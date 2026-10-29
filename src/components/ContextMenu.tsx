@@ -53,7 +53,7 @@ export function ContextMenu() {
           }}
         />
         <MenuSeparator />
-        {["object.fillet", "object.chamfer"].map((id) => (
+        {["object.fillet", "object.chamfer", "object.shell"].map((id) => (
           <MenuItem
             key={id}
             icon={getCommand(id)!.icon}
@@ -62,7 +62,7 @@ export function ContextMenu() {
             onClick={() => {
               done();
               // The same spot turns into a compact value input with live preview.
-              openValuePopover({ command: id, param: "radius", at });
+              openValuePopover({ command: id, param: id === "object.shell" ? "thickness" : "radius", at });
             }}
           />
         ))}
