@@ -20,5 +20,5 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: "init" }
   | { id: number; ok: true; kind: "font" }
   | { id: number; ok: true; kind: "mesh"; mesh: MeshData }
-  | { id: number; ok: true; kind: "export"; data: ArrayBuffer }
+  | { id: number; ok: true; kind: "export"; data: ArrayBuffer; mtl?: string }
   | { id: number; ok: false; error: string; edgeTreatment?: boolean };

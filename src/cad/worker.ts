@@ -117,9 +117,12 @@ function exportStl(shapes: Shape3D[]): ArrayBuffer {
   return buf;
 }
 
-function export3mf(shapes: Shape3D[], names: string[]): ArrayBuffer {
+function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefined)[]): ArrayBuffer {
   const objects: string[] = [];
   const items: string[] = [];
+  // One base material per distinct colour; slicers (Bambu Studio, PrusaSlicer) read it as the part colour.
+  const palette = [...new Set(colors.filter((c): c is string => !!c))];
+  const MAT = 1000;
   shapes.forEach((s, idx) => {
     const m = s.mesh({ tolerance: 0.01, angularTolerance: 5 });
     const verts: string[] = [];
@@ -130,13 +133,15 @@ function export3mf(shapes: Shape3D[], names: string[]): ArrayBuffer {
       tris.push(`<triangle v1="${m.triangles[i]}" v2="${m.triangles[i + 1]}" v3="${m.triangles[i + 2]}"/>`);
     const id = idx + 1;
     const name = names[idx].replace(/[<>&"]/g, "");
-    objects.push(`<object id="${id}" name="${name}" type="model"><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`);
+    const c = colors[idx];
+    const mat = c ? ` pid="${MAT}" pindex="${palette.indexOf(c)}"` : "";
+    objects.push(`<object id="${id}" name="${name}" type="model"${mat}><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`);
     items.push(`<item objectid="${id}"/>`);
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="de-DE" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
 <metadata name="Application">Albedo</metadata>
-<resources>${objects.join("")}</resources>
+<resources>${palette.length ? `<basematerials id="${MAT}">${palette.map((c, i) => `<base name="Farbe ${i + 1}" displaycolor="${c.toUpperCase()}FF"/>`).join("")}</basematerials>` : ""}${objects.join("")}</resources>
 <build>${items.join("")}</build>
 </model>`;
   const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
@@ -151,19 +156,25 @@ function export3mf(shapes: Shape3D[], names: string[]): ArrayBuffer {
   return zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer;
 }
 
-function exportObj(shapes: Shape3D[], names: string[]): ArrayBuffer {
+/** OBJ plus a matching MTL with one material per colour (referenced as <name>.mtl). */
+function exportObj(shapes: Shape3D[], names: string[], colors: (string | undefined)[], mtlName: string): { obj: ArrayBuffer; mtl: string | null } {
+  const palette = [...new Set(colors.filter((c): c is string => !!c))];
   const out: string[] = ["# Albedo OBJ export (mm)"];
+  if (palette.length) out.push(`mtllib ${mtlName}`);
   let offset = 1;
   shapes.forEach((s, idx) => {
     const m = s.mesh({ tolerance: 0.01, angularTolerance: 0.1 });
     out.push(`o ${names[idx].replace(/\s+/g, "_")}`);
+    if (colors[idx]) out.push(`usemtl farbe${palette.indexOf(colors[idx]!) + 1}`);
     for (let i = 0; i < m.vertices.length; i += 3)
       out.push(`v ${m.vertices[i].toFixed(4)} ${m.vertices[i + 1].toFixed(4)} ${m.vertices[i + 2].toFixed(4)}`);
     for (let i = 0; i < m.triangles.length; i += 3)
       out.push(`f ${m.triangles[i] + offset} ${m.triangles[i + 1] + offset} ${m.triangles[i + 2] + offset}`);
     offset += m.vertices.length / 3;
   });
-  return strToU8(out.join("\n") + "\n").buffer as ArrayBuffer;
+  const rgb = (c: string) => [1, 3, 5].map((i) => (parseInt(c.slice(i, i + 2), 16) / 255).toFixed(4)).join(" ");
+  const mtl = palette.length ? palette.map((c, i) => `newmtl farbe${i + 1}\nKd ${rgb(c)}\nKa 0 0 0\nd 1\n`).join("\n") : null;
+  return { obj: strToU8(out.join("\n") + "\n").buffer as ArrayBuffer, mtl };
 }
 
 async function exportStep(shapes: Shape3D[]): Promise<ArrayBuffer> {
@@ -212,16 +223,18 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     if (req.kind === "export") {
       const shapes = req.features.map((f) => buildPlaced(f));
       const names = req.features.map((f) => f.name);
+      const colors = req.features.map((f) => f.color);
+      let objResult: { obj: ArrayBuffer; mtl: string | null } | undefined;
       const data =
         req.format === "stl"
           ? exportStl(shapes)
           : req.format === "3mf"
-            ? export3mf(shapes, names)
+            ? export3mf(shapes, names, colors)
             : req.format === "obj"
-              ? exportObj(shapes, names)
+              ? (objResult = exportObj(shapes, names, colors, `${req.name.replace(/[^\w.-]+/g, "_")}.mtl`)).obj
               : await exportStep(shapes);
       shapes.forEach((s) => s.delete());
-      return post({ id: req.id, ok: true, kind: "export", data }, [data]);
+      return post({ id: req.id, ok: true, kind: "export", data, mtl: objResult?.mtl ?? undefined }, [data]);
     }
   } catch (e) {
     const error = e instanceof EdgeTreatmentError || e instanceof Error ? e.message : `CAD-Fehler (${String(e)})`;

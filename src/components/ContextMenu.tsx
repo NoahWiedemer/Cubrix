@@ -5,6 +5,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { getCommand, isEnabled } from "../core/commands";
 import { openValuePopover } from "./ValuePopover";
 import { openRotatePopover } from "./RotatePopover";
+import { ColorSwatches } from "./ColorRow";
 import { useApp } from "../core/store";
 import { CommandItem } from "../ui/CommandItem";
 
@@ -58,6 +59,11 @@ export function ContextMenu() {
             }}
           />
         ))}
+        <MenuSeparator />
+        <div className="menu-title">Farbe</div>
+        <div className="menu-swatches">
+          <ColorSwatches ids={useApp.getState().selection} onPicked={done} />
+        </div>
         <MenuSeparator />
         <CommandItem id="object.delete" onDone={done} />
       </Menu>

@@ -1307,3 +1307,18 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 @keyframes ai-w3 { to { --a3: 590deg; } }
 @keyframes ai-w4 { to { --a4: 660deg; } }
 @media (prefers-reduced-motion: reduce) { .ai-glow > span { animation: none !important; } }
+/* Farbe */
+.color-row { display: flex; flex-direction: column; gap: 8px; }
+.color-row .group-label { margin-bottom: 0; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.swatch:hover { transform: scale(1.08); }
+.swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent); }
+.swatch.none { background: linear-gradient(135deg, #99a1a8 0 45%, #2b3237 45% 55%, #99a1a8 55%); }
+.color-custom { display: flex; gap: 6px; align-items: center; }
+.color-well { width: 34px; height: 34px; flex: none; border-radius: 7px; border: 1px solid #2c3338; overflow: hidden; position: relative; cursor: pointer; }
+.color-well input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.color-custom .field { flex: 1; }
+.color-custom .field input { padding: 0 10px; font-family: ui-monospace, monospace; font-size: 13px; text-align: left; }
+.menu-swatches { padding: 4px 10px 6px; max-width: 230px; }
+.menu-swatches .swatch { width: 20px; height: 20px; }

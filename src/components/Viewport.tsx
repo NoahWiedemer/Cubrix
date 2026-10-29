@@ -135,7 +135,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         onPointerOut={() => useApp.getState().hoveredId === f.id && useApp.setState({ hoveredId: null })}
       >
         <meshStandardMaterial
-          color="#99a1a8"
+          color={f.color ?? "#99a1a8"}
           roughness={0.6}
           metalness={0}
           envMapIntensity={0.18}

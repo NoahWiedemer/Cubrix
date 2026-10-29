@@ -9,6 +9,7 @@ import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes, useMissingFonts } from "../cad/kernel";
 import { FontPicker } from "./FontPicker";
+import { ColorRow } from "./ColorRow";
 import { worldBox } from "../core/bounds";
 import { Icon } from "../ui/icons";
 import { featureIcon } from "./ObjectTree";
@@ -364,6 +365,7 @@ function SingleObject({ f }: { f: Feature }) {
       </div>
       <TextSection f={f} />
       <Dimensions f={f} />
+      <ColorRow key={f.id + (f.color ?? "")} ids={[f.id]} current={f.color} />
       <TransformFields f={f} kind="position" />
       <TransformFields f={f} kind="rotation" />
       {f.type !== "sphere" && f.type !== "torus" && f.type !== "sketch" && (
@@ -419,6 +421,7 @@ export function PropertiesPanel() {
                 </>
             </div>
             )}
+            <ColorRow ids={selected.map((f) => f.id)} current={selected.every((f) => f.color === selected[0].color) ? selected[0].color : undefined} />
             {selected.length === 2 && (
               <div className="props-empty">Beim Abziehen wird <b>{selected[1].name}</b> aus <b>{selected[0].name}</b> herausgeschnitten.</div>
             )}

@@ -140,8 +140,8 @@ export async function exportFeatures(
   features: Feature[],
   format: ExportFormat,
   name: string,
-): Promise<Uint8Array> {
+): Promise<{ data: Uint8Array; mtl?: string }> {
   const r = await request({ kind: "export", features: await Promise.all(features.map(withFonts)), format, name });
   if (!r.ok || r.kind !== "export") throw new Error(r.ok ? "Unerwartete Antwort" : r.error);
-  return new Uint8Array(r.data);
+  return { data: new Uint8Array(r.data), mtl: r.mtl };
 }
