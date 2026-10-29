@@ -183,11 +183,59 @@ function DepthRange() {
   return null;
 }
 
+/**
+ * Build-volume frame drawn like an open box: the vertical edge at the bed corner
+ * nearest to the camera, and the two top edges meeting above it, fade out so no
+ * frame line ever sits in front of the model.
+ */
+function BuildVolume({ w, d, h }: { w: number; d: number; h: number }) {
+  const edges = useMemo(() => {
+    const x = w / 2, z = d / 2;
+    const corners: [number, number][] = [[-x, -z], [x, -z], [x, z], [-x, z]];
+    const list: { a: THREE.Vector3; b: THREE.Vector3; corners: number[] }[] = [];
+    corners.forEach(([cx, cz], i) => {
+      const [nx, nz] = corners[(i + 1) % 4];
+      list.push({ a: new THREE.Vector3(cx, 0, cz), b: new THREE.Vector3(cx, h, cz), corners: [i] }); // vertical
+      list.push({ a: new THREE.Vector3(cx, h, cz), b: new THREE.Vector3(nx, h, nz), corners: [i, (i + 1) % 4] }); // top
+    });
+    return { corners, list };
+  }, [w, d, h]);
+  const mats = useRef<THREE.LineBasicMaterial[]>([]);
+  useFrame(({ camera }, dt) => {
+    let nearest = 0;
+    let best = Infinity;
+    edges.corners.forEach(([cx, cz], i) => {
+      const dd = Math.hypot(camera.position.x - cx, camera.position.z - cz);
+      if (dd < best) {
+        best = dd;
+        nearest = i;
+      }
+    });
+    edges.list.forEach((e, i) => {
+      const m = mats.current[i];
+      if (!m) return;
+      const target = e.corners.includes(nearest) ? 0 : 0.35;
+      // ~120 ms exponential fade
+      m.opacity += (target - m.opacity) * Math.min(1, dt / 0.04);
+      m.visible = m.opacity > 0.01;
+    });
+  });
+  return (
+    <group>
+      {edges.list.map((e, i) => (
+        <lineSegments key={i} raycast={() => null}>
+          <bufferGeometry onUpdate={(g) => g.setFromPoints([e.a, e.b])} />
+          <lineBasicMaterial ref={(m) => { if (m) mats.current[i] = m; }} color="#3a454c" transparent opacity={0.35} />
+        </lineSegments>
+      ))}
+    </group>
+  );
+}
+
 // ── Print bed ────────────────────────────────────────────────────────────────
 
 function Bed({ volume }: { volume: Vec3 }) {
   const [w, d, h] = volume;
-  const box = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), [w, d, h]);
   return (
     <group>
       <Grid
@@ -216,9 +264,7 @@ function Bed({ volume }: { volume: Vec3 }) {
         fadeStrength={2.2}
         infiniteGrid
       />
-      <lineSegments geometry={box} position={[0, h / 2, 0]} raycast={() => null}>
-        <lineBasicMaterial color="#3a454c" transparent opacity={0.35} />
-      </lineSegments>
+      <BuildVolume w={w} d={d} h={h} />
     </group>
   );
 }

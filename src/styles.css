@@ -39,7 +39,7 @@ input { font: inherit; color: inherit; }
 input::selection { background: rgba(110, 231, 197, 0.38); color: #fff; }
 
 /* ── Layout ───────────────────────────────────────────── */
-.app { display: grid; grid-template-rows: 52px 1fr 30px; height: 100vh; }
+.app { display: grid; grid-template-rows: 56px 1fr 30px; height: 100vh; }
 .main { display: flex; padding: 0 8px; min-height: 0; }
 .main > .rail { flex: none; width: 52px; margin-right: 8px; }
 .main > .viewport { flex: 1; min-width: 0; }
@@ -59,15 +59,31 @@ input::selection { background: rgba(110, 231, 197, 0.38); color: #fff; }
   padding: 0 12px 0 14px;
   -webkit-app-region: drag;
 }
-.mac-tauri .topbar { padding-left: 84px; }
+.mac-tauri .topbar { padding-left: 88px; }
 .topbar > * { -webkit-app-region: no-drag; }
 .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 16px; }
-.logo { flex: none; display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: -0.01em; font-size: 15px; }
-.logo img { width: 22px; height: 22px; }
+.logo {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 8px 0 6px;
+  margin-left: -6px;
+  border-radius: 9px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-size: 15.5px;
+  transition: background 120ms var(--ease);
+}
+.logo:hover { background: rgba(255, 255, 255, 0.06); }
+.logo:active { background: rgba(255, 255, 255, 0.1); }
+.logo img { width: 26px; height: 26px; image-rendering: -webkit-optimize-contrast; }
 .divider-v { width: 1px; height: 18px; background: var(--line); }
 .project { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .project-name { flex: 0 1 auto; min-width: 0; }
 .project-name {
+  font-size: 15px;
   font-weight: 550;
   padding: 4px 6px;
   border-radius: 6px;
@@ -88,7 +104,8 @@ input.project-name { outline: none; border-color: var(--accent-line); background
 .tabs { display: flex; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 9px; }
 .tab {
   white-space: nowrap;
-  padding: 5px 14px;
+  font-size: 14.5px;
+  padding: 6px 15px;
   border-radius: 6px;
   color: var(--text-2);
   font-weight: 500;
@@ -99,8 +116,8 @@ input.project-name { outline: none; border-color: var(--accent-line); background
 
 .topbar-right { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -114,7 +131,8 @@ input.project-name { outline: none; border-color: var(--accent-line); background
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 32px;
+  height: 34px;
+  font-size: 14.5px;
   padding: 0 12px 0 14px;
   border-radius: 8px;
   background: var(--accent);
