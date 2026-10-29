@@ -9,6 +9,8 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useApp } from "../core/store";
 import { useSpacePan } from "../ui/spacePan";
+import { useLayout } from "../ui/layout";
+import { dockedInsets, viewShift } from "../ui/viewportFrame";
 
 type Controls = { target: THREE.Vector3; update(): void; object: THREE.Camera };
 
@@ -32,12 +34,25 @@ export function CameraRig() {
     return c;
   }, []);
 
-  // Keep the ortho frustum in CSS pixels so zoom = pixels per millimetre.
+  // Both cameras always match the canvas (the inactive one too, so swapping never
+  // shows a stale aspect) and share the view offset that centres the scene in the
+  // docked free area. The ortho frustum is in CSS pixels so zoom = pixels per mm.
+  const panels = useLayout((s) => s.panels);
+  const widths = useLayout((s) => s.width);
+  const shift = viewShift(dockedInsets({ panels, width: widths }, size.width + 16));
   useFrame(() => {
     ortho.left = -size.width / 2;
     ortho.right = size.width / 2;
     ortho.top = size.height / 2;
     ortho.bottom = -size.height / 2;
+    const p = persp.current;
+    if (p.aspect !== size.width / size.height) p.aspect = size.width / size.height;
+    for (const c of [p, ortho]) {
+      const v = c.view;
+      if (!v || v.offsetX !== -shift || v.fullWidth !== size.width || v.fullHeight !== size.height)
+        c.setViewOffset(size.width, size.height, -shift, 0, size.width, size.height);
+    }
+    p.updateProjectionMatrix();
     ortho.updateProjectionMatrix();
     if (controls) target.current.copy(controls.target);
   });

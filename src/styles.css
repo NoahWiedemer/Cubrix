@@ -1202,3 +1202,11 @@ body.space-pan .viewport canvas:active { cursor: grabbing !important; }
 body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-select: none !important; }
 .lock { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 6px; border-radius: 6px; color: var(--text-3); } .lock.on { color: var(--text); background: var(--active-bg); box-shadow: var(--active-shadow); } .lock.on svg { color: var(--accent); }
 .lock { width: auto; height: 24px; }
+/* Full-size canvas behind the sidebars, clipped to the free area */
+.main { position: relative; }
+.viewport-slot { flex: 1; min-width: 0; }
+.main > .viewport { position: absolute; top: 0; bottom: 0; left: 8px; right: 8px; z-index: 0; border-radius: 0; }
+.side-slide { position: relative; z-index: 1; }
+.vp-free { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.vp-free > * { pointer-events: auto; }
+.vp-free > .vp-frame { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 12px; pointer-events: none; }

@@ -11,6 +11,7 @@ import { TooltipLayer } from "./ui/Tooltip";
 import { ValuePopover } from "./components/ValuePopover";
 import { ContextMenu } from "./components/ContextMenu";
 import { HelpCenter } from "./help/HelpCenter";
+import { useViewportFrame } from "./ui/viewportFrame";
 import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
 
@@ -37,6 +38,27 @@ function SideSlide({ side, hidden, children }: { side: "left" | "right"; hidden:
   );
 }
 
+/** Placeholder in the flex row: its rect is the free area the viewport is clipped to. */
+function ViewportSlot() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current!;
+    const main = el.parentElement!;
+    const measure = () => {
+      const m = main.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(main).paddingLeft) || 0;
+      useViewportFrame.setState({ left: Math.round(r.left - m.left - pad), right: Math.round(m.right - r.right - pad) });
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(main);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+  return <div ref={ref} className="viewport-slot" />;
+}
+
 export function App() {
   const preview = useApp((s) => s.workspace === "preview");
   useEffect(() => installShortcuts(), []);
@@ -55,6 +77,7 @@ export function App() {
           <LeftRail />
           <DockColumn side="left" />
         </SideSlide>
+        <ViewportSlot />
         <Viewport />
         <SideSlide side="right" hidden={preview}>
           <DockColumn side="right" />

@@ -1,0 +1,92 @@
+[
+ {
+  "wait": 1500
+ },
+ {
+  "js": "localStorage.removeItem('albedo.layout'); localStorage.removeItem('albedo.settings'); setTimeout(()=>location.reload(),10); 1"
+ },
+ {
+  "wait": 8000
+ },
+ {
+  "js": "(()=>{window.__probe=()=>{const s=window.__viewer.get();const c=s.camera;const v=new (c.position.constructor)(0,10,0).project(c);const r=s.gl.domElement.getBoundingClientRect();const asp=c.isPerspectiveCamera?c.aspect:(c.right-c.left)/(c.top-c.bottom);return {x:+(r.left+(v.x+1)/2*r.width).toFixed(2),y:+(r.top+(1-v.y)/2*r.height).toFixed(2),aspect:+asp.toFixed(4),canvas:+(r.width/r.height).toFixed(4),type:c.type}};window.__go=(n)=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===n).click();return 1})()"
+ },
+ {
+  "js": "JSON.stringify(['start',window.__probe()])",
+  "log": 1
+ },
+ {
+  "js": "(window.__go('Vorschau'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "JSON.stringify(['vorschau',window.__probe()])",
+  "log": 1
+ },
+ {
+  "js": "(window.__go('Modell'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "JSON.stringify(['modell',window.__probe()])",
+  "log": 1
+ },
+ {
+  "js": "(window.__go('Vorschau'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "(window.__go('2D'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "(window.__go('Modell'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "JSON.stringify(['V-2D-M',window.__probe()])",
+  "log": 1
+ },
+ {
+  "js": "(window.__go('2D'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "(window.__go('Vorschau'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "(window.__go('Modell'),1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "js": "JSON.stringify(['2D-V-M',window.__probe()])",
+  "log": 1
+ },
+ {
+  "js": "(async()=>{for(const n of ['Vorschau','Modell','2D','Vorschau','Modell']){window.__go(n);await new Promise(r=>setTimeout(r,60))}return 1})()"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "js": "JSON.stringify(['rapid',window.__probe()])",
+  "log": 1
+ }
+]

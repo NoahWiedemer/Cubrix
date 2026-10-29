@@ -31,6 +31,7 @@ import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
 import { viewportPick } from "../ui/viewportPick";
 import { volumeCorners, volumeEdges } from "../ui/buildVolume";
+import { useViewportFrame } from "../ui/viewportFrame";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -351,11 +352,14 @@ export function Viewport() {
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
   const textTool = useTextTool((s) => s.active);
+  const frame = useViewportFrame();
+  const free = { left: frame.left, right: frame.right };
 
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className={`panel viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""}`}
+      className={`viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""}`}
+      style={{ clipPath: `inset(0 ${free.right}px 0 ${free.left}px round 12px)` }}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
     >
       <Canvas
@@ -417,12 +421,14 @@ export function Viewport() {
         <CameraRig />
         <SelectionOutline />
         {workspace !== "preview" && (
-          <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
+          <GizmoHelper alignment="bottom-left" margin={[free.left + 58, 58]} renderPriority={2}>
             <AxisIndicator />
           </GizmoHelper>
         )}
       </Canvas>
 
+      <div className="vp-free" style={free}>
+      <div className="vp-frame" />
       {kernel.status !== "ready" || kernel.busy > 0 ? (
         <div className="vp-badge">
           {kernel.status === "error" ? (
@@ -442,6 +448,7 @@ export function Viewport() {
       <ViewControls />
 
       {workspace === "sketch" && <SketchToolbar />}
+      </div>
     </div>
   );
 }
