@@ -19,6 +19,8 @@ import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ProviderDialog } from "./components/ProviderKeys";
 import { RecoveryBanner } from "./components/RecoveryBanner";
+import { UpdateToast } from "./components/UpdateToast";
+import { scheduleAutoCheck } from "./core/updater";
 
 /**
  * Sidebars slide out (width → 0, slight offset, fade) when entering Vorschau and back in
@@ -67,6 +69,7 @@ function ViewportSlot() {
 export function App() {
   const preview = useApp((s) => s.workspace === "preview");
   useEffect(() => installShortcuts(), []);
+  useEffect(() => scheduleAutoCheck(), []);
 
   // Keep the native window title in sync with the project name.
   const name = useApp((s) => s.nodes[s.currentId].doc.name);
@@ -101,6 +104,7 @@ export function App() {
       <SettingsDialog />
       <ProviderDialog />
       <RecoveryBanner />
+      <UpdateToast />
     </div>
   );
 }

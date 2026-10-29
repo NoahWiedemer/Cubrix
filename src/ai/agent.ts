@@ -16,7 +16,7 @@ import { runTurn, type Block, type Message, type Provider, type ToolSpec, type T
 export const toolName = (id: string) => id.replace(/\./g, "__");
 export const commandId = (name: string) => name.replace(/__/g, ".");
 
-const HIDDEN = new Set(["file.new", "file.open", "file.openRecent", "file.import", "history.redoAlt", "selection.clear", "app.settings"]);
+const HIDDEN = new Set(["file.new", "file.open", "file.openRecent", "file.import", "history.redoAlt", "selection.clear", "app.settings", "app.checkUpdates"]);
 
 export function buildTools(): ToolSpec[] {
   const commands = listCommands()

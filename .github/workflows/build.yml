@@ -16,6 +16,9 @@ jobs:
             args: --target universal-apple-darwin
           - platform: windows-latest
             args: ""
+    # CI builds skip the signed updater artifacts (the signing key is only used for releases).
+    env:
+      NO_UPDATER: --config src-tauri/tauri.ci.conf.json
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +42,7 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         id: tauri
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ env.NO_UPDATER }}
 
       - uses: actions/upload-artifact@v4
         with:

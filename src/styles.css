@@ -1404,3 +1404,23 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .pat-field input { text-align: right; padding-right: 6px; }
 .pat-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--text-3); }
 .pat-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.subtle-hint.inline { margin: 0 0 0 auto; align-self: center; }
+.menu-badge { margin-left: 6px; padding: 1px 6px; border-radius: 99px; font-size: 11px; font-weight: 600; color: #0b2a22; background: var(--accent); font-variant-numeric: tabular-nums; }
+.update-toast { position: fixed; right: 16px; bottom: 44px; z-index: 460; width: 340px; display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 12px 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--accent-line); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5); font-size: 13px; color: var(--text-2); animation: pop-in 160ms var(--ease); }
+.upd-icon { color: var(--accent); margin-top: 1px; display: flex; }
+.upd-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.upd-title { color: var(--text); font-weight: 600; font-size: 13.5px; }
+.upd-line { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.upd-line.muted { color: var(--text-3); }
+.upd-line svg { color: var(--accent); flex: none; }
+.upd-line.muted svg { color: var(--text-3); }
+.upd-notes { margin: 0; padding-left: 16px; color: var(--text-3); font-size: 12.5px; line-height: 1.45; }
+.upd-notes li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upd-sub { color: var(--text-3); font-size: 12px; }
+.upd-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.upd-bar { height: 6px; border-radius: 99px; background: var(--panel-3); overflow: hidden; position: relative; }
+.upd-bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: inherit; transition: width 200ms linear; }
+.upd-bar.indeterminate i { width: 35%; animation: upd-slide 1.1s ease-in-out infinite; }
+@keyframes upd-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.spinner.small { width: 12px; height: 12px; flex: none; }
+.update-toast.brief { align-items: center; padding: 8px 8px 8px 14px; }

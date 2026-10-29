@@ -59,7 +59,19 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   },
-  "mainBinaryName": "cubrix"
+  "mainBinaryName": "cubrix",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRDNTVGNDk5NTAxQjc3NEIKUldSTGR4dFFtZlJWVE0xVy9WVFF2WUgvNkZaZHlhQUFRZzRXOFFmQ3phT1EzcS95eTh3dGJjc3IK",
+      "endpoints": [
+        "https://github.com/NoahWiedemer/modelonio/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

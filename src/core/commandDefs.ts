@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import { checkForUpdates, useUpdater } from "./updater";
 import * as THREE from "three";
 import { defineCommand, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
 import {
@@ -1967,6 +1968,20 @@ defineCommand({
   params: {},
   perform() {
     useSettingsDialog.setState({ open: true });
+  },
+});
+
+defineCommand({
+  id: "app.checkUpdates",
+  kind: "action",
+  label: "Nach Updates suchen …",
+  description: "Prüft auf GitHub, ob eine neuere Cubrix-Version verfügbar ist.",
+  icon: "update",
+  params: {},
+  perform() {
+    const { status } = useUpdater.getState();
+    if (status === "available" || status === "ready") useUpdater.setState({ visible: true });
+    else void checkForUpdates();
   },
 });
 

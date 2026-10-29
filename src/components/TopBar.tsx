@@ -12,6 +12,7 @@ import { useRecent } from "../core/autosave";
 import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { CommandItem } from "../ui/CommandItem";
+import { useUpdater } from "../core/updater";
 
 const TABS: { id: Workspace; label: string; key: string; icon: IconName }[] = [
   { id: "model", label: "Modell", key: "1", icon: "box" },
@@ -27,6 +28,7 @@ export function TopBar() {
   const hasVisible = doc.features.some((f) => f.visible);
   const [editing, setEditing] = useState(false);
   const fileMenu = usePopover();
+  const updateFound = useUpdater((s) => (s.status === "available" || s.status === "ready" ? s.update?.version : null));
   const recent = useRecent((s) => s.paths);
   const exportMenu = usePopover();
   const viewMenu = usePopover();
@@ -71,6 +73,8 @@ export function TopBar() {
               <CommandItem id="export.step" onDone={() => fileMenu.setOpen(false)} />
               <MenuSeparator />
               <CommandItem id="app.settings" onDone={() => fileMenu.setOpen(false)} />
+              <MenuSeparator />
+              <CommandItem id="app.checkUpdates" label={updateFound ? <>Update verfügbar <span className="menu-badge">{updateFound}</span></> : undefined} onDone={() => fileMenu.setOpen(false)} />
             </Menu>
           )}
         </div>

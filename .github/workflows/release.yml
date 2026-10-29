@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - platform: windows-latest
             args: --bundles nsis,msi
@@ -41,12 +41,19 @@ jobs:
 
       - run: npm ci
 
-      # Unsigned builds. Assets are named by tauri-action from productName and version:
-      # Cubrix_X.Y.Z_universal.dmg, Cubrix_X.Y.Z_x64-setup.exe, Cubrix_X.Y.Z_x64_en-US.msi
+      # Builds are not code-signed, but updater artifacts are signed with the updater key
+      # (Cubrix.app.tar.gz + .sig on macOS, the -setup.exe + .sig on Windows). tauri-action
+      # merges both jobs into latest.json; the universal macOS build is listed under
+      # darwin-aarch64 and darwin-x86_64. Assets: Cubrix_X.Y.Z_universal.dmg,
+      # Cubrix_universal.app.tar.gz, Cubrix_X.Y.Z_x64-setup.exe, Cubrix_X.Y.Z_x64_en-US.msi
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           tagName: v__VERSION__
           releaseName: Cubrix v__VERSION__
           releaseBody: |
