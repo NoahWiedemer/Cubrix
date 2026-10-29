@@ -36,7 +36,7 @@ export const DEFAULT_PANELS: Panels = {
 
 /** Bumped whenever the default arrangement changes; older stored layouts are replaced once. */
 export const LAYOUT_REV = 4;
-export const DEFAULT_WIDTH: Record<Side, number> = { left: 300, right: 300 };
+export const DEFAULT_WIDTH: Record<Side, number> = { left: 300, right: 320 };
 
 export function defaultLayout(): LayoutData {
   return {

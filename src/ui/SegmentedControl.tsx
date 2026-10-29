@@ -35,8 +35,13 @@ export function SegmentedControl<T extends string>({
       if (el) setPill({ x: el.offsetLeft, w: el.offsetWidth });
     };
     measure();
+    // Buttons can change size without the wrapper doing so (web fonts loading, flex reflow).
     const ro = new ResizeObserver(measure);
-    if (wrap.current) ro.observe(wrap.current);
+    if (wrap.current) {
+      ro.observe(wrap.current);
+      wrap.current.querySelectorAll("button").forEach((b) => ro.observe(b));
+    }
+    void document.fonts?.ready.then(measure);
     return () => ro.disconnect();
   }, [value, options.length]);
 

@@ -6,7 +6,6 @@ import { Gizmo, useGizmo } from "./Gizmo";
 import {
   ContactShadows,
   GizmoHelper,
-  Grid,
   Html,
   Line,
 } from "@react-three/drei";
@@ -19,6 +18,7 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { GroundGrid } from "./GroundGrid";
 import { openContextMenu } from "./ContextMenu";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { SketchDraw, SketchObject } from "./SketchLayer";
@@ -251,35 +251,10 @@ function Bed({ volume }: { volume: Vec3 }) {
   const volumeStrong = useSettings((s) => s.volumeStrong);
   const gridSize = useSettings((s) => s.gridSize);
   const gridFade = useSettings((s) => s.gridFade);
-  // Adaptive levels: fine = 5 mm cells / 10 mm majors, 1 mm cells when zoomed in close.
-  const [close, setClose] = useState(false);
-  useFrame(({ camera, controls }) => {
-    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target ?? new THREE.Vector3();
-    const dist = (camera as THREE.OrthographicCamera).isOrthographicCamera
-      ? 600 / (camera as THREE.OrthographicCamera).zoom
-      : camera.position.distanceTo(target);
-    const next = dist < 70;
-    if (next !== close) setClose(next);
-  });
-  const cell = gridSize === "coarse" ? 10 : close ? 1 : 5;
-  const section = gridSize === "coarse" ? 50 : close ? 5 : 10;
   const outline = useMemo(() => [[-w / 2, 0.02, -d / 2], [w / 2, 0.02, -d / 2], [w / 2, 0.02, d / 2], [-w / 2, 0.02, d / 2], [-w / 2, 0.02, -d / 2]] as [number, number, number][], [w, d]);
   return (
     <group>
-      {/* Infinite ground grid, fading out with distance from the scene centre. */}
-      <Grid
-        position={[0, 0.01, 0]}
-        cellSize={cell}
-        cellThickness={0.6}
-        cellColor="#252c31"
-        sectionSize={section}
-        sectionThickness={0.9}
-        sectionColor="#35414a"
-        fadeDistance={gridFade}
-        fadeStrength={1.6}
-        fadeFrom={0}
-        infiniteGrid
-      />
+      <GroundGrid coarse={gridSize === "coarse"} fade={gridFade} />
       {showVolume && (
         <>
           <Line points={outline} color={volumeStrong ? "#6f808a" : "#46535b"} lineWidth={1.2} />
@@ -308,7 +283,7 @@ function Lights() {
   }, [gl, scene]);
   return (
     <>
-      <hemisphereLight args={["#e8eef2", "#101315", 0.35]} />
+      <hemisphereLight args={["#eef3f6", "#0a0c0e", 0.6]} />
       {/* key: upper front-left */}
       <directionalLight position={[-140, 220, 160]} intensity={1.45} />
       {/* cool fill */}

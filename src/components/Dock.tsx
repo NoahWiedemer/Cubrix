@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, X, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
@@ -75,11 +75,8 @@ function StackPanel({ id, side, index }: { id: PanelId; side: Side; index: numbe
       }}
     >
       {id === "inspector" ? (
-        // The inspector's header is its own tab bar; the grip on the left drags the panel.
-        <header className="dock-head inspector-head">
-          <span className="grip" draggable onDragStart={startDrag(id)} onDragEnd={endDrag} data-tip="Ziehen zum Verschieben" data-tip-pos="bottom">
-            <GripVertical size={14} />
-          </span>
+        // The inspector's header is its own tab bar; dragging the header moves the panel.
+        <header className="dock-head inspector-head" draggable onDragStart={startDrag(id)} onDragEnd={endDrag}>
           <InspectorTabs />
         </header>
       ) : (
