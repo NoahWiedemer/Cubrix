@@ -1,7 +1,7 @@
 [package]
 name = "modelonio"
 version = "0.1.0"
-description = "Modelonio – CAD für den 3D-Druck"
+description = "Albedo – CAD für den 3D-Druck"
 authors = ["Noah Wiedemer"]
 edition = "2021"
 

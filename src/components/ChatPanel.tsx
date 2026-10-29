@@ -29,7 +29,7 @@ interface ChatEntry {
 const useChat = create<{ entries: ChatEntry[]; api: Message[]; running: boolean }>(() => ({ entries: [], api: [], running: false }));
 let controller: AbortController | null = null;
 
-export const focusChat = () => window.dispatchEvent(new Event("modelonio:focus-chat"));
+export const focusChat = () => window.dispatchEvent(new Event("albedo:focus-chat"));
 
 const STARTERS = [
   "Bau mir eine Box mit Deckel, 60 × 40 × 30 mm",
@@ -148,8 +148,8 @@ export function ChatPanel() {
 
   useEffect(() => {
     const focus = () => inputRef.current?.focus();
-    window.addEventListener("modelonio:focus-chat", focus);
-    return () => window.removeEventListener("modelonio:focus-chat", focus);
+    window.addEventListener("albedo:focus-chat", focus);
+    return () => window.removeEventListener("albedo:focus-chat", focus);
   }, []);
 
   useEffect(() => {
@@ -205,7 +205,7 @@ export function ChatPanel() {
         {entries.length === 0 ? (
           <div className="chat-empty">
             <img src={logo} alt="" />
-            <p>Beschreibe, was du bauen möchtest – oder frag mich etwas zu Modelonio.</p>
+            <p>Beschreibe, was du bauen möchtest – oder frag mich etwas zu Albedo.</p>
             <div className="chat-starters">
               {STARTERS.map((s) => (
                 <button key={s} className="chat-starter" onClick={() => send(s)}>

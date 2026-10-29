@@ -32,7 +32,7 @@ export const useLayout = create<LayoutState>()(
       reset: () => set({ panels: structuredClone(DEFAULT_PANELS), width: { ...DEFAULT_WIDTH } }),
     }),
     {
-      name: "modelonio.layout",
+      name: "albedo.layout",
       version: 2,
       partialize: (s) => ({ panels: s.panels, width: s.width }),
       // Any stored shape (older versions, hand-edited, partially written) is repaired on load.

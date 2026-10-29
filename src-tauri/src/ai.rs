@@ -7,7 +7,9 @@ use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::oneshot;
 
-const SERVICE: &str = "de.codana.modelonio";
+const SERVICE: &str = "de.codana.albedo";
+/// Keychain service used before the rename to Albedo.
+const OLD_SERVICE: &str = "de.codana.modelonio";
 
 #[derive(Default)]
 pub struct AiState {
@@ -19,9 +21,17 @@ fn entry(provider: &str) -> Result<keyring::Entry, String> {
 }
 
 fn key(provider: &str) -> Result<String, String> {
-    entry(provider)?
-        .get_password()
-        .map_err(|_| "Kein API-Schlüssel hinterlegt".to_string())
+    let current = entry(provider)?;
+    if let Ok(k) = current.get_password() {
+        return Ok(k);
+    }
+    // One-time migration from the old keychain service.
+    let old = keyring::Entry::new(OLD_SERVICE, &format!("api-key-{provider}")).map_err(|e| e.to_string())?;
+    let k = old.get_password().map_err(|_| "Kein API-Schlüssel hinterlegt".to_string())?;
+    if current.set_password(&k).is_ok() {
+        let _ = old.delete_credential();
+    }
+    Ok(k)
 }
 
 #[tauri::command]

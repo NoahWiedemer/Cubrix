@@ -25,7 +25,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     icon: "boxes",
     status: "ready",
     summary: "Ein neues Projekt startet mit einem 20-mm-Würfel auf dem Druckbett; Körper hinzufügen, verändern, exportieren.",
-    what: "Modelonio ist ein Programm, mit dem du Teile für deinen 3D-Drucker baust. Du kombinierst einfache Grundkörper, schneidest Löcher hinein und exportierst das Ergebnis für deinen Slicer.",
+    what: "Albedo ist ein Programm, mit dem du Teile für deinen 3D-Drucker baust. Du kombinierst einfache Grundkörper, schneidest Löcher hinein und exportierst das Ergebnis für deinen Slicer.",
     when: "Immer, wenn du ein eigenes Teil drucken möchtest – zum Beispiel einen Halter, eine Box oder ein Ersatzteil.",
     steps: [
       "Jedes neue Projekt beginnt mit einem Würfel auf dem Druckbett.",
@@ -34,7 +34,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Mit „Exportieren“ oben rechts speicherst du eine STL- oder 3MF-Datei für den Slicer.",
     ],
     tip: "Plane dein Teil zuerst grob mit Grundkörpern. Details wie Abrundungen kommen zum Schluss.",
-    image: { kind: "screenshot", src: "start", alt: "Modelonio mit einem Würfel auf dem Druckbett" },
+    image: { kind: "screenshot", src: "start", alt: "Albedo mit einem Würfel auf dem Druckbett" },
     keywords: ["anfang", "einstieg", "neu", "projekt"],
   },
   {
@@ -153,7 +153,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     when: "Für angenehmere Griffe, stabilere Ecken und schönere Teile. Fasen an der Unterseite helfen gegen den „Elefantenfuß“.",
     steps: [
       "Wähle einen Körper aus.",
-      "Klicke „Abrunden“ oder „Fasen“ – Modelonio schlägt eine passende Größe vor.",
+      "Klicke „Abrunden“ oder „Fasen“ – Albedo schlägt eine passende Größe vor.",
       "Unter „Kanten“ rechts stellst du den genauen Wert ein. Ist er zu groß, erscheint ein Hinweis.",
     ],
     tip: "Fasen statt Rundungen an der Unterseite drucken sich ohne Stützen.",
@@ -190,7 +190,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     icon: "measure",
     status: "ready",
     summary: "Maße eines Körpers erscheinen beim Überfahren und beim Ziehen; exakte Werte stehen rechts in den Feldern. Punkt-zu-Punkt-Messen kommt bald.",
-    what: "Modelonio zeigt dir die Abmessungen von Körpern direkt im Viewport.",
+    what: "Albedo zeigt dir die Abmessungen von Körpern direkt im Viewport.",
     when: "Wenn du prüfen willst, ob ein Teil passt.",
     steps: [
       "Fahre mit der Maus über einen ausgewählten Körper – Breite, Tiefe und Höhe erscheinen.",

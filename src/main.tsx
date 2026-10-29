@@ -1,3 +1,4 @@
+import "./migrate";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
@@ -38,9 +39,9 @@ if (new URLSearchParams(location.search).has("beispiel"))
     void execute("selection.set", { ids: [s.nodes[s.currentId].doc.features[0].id] });
   });
 
-// Handy for debugging and the upcoming AI integration: window.modelonio.execute("primitive.box", {...})
+// Handy for debugging and scripting: window.albedo.execute("primitive.box", {...})
 Object.assign(window, {
-  modelonio: { execute, commands: () => listCommands().map(toToolDefinition), state: useApp.getState },
+  albedo: { execute, commands: () => listCommands().map(toToolDefinition), state: useApp.getState },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -1,4 +1,4 @@
-// The Modelonio document: a plain, serializable JSON list of features.
+// The Albedo document: a plain, serializable JSON list of features.
 // Everything the user builds lives here, so it can be saved, diffed, replayed
 // and (later) read and written by the AI assistant.
 
@@ -73,7 +73,7 @@ export interface PrinterProfile {
 }
 
 export interface ModelDocument {
-  format: "modelonio";
+  format: "albedo";
   version: 1;
   name: string;
   units: "mm";
@@ -88,7 +88,7 @@ export const DEFAULT_PRINTER: PrinterProfile = {
 
 export function createDocument(name = "Unbenanntes Projekt", { starter = true } = {}): ModelDocument {
   return {
-    format: "modelonio",
+    format: "albedo",
     version: 1,
     name,
     units: "mm",
@@ -207,5 +207,6 @@ export function geometryKey(f: Feature): string {
 
 export function isModelDocument(x: unknown): x is ModelDocument {
   const d = x as ModelDocument;
-  return !!d && d.format === "modelonio" && Array.isArray(d.features);
+  // Files from before the rename (format "modelonio") are still accepted.
+  return !!d && (d.format === "albedo" || (d.format as string) === "modelonio") && Array.isArray(d.features);
 }

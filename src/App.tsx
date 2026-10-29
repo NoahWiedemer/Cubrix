@@ -16,7 +16,7 @@ export function App() {
   // Keep the native window title in sync with the project name.
   const name = useApp((s) => s.nodes[s.currentId].doc.name);
   useEffect(() => {
-    document.title = `${name} – Modelonio`;
+    document.title = `${name} – Albedo`;
   }, [name]);
 
   return (

@@ -1,8 +1,8 @@
-# Modelonio
+# Albedo
 
 CAD für den 3D-Druck – einfach, ruhig, auf Deutsch. Desktop-App (macOS, später Windows) auf Basis von Tauri 2, React, three.js und dem OpenCascade-Kern (replicad, WASM).
 
-![Modelonio](docs/screenshot.png)
+![Albedo](docs/screenshot.png)
 
 ## Starten
 
@@ -24,7 +24,7 @@ Voraussetzungen: Node 20+, Rust (stable).
 - Boolesche Operationen: Vereinen, Abziehen, Schnittmenge (und wieder auflösen)
 - Verlauf wie in Photoshop: jeder Schritt anklickbar, frühere Zweige bleiben wiederherstellbar, ⌘Z / ⇧⌘Z
 - Druckprüfung (geschlossen, auf dem Bett, im Bauraum des Snapmaker Original 125³ mm)
-- Export als STL und 3MF, Projekte als `.modelonio` (JSON) speichern/öffnen
+- Export als STL, 3MF, OBJ und STEP; Projekte als `.albedo` (JSON) speichern/öffnen (ältere `.modelonio`-Dateien werden weiterhin geöffnet)
 
 ## Architektur
 
@@ -35,4 +35,6 @@ Voraussetzungen: Node 20+, Rust (stable).
 - `src/cad/worker.ts` – CAD-Kern im Web Worker (Meshing, STL/3MF-Export)
 - `src/components/` – Oberfläche
 
-In der Entwicklerkonsole: `modelonio.execute("primitive.box", { width: 40 })`, `modelonio.commands()`.
+In der Entwicklerkonsole: `albedo.execute("primitive.box", { width: 40 })`, `albedo.commands()`.
+
+Hinweis: Ordner, Repository und Rust-Crate heißen aus technischen Gründen noch `modelonio`.

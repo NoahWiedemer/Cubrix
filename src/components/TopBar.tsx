@@ -42,7 +42,7 @@ export function TopBar() {
         <div ref={fileMenu.ref} style={{ position: "relative" }}>
           <button className="logo" onClick={() => fileMenu.setOpen(!fileMenu.open)} data-tip="Datei" data-tip-pos="bottom">
             <img src={logo1x} srcSet={`${logo1x} 1x, ${logo2x} 2x`} alt="" />
-            Modelonio
+            Albedo
             <ChevronDown size={13} color="var(--text-3)" />
           </button>
           {fileMenu.open && (

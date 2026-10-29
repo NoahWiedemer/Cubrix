@@ -834,7 +834,7 @@ defineCommand({
   perform() {
     const layout = useLayout.getState();
     if (!layout.panels.chat.open || layout.panels.chat.collapsed) layout.setPanel("chat", { open: true, collapsed: false });
-    setTimeout(() => window.dispatchEvent(new Event("modelonio:focus-chat")), 60);
+    setTimeout(() => window.dispatchEvent(new Event("albedo:focus-chat")), 60);
   },
 });
 
@@ -852,7 +852,9 @@ defineCommand({
 
 // ── Files ────────────────────────────────────────────────────────────────────
 
-const PROJECT_FILTER = { name: "Modelonio-Projekt", extensions: ["modelonio"] };
+const PROJECT_FILTER = { name: "Albedo-Projekt", extensions: ["albedo"] };
+/** Opening also accepts project files saved before the rename. */
+const OPEN_FILTER = { name: "Albedo-Projekt", extensions: ["albedo", "modelonio"] };
 
 async function confirmDiscard(): Promise<boolean> {
   const s = useApp.getState();
@@ -860,7 +862,7 @@ async function confirmDiscard(): Promise<boolean> {
   const text = "Ungespeicherte Änderungen gehen verloren. Fortfahren?";
   if (isTauri) {
     const { ask } = await import("@tauri-apps/plugin-dialog");
-    return ask(text, { title: "Modelonio", kind: "warning", okLabel: "Verwerfen", cancelLabel: "Abbrechen" });
+    return ask(text, { title: "Albedo", kind: "warning", okLabel: "Verwerfen", cancelLabel: "Abbrechen" });
   }
   return window.confirm(text);
 }
@@ -871,7 +873,7 @@ async function saveProject(forceDialog: boolean) {
   const s = useApp.getState();
   const doc = s.nodes[s.currentId].doc;
   const path = await saveFile(
-    `${fileSafe(doc.name)}.modelonio`,
+    `${fileSafe(doc.name)}.albedo`,
     PROJECT_FILTER,
     JSON.stringify(doc, null, 2),
     forceDialog ? null : s.filePath,
@@ -899,16 +901,17 @@ defineCommand({
   id: "file.open",
   kind: "action",
   label: "Öffnen …",
-  description: "Öffnet eine .modelonio-Projektdatei.",
+  description: "Öffnet eine Albedo-Projektdatei (.albedo, auch ältere .modelonio-Dateien).",
   icon: "open",
   shortcut: "mod+o",
   params: {},
   async perform() {
     if (!(await confirmDiscard())) return;
-    const file = await openTextFile(PROJECT_FILTER);
+    const file = await openTextFile(OPEN_FILTER);
     if (!file) return;
     const doc = JSON.parse(file.text);
-    if (!isModelDocument(doc)) throw new Error("Keine gültige Modelonio-Datei");
+    if (!isModelDocument(doc)) throw new Error("Keine gültige Albedo-Datei");
+    doc.format = "albedo";
     useApp.getState().reset(doc, `${baseName(file.path)} geöffnet`, isTauri ? file.path : null);
   },
 });
@@ -917,7 +920,7 @@ defineCommand({
   id: "file.save",
   kind: "action",
   label: "Speichern",
-  description: "Speichert das Projekt als .modelonio-Datei.",
+  description: "Speichert das Projekt als .albedo-Datei.",
   icon: "save",
   shortcut: "mod+s",
   params: {},

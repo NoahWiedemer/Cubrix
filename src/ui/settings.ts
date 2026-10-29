@@ -16,7 +16,7 @@ export const QUALITY: Record<Quality, { dpr: number; shadows: number }> = {
 export type Projection = "perspective" | "orthographic";
 
 export const useSettings = create<{ quality: Quality; projection: Projection }>()(
-  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection }), { name: "modelonio.settings" }),
+  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection }), { name: "albedo.settings" }),
 );
 
 export interface AiSettings {
@@ -25,5 +25,5 @@ export interface AiSettings {
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "" } }), { name: "modelonio.ai" }),
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "" } }), { name: "albedo.ai" }),
 );
