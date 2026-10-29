@@ -9,7 +9,7 @@ import {
   Html,
   Line,
 } from "@react-three/drei";
-import { SelectionOutline, registerMesh } from "./SelectionOutline";
+import { SelectionOutline, registerMesh, useMeshObjects } from "./SelectionOutline";
 import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
@@ -29,6 +29,7 @@ import { usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
+import { viewportPick } from "../ui/viewportPick";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -367,6 +368,22 @@ export function Viewport() {
         onCreated={(state) => {
           const { gl } = state;
           if (import.meta.env.DEV) Object.assign(window, { __viewer: state });
+          viewportPick.pick = (x, y) => {
+            const { camera, raycaster, gl: renderer } = state.get();
+            const r = renderer.domElement.getBoundingClientRect();
+            if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
+            raycaster.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+            const meshes = useMeshObjects.getState().meshes;
+            const ids = new Map(Object.entries(meshes).map(([id, m]) => [m, id]));
+            const hit = raycaster.intersectObjects([...ids.keys()], false)[0];
+            // Scene is Y-up; CAD is Z-up: (x, y, z)cad = (x, -z, y)scene.
+            if (hit) {
+              const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3();
+              return { point: [hit.point.x, -hit.point.z, hit.point.y], featureId: ids.get(hit.object as THREE.Mesh), facesUp: n.y > 0.7 };
+            }
+            const p = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+            return p ? { point: [p.x, -p.z, 0], facesUp: true } : null;
+          };
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 0.85;
         }}

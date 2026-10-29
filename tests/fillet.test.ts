@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import opencascade from "replicad-opencascadejs";
-import { setOC } from "replicad";
+import { measureVolume, setOC } from "replicad";
 import { buildLocal, EdgeTreatmentError } from "../src/cad/build";
 import { getCommand } from "../src/core/commands";
 import type { Feature } from "../src/core/document";
@@ -48,16 +48,37 @@ describe("Kanten abrunden / fasen (Kernel)", () => {
 describe("object.fillet (Befehl)", () => {
   const cmd = getCommand("object.fillet")!;
   if (cmd.kind !== "document") throw new Error("expected document command");
-  it("setzt den Radius und entfernt eine Fase", () => {
+  it("setzt den Radius und behält eine vorhandene Fase", () => {
     const doc = createDocument();
     const id = doc.features[0].id;
     doc.features[0] = { ...doc.features[0], chamfer: 1 };
     const res = cmd.apply(doc, { id, radius: 3 }, { doc, selection: [id], source: "user" })!;
-    expect(res.doc.features[0]).toMatchObject({ fillet: 3, chamfer: 0 });
+    expect(res.doc.features[0]).toMatchObject({ fillet: 3, chamfer: 1 });
   });
   it("lehnt zu große Radien mit klarer Meldung ab", () => {
     const doc = createDocument();
     const id = doc.features[0].id;
     expect(() => cmd.apply(doc, { id, radius: 10 }, { doc, selection: [id], source: "user" })).toThrow(/zu groß/);
+  });
+});
+
+describe("Fase und Abrundung kombiniert", () => {
+  it("Quader mit Fase 1 mm und Abrundung 0,5 mm", () => {
+    const plain = buildLocal(box());
+    const chamfered = buildLocal(box({ chamfer: 1 }));
+    const both = buildLocal(box({ chamfer: 1, fillet: 0.5 }));
+    // Outer size unchanged, both passes remove material, the fillet adds faces.
+    expect(both.boundingBox.width).toBeCloseTo(20, 3);
+    expect(measureVolume(both)).toBeLessThan(measureVolume(chamfered));
+    expect(measureVolume(chamfered)).toBeLessThan(measureVolume(plain));
+    expect(both.faces.length).toBeGreaterThan(chamfered.faces.length);
+  });
+  it("Befehle ändern nur ihren eigenen Wert", () => {
+    const doc = { ...createDocument("T", { starter: false }), features: [box()] };
+    const ctx = { doc, selection: ["b"], source: "user" as const };
+    const a = getCommand("object.chamfer")!;
+    const r1 = (a as any).apply(doc, { id: "b", radius: 1 }, ctx);
+    const r2 = (getCommand("object.fillet") as any).apply(r1.doc, { id: "b", radius: 0.5 }, { ...ctx, doc: r1.doc });
+    expect(r2.doc.features[0]).toMatchObject({ chamfer: 1, fillet: 0.5 });
   });
 });

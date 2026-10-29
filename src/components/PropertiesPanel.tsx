@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, Link2, Link2Off } from "lucide-react";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { maxEdgeSize, textOf } from "../core/commandDefs";
+import { profileBounds } from "../core/scale";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
@@ -16,21 +17,28 @@ const parse = (s: string) => Number(s.trim().replace(",", "."));
 
 interface NumberFieldProps {
   value: number;
-  label?: string;
+  /** Scrub handle on the left: an axis letter or a tiny icon. */
+  label?: ReactNode;
   axis?: "x" | "y" | "z";
   unit?: string;
   step?: number;
   min?: number;
   max?: number;
   readOnly?: boolean;
-  /** Scrub by dragging anywhere on the field (a plain click still types). */
-  scrubBody?: boolean;
   onCommit(v: number): void;
   /** Called continuously while scrubbing the label; commit follows on release. */
   onPreview?(v: number): void;
 }
 
-function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, scrubBody, onCommit, onPreview }: NumberFieldProps) {
+/** Tiny corner glyphs as scrub handles for the Kanten fields. */
+const FilletGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 11V7a5 5 0 0 1 5-5h4" /></svg>
+);
+const ChamferGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 11V6l4-4h5" /></svg>
+);
+
+function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, onCommit, onPreview }: NumberFieldProps) {
   const [text, setText] = useState(show(value));
   const focused = useRef(false);
   useEffect(() => {
@@ -45,7 +53,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
     if (Math.abs(v - value) > 1e-9) onCommit(v);
   };
 
-  const scrub = (e: React.PointerEvent<HTMLElement>, threshold = 0) => {
+  const scrub = (e: React.PointerEvent<HTMLElement>, threshold = 2) => {
     if (readOnly) return;
     e.preventDefault();
     const startX = e.clientX;
@@ -86,13 +94,8 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
   const fontSize = text.length > 6 ? 12 : text.length > 4 ? 13 : undefined;
   return (
     <div
-      className={`field ${scrubBody && !readOnly ? "scrub-body" : ""}`}
-      onPointerDown={(e) => {
-        if (!scrubBody || document.activeElement === inputRef.current) return;
-        scrub(e, 3);
-      }}
+      className="field"
       onMouseDown={(e) => {
-        if (scrubBody) return;
         // The whole box is the hit target (except the scrub label): focus and select all.
         if ((e.target as HTMLElement).tagName === "LABEL" || readOnly) return;
         e.preventDefault();
@@ -101,7 +104,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
       }}
     >
       {label && (
-        <label className={axis} onPointerDown={scrub} title={readOnly ? undefined : "Ziehen zum Ändern"}>
+        <label className={`${axis ?? ""} ${typeof label === "string" ? "" : "icon"}`} onPointerDown={scrub} title={readOnly ? undefined : "Ziehen zum Ändern"}>
           {label}
         </label>
       )}
@@ -176,9 +179,10 @@ function Dimensions({ f }: { f: Feature }) {
     );
   }
 
-  if (f.type === "sketch" || f.type === "text") return null;
-  const fields = f.type === "extrude" ? [{ key: "height", label: "Höhe" }] : PARAM_FIELDS[f.type];
-  const params = (f.type === "extrude" ? { height: f.height } : f.params) as Record<string, number>;
+  if (f.type === "text") return null;
+  if (f.type === "sketch" || f.type === "extrude") return <ProfileSize f={f} />;
+  const fields = PARAM_FIELDS[f.type];
+  const params = f.params as Record<string, number>;
   const set = (key: string, v: number) => {
     let patch: Record<string, number> = { [key]: v };
     if (locked && params[key] > 0) {
@@ -200,13 +204,38 @@ function Dimensions({ f }: { f: Feature }) {
         )}
       </div>
       <div className={`field-row ${cols(fields.length)}`}>
-        {fields.map(({ key }) => (
-          <NumberField key={key} value={params[key]} min={key === "topDiameter" ? 0 : 0.1} onCommit={(v) => set(key, v)} />
+        {fields.map(({ key, label }) => (
+          <NumberField key={key} label={label[0]} value={params[key]} min={key === "topDiameter" ? 0 : 0.1} onCommit={(v) => set(key, v)} />
         ))}
       </div>
       <div className={`field-caption ${cols(fields.length)}`} style={fields.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
         {fields.map(({ key, label }) => <span key={key}>{label}</span>)}
       </div>
+    </div>
+  );
+}
+
+/** Breite / Tiefe / Höhe of a sketch or extruded profile; Höhe 0 = flat, > 0 extrudes. */
+function ProfileSize({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
+  const b = profileBounds(f.type === "sketch" ? f.shapes : f.profile);
+  const values = [b ? b.maxX - b.minX : 0, b ? b.maxY - b.minY : 0, f.type === "extrude" ? f.height : 0];
+  const keys = ["width", "depth", "height"] as const;
+  return (
+    <div className="group">
+      <div className="group-label"><span><Icon name="measure" size={15} />Maße</span></div>
+      <div className="field-row">
+        {values.map((v, i) => (
+          <NumberField
+            key={keys[i]}
+            label={"BTH"[i]}
+            value={Math.round(v * 100) / 100}
+            min={i === 2 ? 0 : 0.1}
+            onCommit={(n) => void execute("shape.setSize", { id: f.id, [keys[i]]: n })}
+          />
+        ))}
+      </div>
+      <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
+      {f.type === "sketch" && <p className="hint subtle-hint">Höhe über 0 zieht die Skizze in 3D.</p>}
     </div>
   );
 }
@@ -303,8 +332,9 @@ function TextSection({ f }: { f: Feature }) {
 
 function SingleObject({ f }: { f: Feature }) {
   const limit = maxEdgeSize(f);
-  // Stay just below the size at which the edge treatment would consume a whole face.
-  const edgeLimit = limit !== null ? Math.floor((limit - 0.05) * 10) / 10 : undefined;
+  // Stay just below the size at which the edge treatments would consume a whole face;
+  // fillet and chamfer share that room.
+  const edgeLimit = (other: number) => (limit !== null ? Math.max(0, Math.floor((limit - other - 0.05) * 10) / 10) : undefined);
   const last = useRef(0);
   const edgePreview = (command: string, v: number) => {
     const now = performance.now();
@@ -322,18 +352,18 @@ function SingleObject({ f }: { f: Feature }) {
       <Dimensions f={f} />
       <TransformFields f={f} kind="position" />
       <TransformFields f={f} kind="rotation" />
-      {f.type !== "sphere" && f.type !== "torus" && (
+      {f.type !== "sphere" && f.type !== "torus" && f.type !== "sketch" && (
         <div className="group">
           <div className="group-label"><span><Icon name="fillet" size={15} />Kanten</span></div>
           <div className="field-row two">
             {(["fillet", "chamfer"] as const).map((k) => (
               <NumberField
                 key={k}
+                label={k === "fillet" ? <FilletGlyph /> : <ChamferGlyph />}
                 value={f[k] ?? 0}
                 min={0}
-                max={edgeLimit}
+                max={edgeLimit((k === "fillet" ? f.chamfer : f.fillet) ?? 0)}
                 step={0.5}
-                scrubBody
                 onPreview={(v) => edgePreview(`object.${k}`, v)}
                 onCommit={(v) => {
                   clearPreview();

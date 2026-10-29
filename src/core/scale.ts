@@ -1,7 +1,7 @@
 // Scaling bakes into the parametric dimensions (no scale matrix in the document).
 // Radial dimensions follow the mean of X and Y; bodies that can only scale
 // uniformly (sphere) use the factor that changed most.
-import type { Feature, SketchShape, Vec3 } from "./document";
+import { isClosed, shapePoints, type Feature, type SketchShape, type Vec3 } from "./document";
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -104,3 +104,39 @@ export function scaleFeature(f: Feature, requested: Vec3, anchor: Vec3): Feature
   const position = f.transform.position.map((v, i) => r2(anchor[i] + (v - anchor[i]) * s[i])) as Vec3;
   return { ...scaled, transform: { ...f.transform, position } };
 }
+
+/** Bounding box of 2D shapes (closed and open). */
+export function profileBounds(shapes: SketchShape[]) {
+  const pts = shapes.flatMap((s) => shapePoints(s, 48));
+  if (!pts.length) return null;
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+/** Resizes a 2D profile to the given width/depth (mm), keeping its centre. */
+export function resizeProfile(shapes: SketchShape[], width?: number, depth?: number): SketchShape[] {
+  const b = profileBounds(shapes);
+  if (!b) return shapes;
+  const w = b.maxX - b.minX;
+  const d = b.maxY - b.minY;
+  const sx = width !== undefined && w > 1e-6 ? width / w : 1;
+  const sy = depth !== undefined && d > 1e-6 ? depth / d : 1;
+  if (sx === 1 && sy === 1) return shapes;
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  const shift = (s: SketchShape, dx: number, dy: number): SketchShape => {
+    switch (s.kind) {
+      case "rect":
+        return { ...s, x: s.x + dx, y: s.y + dy };
+      case "circle":
+      case "polygon":
+        return { ...s, cx: s.cx + dx, cy: s.cy + dy };
+      case "poly":
+        return { ...s, points: s.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) };
+    }
+  };
+  return shapes.map((s) => shift(scaleShape(shift(s, -cx, -cy), [sx, sy, 1]), cx, cy)).map((s) => shift(s, 0, 0));
+}
+
+export const hasClosedProfile = (shapes: SketchShape[]) => shapes.some(isClosed);

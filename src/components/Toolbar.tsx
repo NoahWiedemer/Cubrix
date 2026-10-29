@@ -41,7 +41,6 @@ export function Toolbar() {
             <button className="tool" onClick={() => { useSketch.setState({ activeId: single.id }); void execute("workspace.sketch"); }} data-tip="Skizze im 2D-Modus bearbeiten" data-tip-pos="top">
               <Icon name="sketch" size={18} />In 2D bearbeiten
             </button>
-            <CommandTool id="sketch.extrude" label="In 3D ziehen" />
           </>
         )}
         {mode === "single" && single?.type !== "sketch" && (

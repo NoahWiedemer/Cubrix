@@ -1,5 +1,5 @@
 // All built-in commands. Importing this module registers them.
-import { defineCommand, type CommandContext, type DocumentResult } from "./commands";
+import { defineCommand, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
 import {
   BOOLEAN_LABELS,
   PRIMITIVE_LABELS,
@@ -20,7 +20,6 @@ import {
   type ModelDocument,
   type SketchFeature,
   type SketchShape,
-  isClosed,
   isSolid,
   type PrimitiveFeature,
   type PrimitiveParams,
@@ -35,7 +34,7 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
-import { scaleFeature } from "./scale";
+import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
 import { useHelp } from "../help/HelpCenter";
@@ -312,13 +311,17 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
         const smallest = b ? Math.min(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) : 20;
         size = current ? 0 : Math.max(0.5, Math.round(smallest * 0.1 * 2) / 2);
       }
-      const limit = maxEdgeSize(f);
+      // The other treatment already uses part of the room on each edge.
+      const other = (fillet ? f.chamfer : f.fillet) ?? 0;
+      const base = maxEdgeSize(f);
+      const limit = base === null ? null : base - other;
       if (size > 0 && limit !== null && size >= limit)
         throw new Error(`${size.toLocaleString("de-DE")} mm ist zu groß für ${f.name}. Höchstens etwa ${(Math.floor((limit - 0.05) * 10) / 10).toLocaleString("de-DE")} mm.`);
-      if (current === size && !(fillet ? f.chamfer : f.fillet)) return null;
+      if (current === size) return null;
       const verb = fillet ? "abrunden" : "fasen";
       return {
-        doc: updateFeature(doc, f.id, (x) => ({ ...x, fillet: fillet ? size : 0, chamfer: fillet ? 0 : size })),
+        // Independent of the other treatment: both can be combined.
+        doc: updateFeature(doc, f.id, (x) => ({ ...x, [kind]: size })),
         label: size ? `${f.name} ${verb} (${size.toLocaleString("de-DE")} mm)` : `${f.name}: ${fillet ? "Abrundung" : "Fase"} entfernen`,
       };
     },
@@ -650,34 +653,59 @@ defineCommand({
   },
 });
 
+/**
+ * Size of a 2D sketch / extruded profile: Breite and Tiefe scale the profile around its
+ * centre, Höhe > 0 extrudes it in place (same object), Höhe 0 makes it flat again.
+ */
+defineCommand({
+  id: "shape.setSize",
+  kind: "document",
+  label: "Größe ändern",
+  description:
+    "Setzt Breite, Tiefe und Höhe einer Skizze bzw. eines hochgezogenen Profils. Höhe > 0 zieht die Skizze in 3D (parametrisch), Höhe 0 macht sie wieder flach.",
+  icon: "extrude",
+  params: {
+    id: { type: "id", optional: true, description: "Skizzen-/Profil-ID (Standard: Auswahl)" },
+    width: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Breite (X)" },
+    depth: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Tiefe (Y)" },
+    height: { type: "number", unit: "mm", min: 0, optional: true, description: "Höhe (0 = flache Skizze)" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 1 && ["sketch", "extrude"].includes(findFeature(ctx.doc, ctx.selection[0])?.type ?? ""),
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f || (f.type !== "sketch" && f.type !== "extrude")) throw new Error("Bitte eine Skizze oder ein hochgezogenes Profil auswählen.");
+    const shapes = resizeProfile(f.type === "sketch" ? f.shapes : f.profile, p.width, p.depth);
+    const height = p.height !== undefined ? round(p.height) : f.type === "extrude" ? f.height : 0;
+    if (height > 0 && !hasClosedProfile(shapes))
+      throw new Error("Die Skizze enthält keine geschlossene Form. Schließe den Linienzug am Startpunkt.");
+    const { id, name, visible, transform } = f;
+    const next: Feature =
+      height > 0
+        ? { id, name, visible, transform, type: "extrude", profile: shapes, height, fillet: f.fillet, chamfer: f.chamfer }
+        : { id, name, visible, transform, type: "sketch", shapes };
+    if (JSON.stringify(next) === JSON.stringify(f)) return null;
+    const label =
+      p.height !== undefined && (f.type === "sketch") !== (height === 0)
+        ? height > 0 ? `${name} ${height.toLocaleString("de-DE")} mm hochziehen` : `${name} flach machen`
+        : `${name}: Größe ändern`;
+    return { doc: updateFeature(doc, f.id, () => next), label };
+  },
+});
+
+/** Kept for the AI and older prompts: extrudes a sketch in place. */
 defineCommand({
   id: "sketch.extrude",
   kind: "document",
   label: "In 3D ziehen",
-  description: "Zieht die geschlossenen Formen einer Skizze um die angegebene Höhe in die Höhe (Extrusion). Innenliegende Formen werden zu Löchern.",
+  description: "Zieht eine Skizze um die angegebene Höhe hoch (wie Höhe im Inspektor). Innenliegende Formen werden zu Löchern.",
   icon: "extrude",
-  shortcut: "e",
   params: {
     id: { type: "id", optional: true, description: "Skizzen-ID (Standard: Auswahl)" },
     height: { type: "number", unit: "mm", min: 0.1, default: 10, description: "Höhe" },
   },
   isEnabled: (ctx) => ctx.selection.length === 1 && findFeature(ctx.doc, ctx.selection[0])?.type === "sketch",
   apply(doc, p, ctx) {
-    const sketch = findFeature(doc, p.id ?? ctx.selection[0]);
-    if (!sketch || sketch.type !== "sketch") throw new Error("Bitte eine Skizze auswählen");
-    const profile = sketch.shapes.filter(isClosed);
-    if (!profile.length) throw new Error("Die Skizze enthält keine geschlossene Form. Schließe den Linienzug am Startpunkt.");
-    const body: Feature = {
-      id: newId(),
-      type: "extrude",
-      name: uniqueName(doc, "Körper"),
-      visible: true,
-      transform: structuredClone(sketch.transform),
-      profile,
-      height: round(p.height),
-    };
-    const features = doc.features.map((f) => (f.id === sketch.id ? { ...f, visible: false } : f));
-    return { doc: { ...doc, features: [...features, body] }, selection: [body.id], label: `${sketch.name} ${round(p.height)} mm hochziehen` };
+    return (getCommand("shape.setSize") as DocumentCommand).apply(doc, { id: p.id ?? ctx.selection[0], height: p.height }, ctx);
   },
 });
 

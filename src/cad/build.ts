@@ -9,30 +9,40 @@ export class EdgeTreatmentError extends Error {}
 
 const mm = (n: number) => `${(Math.round(n * 10) / 10).toLocaleString("de-DE")} mm`;
 
-function applyEdgeTreatment(shape: Shape3D, f: Feature): Shape3D {
-  const fillet = f.fillet ?? 0;
-  const chamfer = f.chamfer ?? 0;
-  if (fillet <= 0 && chamfer <= 0) return shape;
-  const what = fillet > 0 ? "Abrunden" : "Fasen";
-  const size = fillet > 0 ? fillet : chamfer;
-  // Spheres and tori only have seam edges, nothing that could be rounded.
-  if (f.type === "sphere" || f.type === "torus" || shape.edges.length === 0)
-    throw new EdgeTreatmentError(`${f.name} hat keine Kanten zum ${what}.`);
+/** One rounding or chamfer pass over all edges, validated (OCC can "succeed" with junk). */
+function edgePass(shape: Shape3D, f: Feature, kind: "fillet" | "chamfer", size: number): Shape3D {
+  const what = kind === "fillet" ? "Abrunden" : "Fasen";
+  const tooBig = () => new EdgeTreatmentError(`${what} mit ${mm(size)} ist für ${f.name} zu groß. Versuche einen kleineren Wert.`);
   let result: Shape3D;
   try {
-    result = fillet > 0 ? shape.fillet(fillet) : shape.chamfer(chamfer);
+    result = kind === "fillet" ? shape.fillet(size) : shape.chamfer(size);
   } catch {
-    throw new EdgeTreatmentError(`${what} mit ${mm(size)} ist für ${f.name} zu groß. Versuche einen kleineren Wert.`);
+    throw tooBig();
   }
-  // OpenCascade sometimes "succeeds" with a broken result: rounding must keep the
-  // outer size and only remove a little material.
+  // It must keep the outer size and only remove a little material.
   const before = shape.boundingBox.bounds;
   const after = result?.boundingBox.bounds;
   const grew = !after || after.some((p, i) => p.some((v, k) => (i === 0 ? v < before[i][k] - 0.01 : v > before[i][k] + 0.01)));
   const v0 = measureVolume(shape);
   const v1 = result ? measureVolume(result) : 0;
-  if (!result || result.isNull || grew || !(v1 > 0 && v1 < v0) || result.faces.length <= shape.faces.length)
-    throw new EdgeTreatmentError(`${what} mit ${mm(size)} ist für ${f.name} zu groß. Versuche einen kleineren Wert.`);
+  if (!result || result.isNull || grew || !(v1 > 0 && v1 < v0) || result.faces.length <= shape.faces.length) throw tooBig();
+  return result;
+}
+
+/**
+ * Fase and Abrundung are independent and can be combined: the chamfer is cut first,
+ * then the fillet rounds every resulting edge (which also softens the chamfer borders).
+ */
+function applyEdgeTreatment(shape: Shape3D, f: Feature): Shape3D {
+  const fillet = f.fillet ?? 0;
+  const chamfer = f.chamfer ?? 0;
+  if (fillet <= 0 && chamfer <= 0) return shape;
+  // Spheres and tori only have seam edges, nothing that could be rounded.
+  if (f.type === "sphere" || f.type === "torus" || shape.edges.length === 0)
+    throw new EdgeTreatmentError(`${f.name} hat keine Kanten zum ${fillet > 0 ? "Abrunden" : "Fasen"}.`);
+  let result = shape;
+  if (chamfer > 0) result = edgePass(result, f, "chamfer", chamfer);
+  if (fillet > 0) result = edgePass(result, f, "fillet", fillet);
   return result;
 }
 
