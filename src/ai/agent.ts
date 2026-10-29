@@ -101,6 +101,8 @@ ${sceneSummary()}`;
 
 export interface AgentEvents {
   onText(delta: string): void;
+  /** What is happening right now, in plain German ("Denkt nach …", "Erstellt 21 Formen …"). */
+  onPhase?(phase: string): void;
   onStep(step: { label: string; nodeId?: string; ok: boolean; error?: string }): void;
 }
 
@@ -124,7 +126,27 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   return created.length ? { ok: true, created } : { ok: true, changed: !!node };
 }
 
+/** Plain-German activity for a tool call. */
+export function phaseFor(name: string, input: Record<string, unknown>): string {
+  const id = commandId(name);
+  const n = (k: string) => (Array.isArray(input[k]) ? (input[k] as unknown[]).length : 0);
+  if (id === "shapes.createMany") return `Erstellt ${n("shapes")} Formen …`;
+  if (id === "boolean.subtract") return n("toolIds") > 1 ? `Schneidet ${n("toolIds")} Formen aus …` : "Schneidet aus …";
+  if (id === "boolean.union") return "Verbindet Körper …";
+  if (id === "boolean.intersect") return "Bildet die Schnittmenge …";
+  if (id === "object.pattern") return "Erstellt ein Muster …";
+  if (id === "object.fillet") return "Rundet Kanten ab …";
+  if (id === "object.chamfer") return "Fast Kanten …";
+  if (id.startsWith("primitive.")) return `Erstellt ${getCommand(id)?.label.replace(/ hinzufügen$/, "") ?? "Form"} …`;
+  if (id.startsWith("text.")) return "Setzt Text …";
+  if (name === "get_screenshot") return "Prüft das Ergebnis …";
+  if (name === "get_model") return "Sieht sich das Modell an …";
+  if (name === "run_script") return "Führt mehrere Schritte aus …";
+  return `${getCommand(id)?.label ?? id} …`;
+}
+
 async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
+  events.onPhase?.(phaseFor(block.name, block.input));
   const result = (content: unknown, extra: Partial<Extract<Block, { type: "tool_result" }>> = {}): Block => ({
     type: "tool_result",
     tool_use_id: block.id,
@@ -216,12 +238,15 @@ export async function runAgent(opts: {
   signal: AbortSignal;
   events: AgentEvents;
   maxTurns?: number;
+  /** History group id for this run (to undo the whole run at once). */
+  groupId?: string;
 }): Promise<Message[]> {
-  const group = { id: Math.random().toString(36).slice(2), prompt: opts.prompt };
+  const group = { id: opts.groupId ?? Math.random().toString(36).slice(2), prompt: opts.prompt };
   const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }] }];
   const tools = buildTools();
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
     if (opts.signal.aborted) break;
+    opts.events.onPhase?.(turn === 0 ? "Denkt nach …" : "Plant den nächsten Schritt …");
     const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, prepareHistory(messages), opts.events.onText, opts.signal);
     messages.push({ role: "assistant", content: res.blocks, model: opts.model });
     const calls = res.blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");

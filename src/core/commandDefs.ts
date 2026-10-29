@@ -426,7 +426,7 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
     apply(doc, p, ctx) {
       const f = findFeature(doc, p.id ?? ctx.selection[0]);
       if (!f) throw new Error("Objekt nicht gefunden");
-      if (f.type === "sketch") throw new Error("Skizzen haben keine Kanten – erst in 3D ziehen.");
+      if (f.type === "sketch") throw new Error("Flache Skizzen haben keine Kanten – zuerst im Inspektor eine Höhe geben.");
       if (f.type === "sphere" || f.type === "torus")
         throw new Error(`${PRIMITIVE_LABELS[f.type]} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
       const current = (fillet ? f.fillet : f.chamfer) ?? 0;
@@ -821,7 +821,7 @@ defineCommand({
 defineCommand({
   id: "sketch.extrude",
   kind: "document",
-  label: "In 3D ziehen",
+  label: "Höhe geben",
   description: "Zieht eine Skizze um die angegebene Höhe hoch (wie Höhe im Inspektor). Innenliegende Formen werden zu Löchern.",
   icon: "extrude",
   params: {
@@ -1454,7 +1454,9 @@ function defineExport(format: ExportFormat, description: string, shortcut?: stri
     isEnabled: (ctx) => ctx.doc.features.some((f) => f.visible && isSolid(f)),
     async perform(_p, ctx) {
       const visible = ctx.doc.features.filter((f) => f.visible && isSolid(f));
+      const flat = ctx.doc.features.filter((f) => f.visible && f.type === "sketch").length;
       if (!visible.length) throw new Error("Es gibt keine sichtbaren Körper zum Exportieren.");
+      if (flat) useApp.getState().toast("info", flat === 1 ? "1 flache Skizze wurde nicht exportiert." : `${flat} flache Skizzen wurden nicht exportiert.`);
       const data = await exportFeatures(visible, format, ctx.doc.name);
       const path = await saveFile(
         `${fileSafe(ctx.doc.name)}.${format}`,

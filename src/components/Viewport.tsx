@@ -32,6 +32,7 @@ import { placeText, useTextTool } from "../ui/textTool";
 import { viewportPick } from "../ui/viewportPick";
 import { volumeCorners, volumeEdges } from "../ui/buildVolume";
 import { useViewportFrame } from "../ui/viewportFrame";
+import { useAiRun } from "../ai/run";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -92,6 +93,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
   const t = useTransform(f);
   const selected = useApp((s) => s.selection.includes(f.id));
   const presenting = useApp((s) => s.workspace === "preview");
+  const anim = useBuildAnimation(f.id, t.position);
   const overhangsOn = usePrintView((s) => s.overhangs);
   const showOverhangs = overhangsOn && !presenting;
   if (!entry || !f.visible) return null;
@@ -110,7 +112,8 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
   };
 
   return (
-    <group position={t.position} rotation={new THREE.Euler(deg(t.rotation[0]), deg(t.rotation[1]), deg(t.rotation[2]), "XYZ")}>
+    <group ref={anim.outer} position={t.position} rotation={new THREE.Euler(deg(t.rotation[0]), deg(t.rotation[1]), deg(t.rotation[2]), "XYZ")}>
+      <group ref={anim.inner}>
       <mesh
         ref={(m) => registerMesh(f.id, m)}
         geometry={entry.geometry}
@@ -149,8 +152,73 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
       <lineSegments geometry={entry.edges} raycast={() => null} visible={!presenting}>
         <lineBasicMaterial color={selected ? ACCENT : "#14181b"} transparent opacity={selected ? 0.8 : 0.55} />
       </lineSegments>
+      {/* Mint edge glow while materializing (fades out). */}
+      <lineSegments geometry={entry.edges} raycast={() => null} renderOrder={5}>
+        <lineBasicMaterial ref={anim.glow} color={ACCENT} transparent opacity={0} depthTest={false} toneMapped={false} />
+      </lineSegments>
+      </group>
     </group>
   );
+}
+
+const reducedMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * AI build animations: objects created during a run grow from their base (CAD Z) with
+ * a fading mint edge glow (boolean results only glow), and AI moves tween instead of
+ * jumping. Runs alongside the operations; nothing waits for it.
+ */
+function useBuildAnimation(id: string, target: Vec3) {
+  const outer = useRef<THREE.Group>(null);
+  const inner = useRef<THREE.Group>(null);
+  const glow = useRef<THREE.LineBasicMaterial>(null);
+  const shown = useRef<THREE.Vector3 | null>(null);
+  const start = useRef<number | null>(null);
+  useFrame((_, dt) => {
+    const on = useSettings.getState().aiAnimations && !reducedMotion;
+    const run = useAiRun.getState();
+    // Position tween (AI only).
+    const g = outer.current;
+    if (g) {
+      const goal = new THREE.Vector3(...target);
+      if (!shown.current || !on || !run.running) shown.current = goal.clone();
+      else shown.current.lerp(goal, Math.min(1, dt / 0.09));
+      g.position.copy(shown.current);
+    }
+    const b = run.born[id];
+    const i = inner.current;
+    const m = glow.current;
+    if (!b || !on) {
+      if (i && i.scale.z !== 1) i.scale.set(1, 1, 1);
+      if (m && m.opacity) m.opacity = 0;
+      return;
+    }
+    // The clock starts when the mesh first renders, plus the batch stagger.
+    if (start.current === null) {
+      if (!i) return;
+      start.current = performance.now() + b.delay * ((import.meta.env.DEV && (window as unknown as { __animSlow?: number }).__animSlow) || 1);
+    }
+    // Dev only: window.__animSlow stretches the animation for frame captures.
+    const slow = (import.meta.env.DEV && (window as unknown as { __animSlow?: number }).__animSlow) || 1;
+    const k = Math.max(0, Math.min(1, (performance.now() - start.current) / ((b.kind === "grow" ? 340 : 520) * slow)));
+    if (i) {
+      if (b.kind === "grow") {
+        // Ease-out with a hint of overshoot, from the base upwards.
+        const e = 1 - Math.pow(1 - k, 3);
+        const z = Math.max(0.001, e + Math.sin(k * Math.PI) * 0.06);
+        const xy = 0.86 + 0.14 * e;
+        i.scale.set(xy, xy, z);
+      } else i.scale.set(1, 1, 1);
+    }
+    if (m) m.opacity = (1 - k) * 0.9;
+    if (k >= 1) {
+      start.current = null;
+      const born = { ...useAiRun.getState().born };
+      delete born[id];
+      useAiRun.setState({ born });
+    }
+  });
+  return { outer, inner, glow };
 }
 
 // ── Dimensions ───────────────────────────────────────────────────────────────
@@ -353,6 +421,7 @@ export function Viewport() {
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
   const textTool = useTextTool((s) => s.active);
   const frame = useViewportFrame();
+  const aiRunning = useAiRun((s) => s.running) && workspace !== "preview";
   const free = { left: frame.left, right: frame.right };
 
   return (
@@ -410,7 +479,7 @@ export function Viewport() {
           )}
           {textTool && <TextPlacementPlane />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && single.type !== "sketch" && workspace === "model" && (
+          {single && workspace === "model" && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -428,7 +497,7 @@ export function Viewport() {
       </Canvas>
 
       <div className="vp-free" style={free}>
-      <div className="vp-frame" />
+      <div className={`vp-frame ${aiRunning ? "ai-working" : ""}`} />
       {kernel.status !== "ready" || kernel.busy > 0 ? (
         <div className="vp-badge">
           {kernel.status === "error" ? (

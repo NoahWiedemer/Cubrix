@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
+import { useAiRun } from "../ai/run";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
 import { clampColumnWidth, column, resizeColumn, slotAt } from "../ui/layoutModel";
@@ -28,6 +29,8 @@ function PanelBody({ id }: { id: PanelId }) {
 
 function PanelMeta({ id }: { id: PanelId }) {
   const doc = useDoc();
+  const aiRunning = useAiRun((s) => s.running);
+  if (id === "chat" && aiRunning) return <span className="run-dot small" data-tip="KI arbeitet" data-tip-pos="bottom" />;
   if (id === "tree" && doc.features.length) return <span className="count">{doc.features.length}</span>;
   return null;
 }

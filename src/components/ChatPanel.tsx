@@ -16,6 +16,8 @@ import { logError } from "../core/errorLog";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
 import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, modelInfo, type Effort, type ModelInfo } from "../ai/models";
 import { connectedProviders, refreshKeys, useKeys } from "../ai/keys";
+import { endRun, setPhase, startRun, useAiRun } from "../ai/run";
+import { useApp } from "../core/store";
 import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
 
@@ -31,6 +33,9 @@ interface ChatEntry {
   steps: Step[];
   error?: FriendlyError;
   prompt?: string;
+  /** History group of the run (to undo it as a whole). */
+  groupId?: string;
+  durationMs?: number;
 }
 
 /** Conversation state survives closing/reopening the panel. */
@@ -106,6 +111,44 @@ function ModelLabel({ m }: { m: ModelInfo }) {
   );
 }
 
+/** Live status while the agent works: pulsing dot, shimmering activity, elapsed seconds. */
+function RunStatus() {
+  const phase = useAiRun((s) => s.phase);
+  const startedAt = useAiRun((s) => s.startedAt);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, []);
+  const secs = Math.max(0, Math.floor((performance.now() - startedAt) / 1000));
+  return (
+    <div className="run-status" role="status" aria-live="polite">
+      <span className="run-dot" />
+      <span className="run-phase">{phase || "Arbeitet …"}</span>
+      <span className="run-time">{secs} s</span>
+    </div>
+  );
+}
+
+/** Undo / redo a whole AI run (its history group), as long as nothing was built on top. */
+function RunUndo({ groupId }: { groupId: string }) {
+  const nodes = useApp((s) => s.nodes);
+  const currentId = useApp((s) => s.currentId);
+  const mine = Object.values(nodes).filter((n) => n.group?.id === groupId);
+  if (!mine.length) return null;
+  const first = mine.find((n) => !mine.some((m) => m.id === n.parentId))!;
+  const last = mine.find((n) => !mine.some((m) => m.parentId === n.id))!;
+  const before = first.parentId;
+  const canUndo = currentId === last.id && !!before;
+  const canRedo = currentId === before && nodes[before!]?.activeChildId === first.id;
+  if (!canUndo && !canRedo) return null;
+  return (
+    <button className="run-undo" onClick={() => execute("history.goto", { nodeId: canUndo ? before! : last.id })} data-tip={canUndo ? "Alle Schritte dieser Antwort zurücknehmen" : "Schritte wiederherstellen"} data-tip-pos="top">
+      <Icon name={canUndo ? "undo" : "redo"} size={13} />{canUndo ? "Rückgängig" : "Wiederherstellen"}
+    </button>
+  );
+}
+
 function ErrorBox({ error, onRetry }: { error: FriendlyError; onRetry?: () => void }) {
   const [open, setOpen] = useState(false);
   return (
@@ -120,18 +163,19 @@ function ErrorBox({ error, onRetry }: { error: FriendlyError; onRetry?: () => vo
   );
 }
 
-function Steps({ steps }: { steps: Step[] }) {
-  const [open, setOpen] = useState(false);
+function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const shown = open ?? !!live; // live runs show their steps, finished ones collapse
   const failed = steps.filter((s) => !s.ok).length;
   return (
     <div className="msg-steps">
-      <button className="steps-toggle" onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      <button className="steps-toggle" onClick={() => setOpen(!shown)}>
+        {shown ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         <Icon name="ai" size={13} />
         {steps.length} {steps.length === 1 ? "Schritt" : "Schritte"}
         {failed > 0 && <span className="steps-failed">· {failed} fehlgeschlagen</span>}
       </button>
-      {open &&
+      {shown &&
         steps.map((s, j) => (
           <button key={j} className={`step-row ${s.ok ? "" : "failed"}`} disabled={!s.nodeId} onClick={() => s.nodeId && execute("history.goto", { nodeId: s.nodeId })} title={s.error}>
             <Icon name={s.ok ? "check" : "warn"} size={12} />
@@ -206,8 +250,13 @@ export function ChatPanel() {
     const update = (fn: (e: ChatEntry) => ChatEntry) =>
       useChat.setState((s) => ({ entries: [...s.entries.slice(0, -1), fn(s.entries[s.entries.length - 1])] }));
     const info = modelInfo(provider, model[provider] || DEFAULT_MODEL[provider]);
+    const groupId = Math.random().toString(36).slice(2);
+    const t0 = performance.now();
+    update((e) => ({ ...e, groupId }));
+    startRun();
     try {
       const api = await runAgent({
+        groupId,
         provider,
         model: info.id,
         effort: info.effort ? effort : null,
@@ -218,6 +267,7 @@ export function ChatPanel() {
         events: {
           onText: (d) => update((e) => ({ ...e, text: e.text + d })),
           onStep: (step) => update((e) => ({ ...e, steps: [...e.steps, step] })),
+          onPhase: setPhase,
         },
       });
       useChat.setState({ api });
@@ -228,6 +278,8 @@ export function ChatPanel() {
         update((x) => ({ ...x, error: friendlyError(e), prompt }));
       }
     } finally {
+      update((e) => ({ ...e, durationMs: performance.now() - t0 }));
+      endRun();
       useChat.setState({ running: false });
       controller = null;
     }
@@ -278,10 +330,15 @@ export function ChatPanel() {
           entries.map((e, i) => (
             <div key={i} className={`msg ${e.role}`}>
               {e.text && <div className="msg-text">{e.text}</div>}
-              {e.steps.length > 0 && <Steps steps={e.steps} />}
+              {e.steps.length > 0 && <Steps steps={e.steps} live={running && i === entries.length - 1} />}
               {e.error && <ErrorBox error={e.error} onRetry={e.prompt ? () => retry(e.prompt!) : undefined} />}
-              {e.role === "assistant" && running && i === entries.length - 1 && !e.text && !e.steps.length && (
-                <div className="typing"><span /><span /><span /></div>
+              {e.role === "assistant" && running && i === entries.length - 1 && <RunStatus />}
+              {e.role === "assistant" && !(running && i === entries.length - 1) && e.durationMs !== undefined && !e.error && (
+                <div className="run-done">
+                  <Icon name="check" size={12} />
+                  <span>Fertig · {Math.max(1, Math.round(e.durationMs / 1000))} s{e.steps.filter((x) => x.nodeId).length ? ` · ${e.steps.filter((x) => x.nodeId).length} ${e.steps.filter((x) => x.nodeId).length === 1 ? "Änderung" : "Änderungen"}` : ""}</span>
+                  {e.groupId && <RunUndo groupId={e.groupId} />}
+                </div>
               )}
             </div>
           ))
@@ -292,7 +349,7 @@ export function ChatPanel() {
           ref={inputRef}
           rows={1}
           value={input}
-          placeholder="Nachricht an die KI"
+          placeholder={running ? "Arbeitet …" : "Nachricht an die KI"}
           data-tip="KI-Chat"
           data-kbd="mod+k"
           data-tip-pos="top"

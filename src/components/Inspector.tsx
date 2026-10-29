@@ -83,7 +83,6 @@ function Printer() {
         ))}
       </div>
       <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
-      {!manual && <p className="hint">Werte ändern schaltet auf „Manuell“.</p>}
       <VolumeToggles />
       <PrintSummary />
     </div>
@@ -166,6 +165,9 @@ function View() {
       <button className="more-row" onClick={() => setMore(!more)}>
         {more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}Mehr
       </button>
+      {more && (
+        <Toggle label="KI-Animationen" value={s.aiAnimations} onChange={(aiAnimations) => useSettings.setState({ aiAnimations })} />
+      )}
       {more && (
         <label className="slider-row">
           <span>Raster ausblenden ab</span>

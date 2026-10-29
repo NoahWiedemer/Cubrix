@@ -246,7 +246,6 @@ function ProfileSize({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
         ))}
       </div>
       <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
-      {f.type === "sketch" && <p className="hint subtle-hint">Höhe über 0 zieht die Skizze in 3D.</p>}
     </div>
   );
 }

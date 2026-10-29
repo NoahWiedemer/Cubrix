@@ -44,7 +44,7 @@ function Extrude() {
         </marker>
       </defs>
       <text x={iso(60, 40, 30)[0] + 52} y={iso(60, 40, 30)[1] + 4} fill={MINT} fontSize="14">Höhe</text>
-      <text x="40" y="210" fill={TEXT} fontSize="13">Skizze (mint) → In 3D ziehen → Körper</text>
+      <text x="40" y="210" fill={TEXT} fontSize="13">Skizze (mint) → Höhe im Inspektor → Körper</text>
     </svg>
   );
 }

@@ -8,6 +8,12 @@ import { App } from "./App";
 import { installErrorHooks } from "./core/errorLog";
 
 installErrorHooks();
+
+// Dev only: scripted demos (e.g. AI build animations) from the browser console / CDP.
+if (import.meta.env.DEV)
+  void Promise.all([import("./ai/run"), import("./core/commands"), import("./core/store")]).then(([run, commands, store]) =>
+    Object.assign(window, { __albedo: { run, execute: commands.execute, useApp: store.useApp } }),
+  );
 import { initKernel, useKernel } from "./cad/kernel";
 import { isTauri } from "./core/platform";
 import { isMac, listCommands, toToolDefinition, execute } from "./core/commands";
