@@ -1,6 +1,7 @@
 // Icon names are plain strings in commands and history (so they serialize);
 // this maps them to lucide components.
 import {
+  Globe,
   Pill,
   Egg,
   Star,
@@ -92,6 +93,7 @@ import {
 } from "lucide-react";
 
 export const ICONS = {
+  globe: Globe,
   capsule: Pill,
   egg: Egg,
   star: Star,

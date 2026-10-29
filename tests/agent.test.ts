@@ -295,3 +295,53 @@ describe("Modellwechsel mitten im Chat", () => {
     expect(JSON.stringify(other.bodies[0].messages)).not.toContain('"thinking"');
   });
 });
+
+describe("Websuche (Server-Werkzeug)", () => {
+  it("Anthropic: Suche, Pause, Fortsetzung; Blöcke werden unverändert zurückgegeben", async () => {
+    const bodies: any[] = [];
+    const t: Transport = {
+      async stream(_p, body, onChunk) {
+        bodies.push(body);
+        if (bodies.length === 1)
+          onChunk(
+            sse([
+              { type: "content_block_start", index: 0, content_block: { type: "server_tool_use", id: "srv1", name: "web_search" } },
+              { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"Raspberry Pi 5 Maße"}' } },
+              { type: "content_block_stop", index: 0 },
+              { type: "content_block_start", index: 1, content_block: { type: "web_search_tool_result", tool_use_id: "srv1", content: [{ type: "web_search_result", url: "https://example.org/pi5", title: "Pi 5 Datenblatt" }] } },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "pause_turn" } },
+            ]),
+          );
+        else
+          onChunk(
+            sse([
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "85 × 56 mm" } },
+              { type: "message_delta", delta: { stop_reason: "end_turn" } },
+            ]),
+          );
+      },
+    };
+    const steps: string[] = [];
+    let sources: { url: string }[] = [];
+    const out = await runAgent({
+      provider: "anthropic", model: "claude-sonnet-5-5", transport: t, history: [], prompt: "Case für den Pi", webSearch: true,
+      signal: new AbortController().signal, events: { onText() {}, onStep: (s) => steps.push(s.label), onSources: (s) => (sources = s) },
+    });
+    expect(bodies[0].tools.some((x: any) => x.type === "web_search_20260209" && x.max_uses === 3)).toBe(true);
+    expect(steps).toContain("Sucht im Web: Raspberry Pi 5 Maße");
+    expect(sources[0].url).toBe("https://example.org/pi5");
+    // The paused turn is continued with the server-tool blocks replayed as they came.
+    const replay = JSON.stringify(bodies[1].messages);
+    expect(replay).toContain('"type":"server_tool_use"');
+    expect(replay).toContain('"type":"web_search_tool_result"');
+    expect(replay).not.toContain("anthropic_raw");
+    // Switching to OpenAI drops the Anthropic server-tool blocks cleanly.
+    const o: any[] = [];
+    const ot: Transport = { async stream(_p, body, onChunk) { o.push(body); onChunk(sse([{ type: "response.completed", response: { output: [] } }])); } };
+    await runAgent({ provider: "openai", model: "gpt-6.1-terra", transport: ot, history: out, prompt: "weiter", webSearch: true, signal: new AbortController().signal, events: { onText() {}, onStep() {} } });
+    expect(JSON.stringify(o[0].input)).not.toContain("server_tool_use");
+    expect(o[0].tools.some((x: any) => x.type === "web_search")).toBe(true);
+  });
+});

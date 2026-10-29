@@ -12,6 +12,10 @@ interface ViewSettings {
   showGrid: boolean;
   /** Objects created by the AI materialize, moves tween (respects reduced motion). */
   aiAnimations: boolean;
+  /** Colour picked last; new objects get it (null = neutral). */
+  lastColor: string | null;
+  /** Custom colours used recently (newest first). */
+  recentColors: string[];
   /** Grid line strength in % (100 = the original intensity). */
   gridStrength: number;
   /** Distance (mm) over which the infinite grid fades out. */
@@ -20,7 +24,7 @@ interface ViewSettings {
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true }),
+    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, lastColor: null, recentColors: [] }),
     {
       name: "albedo.settings",
       version: 3,
@@ -29,7 +33,7 @@ export const useSettings = create<ViewSettings>()(
       // v3: grid strength added; everyone starts at the new, weaker default.
       migrate: (stored, version) => {
         const { inertia: _i, quality: _q, gridSize: _g, ...rest } = (stored ?? {}) as ViewSettings & Record<string, unknown>;
-        return { ...rest, aiAnimations: (rest as { aiAnimations?: boolean }).aiAnimations ?? true, showGrid: rest.showGrid ?? true, gridStrength: version < 3 ? 45 : (rest.gridStrength ?? 45) } as ViewSettings;
+        return { ...rest, lastColor: (rest as { lastColor?: string | null }).lastColor ?? null, recentColors: (rest as { recentColors?: string[] }).recentColors ?? [], aiAnimations: (rest as { aiAnimations?: boolean }).aiAnimations ?? true, showGrid: rest.showGrid ?? true, gridStrength: version < 3 ? 45 : (rest.gridStrength ?? 45) } as ViewSettings;
       },
     },
   ),
@@ -39,12 +43,14 @@ export interface AiSettings {
   provider: "anthropic" | "openai";
   model: { anthropic: string; openai: string };
   effort: "low" | "medium" | "high";
+  /** Let the model use the provider's web search. */
+  webSearch: boolean;
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium" }), {
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium", webSearch: true }), {
     name: "albedo.ai",
-    version: 4,
+    version: 5,
     // v3: GPT-6.1 Terra became the OpenAI default. v4: only the current lineup is offered,
     // so ids outside it (older or list-extended models) fall back to the defaults.
     migrate: (s, version) => {
@@ -59,6 +65,7 @@ export const useAiSettings = create<AiSettings>()(
           openai: OPENAI.includes(openai ?? "") ? openai! : "gpt-6.1-terra",
         },
         effort: old.effort ?? "medium",
+        webSearch: old.webSearch ?? true,
       };
     },
   }),

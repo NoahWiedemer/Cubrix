@@ -47,8 +47,10 @@ interface FeatureBase {
   transform: Transform;
   /** Optional edge rounding radius in mm (0 = sharp). */
   fillet?: number;
-  /** Optional edge chamfer distance in mm (0 = sharp). Exclusive with fillet. */
+  /** Optional edge chamfer distance in mm (0 = sharp). */
   chamfer?: number;
+  /** Display/print colour as "#rrggbb" (unset = neutral grey). */
+  color?: string;
 }
 
 export type PrimitiveFeature = {

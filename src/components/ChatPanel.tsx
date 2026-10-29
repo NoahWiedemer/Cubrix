@@ -36,6 +36,7 @@ interface ChatEntry {
   /** History group of the run (to undo it as a whole). */
   groupId?: string;
   durationMs?: number;
+  sources?: { url: string; title: string }[];
 }
 
 /** Conversation state survives closing/reopening the panel. */
@@ -188,7 +189,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
 
 export function ChatPanel() {
   const { entries, running } = useChat();
-  const { provider, model, effort } = useAiSettings();
+  const { provider, model, effort, webSearch } = useAiSettings();
   const keys = useKeys((s) => s.keys);
   const keysLoaded = useKeys((s) => s.loaded);
   const [demo, setDemo] = useState(false);
@@ -257,6 +258,7 @@ export function ChatPanel() {
     try {
       const api = await runAgent({
         groupId,
+        webSearch: useAiSettings.getState().webSearch,
         provider,
         model: info.id,
         effort: info.effort ? effort : null,
@@ -268,6 +270,7 @@ export function ChatPanel() {
           onText: (d) => update((e) => ({ ...e, text: e.text + d })),
           onStep: (step) => update((e) => ({ ...e, steps: [...e.steps, step] })),
           onPhase: setPhase,
+          onSources: (src) => update((e) => ({ ...e, sources: [...(e.sources ?? []), ...src].filter((x, i, all) => all.findIndex((y) => y.url === x.url) === i).slice(0, 8) })),
         },
       });
       useChat.setState({ api });
@@ -311,6 +314,7 @@ export function ChatPanel() {
             <Menu style={{ top: 34, right: 0 }}>
               <MenuItem icon="file" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
               <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
+              <MenuItem icon="globe" label="Websuche erlauben" checked={webSearch} onClick={() => useAiSettings.setState({ webSearch: !webSearch })} />
             </Menu>
           )}
         </div>
@@ -330,6 +334,16 @@ export function ChatPanel() {
           entries.map((e, i) => (
             <div key={i} className={`msg ${e.role}`}>
               {e.text && <div className="msg-text">{e.text}</div>}
+              {e.sources && e.sources.length > 0 && (
+                <div className="msg-sources">
+                  <Icon name="globe" size={12} />
+                  {e.sources.map((src) => (
+                    <button key={src.url} className="source-link" title={src.url} onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(src.url))}>
+                      {src.title.length > 40 ? `${src.title.slice(0, 38)}…` : src.title}
+                    </button>
+                  ))}
+                </div>
+              )}
               {e.steps.length > 0 && <Steps steps={e.steps} live={running && i === entries.length - 1} />}
               {e.error && <ErrorBox error={e.error} onRetry={e.prompt ? () => retry(e.prompt!) : undefined} />}
               {e.role === "assistant" && running && i === entries.length - 1 && <RunStatus />}

@@ -108,6 +108,7 @@ function definePrimitive<K extends PrimitiveType>(
         visible: true,
         params: values,
         transform: { position: p.position ?? freeSpot(doc, footprint(values)), rotation: [0, 0, 0] },
+        ...newColor(),
       } as PrimitiveFeature;
       return {
         doc: { ...doc, features: [...doc.features, feature] },
@@ -514,6 +515,39 @@ for (const [type, def] of Object.entries(SHAPE_DEFAULTS) as [ExtraType, ShapeDef
   });
 }
 
+/** New objects (library, text, sketches, AI) get the colour picked last. */
+function newColor(): { color?: string } {
+  const c = useSettings.getState().lastColor;
+  return c ? { color: c } : {};
+}
+
+defineCommand({
+  id: "object.setColor",
+  kind: "document",
+  label: "Farbe",
+  description: "Setzt die Farbe eines oder mehrerer Objekte (Hex wie \"#e64a3c\"; leer = neutral grau). Wird in 3MF/OBJ mit exportiert.",
+  icon: "background",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    color: { type: "string", description: "Farbe als #rrggbb oder leer" },
+  },
+  isEnabled: (ctx) => ctx.selection.length > 0,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    const c = String(p.color ?? "").trim().toLowerCase();
+    if (c && !/^#[0-9a-f]{6}$/.test(c)) throw new Error("Farbe bitte als #rrggbb angeben.");
+    let changed = 0;
+    const features = doc.features.map((f) => {
+      if (!ids.includes(f.id) || (f.color ?? "") === c) return f;
+      changed++;
+      const { color: _old, ...rest } = f;
+      return (c ? { ...rest, color: c } : rest) as Feature;
+    });
+    if (!changed) return null;
+    return { doc: { ...doc, features }, label: changed === 1 ? `${doc.features.find((f) => ids.includes(f.id))!.name}: Farbe` : `${changed} Objekte: Farbe` };
+  },
+});
+
 // ── Text ─────────────────────────────────────────────────────────────────────
 
 const textParamSchema = {
@@ -560,6 +594,7 @@ defineCommand({
         type: "text",
         name,
         visible: true,
+        ...newColor(),
         params,
         transform: { position: p.position ?? freeSpot(doc, footprint), rotation: [0, 0, 0] },
       };
@@ -589,6 +624,7 @@ defineCommand({
       op: p.mode === "emboss" ? "union" : "subtract",
       name: target.name,
       visible: true,
+      ...(target.color ? { color: target.color } : {}),
       transform: { position: [...origin], rotation: [0, 0, 0] },
       children: [{ ...target, visible: true, transform: { ...target.transform, position: [0, 0, 0] } }, text],
     };
@@ -995,6 +1031,8 @@ function defineBoolean(op: BooleanOp, icon: IconName, label: string, description
         op,
         name: target.name,
         visible: true,
+        // The result keeps the colour of the first operand.
+        ...(target.color ? { color: target.color } : {}),
         transform: { position: [...origin], rotation: [0, 0, 0] },
         children: [rel(target), ...tools.map(rel)],
       };

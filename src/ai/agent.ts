@@ -78,7 +78,7 @@ export function sceneSummary(): string {
   return `${lines.length ? lines.join("\n") : "(leer)"}${sel.length ? `\nAuswahl des Nutzers: ${sel.join(", ")}` : ""}`.slice(0, 6000);
 }
 
-export function systemPrompt(): string {
+export function systemPrompt(webSearch = false): string {
   const doc = getDoc();
   const help = HELP_TOPICS.map((t) => `- ${t.title}${t.status === "soon" ? " (kommt bald)" : ""}: ${t.summary}`).join("\n");
   return `Du bist der KI-Assistent in Albedo, einer CAD-App für den 3D-Druck für Einsteiger. Antworte auf Deutsch, freundlich und knapp.
@@ -91,7 +91,8 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
 - Nutze Sammelbefehle, nie Schleifen über Einzelaufrufe: shapes__createMany (viele Körper auf einmal), object__pattern (linear/grid/circular/mirror), objects__transformMany, object__delete mit ids, boolean__subtract/union/intersect mit targetId und toolIds (alle Werkzeuge in einem Schnitt).
 - Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
 - Beispiel Spielwürfel: primitive__box 20 mm (mit fillet), dann EIN shapes__createMany mit allen 21 Augen-Kugeln (Positionen auf den 6 Seiten), dann EIN boolean__subtract mit toolIds = alle Augen. Fertig in 3 Aufrufen.
-- Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
+${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren. Höchstens 3 Suchen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
+` : ""}- Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
 - Fragen zur App beantwortest du anhand dieser Hilfe-Themen:
 ${help}
 
@@ -103,6 +104,8 @@ export interface AgentEvents {
   onText(delta: string): void;
   /** What is happening right now, in plain German ("Denkt nach …", "Erstellt 21 Formen …"). */
   onPhase?(phase: string): void;
+  /** Web sources the model used (shown as links under the answer). */
+  onSources?(sources: { url: string; title: string }[]): void;
   onStep(step: { label: string; nodeId?: string; ok: boolean; error?: string }): void;
 }
 
@@ -240,6 +243,8 @@ export async function runAgent(opts: {
   maxTurns?: number;
   /** History group id for this run (to undo the whole run at once). */
   groupId?: string;
+  /** Offer the provider's server-side web search (the model decides when to use it). */
+  webSearch?: boolean;
 }): Promise<Message[]> {
   const group = { id: opts.groupId ?? Math.random().toString(36).slice(2), prompt: opts.prompt };
   const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }] }];
@@ -247,8 +252,12 @@ export async function runAgent(opts: {
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
     if (opts.signal.aborted) break;
     opts.events.onPhase?.(turn === 0 ? "Denkt nach …" : "Plant den nächsten Schritt …");
-    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, prepareHistory(messages), opts.events.onText, opts.signal);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, prepareHistory(messages), opts.events.onText, opts.signal, opts.webSearch);
     messages.push({ role: "assistant", content: res.blocks, model: opts.model });
+    for (const q of res.searches ?? []) opts.events.onStep({ label: `Sucht im Web: ${q}`, ok: true });
+    if (res.sources?.length) opts.events.onSources?.(res.sources);
+    // Long server-tool turns (web search) may pause; just continue the conversation.
+    if (res.stop === "pause") continue;
     const calls = res.blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");
     if (!calls.length || res.stop !== "tool_use") break;
     const results: Block[] = [];
