@@ -1107,3 +1107,40 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .popover.select-menu { position: absolute; top: 40px; left: 0; right: 0; min-width: 0; }
 .popover.select-menu { width: auto; max-width: none; box-sizing: border-box; overflow-x: hidden; } .select-search { box-sizing: border-box; } .popover.select-menu .menu-item { min-width: 0; } .printer-opt > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .printer-opt .printer-dim { font-size: 11px; flex: none; } .popover.select-menu .menu-icon:empty { width: 4px; }
+
+/* ── Shared active style (from the Modell / 2D / Vorschau switcher) ─────────────
+   Neutral fill, light text, mint only on the icon. Groups use the sliding pill
+   (.segmented-pill), single toggles use .is-active-fill via the selectors below. */
+:root {
+  --active-bg: var(--panel-3);
+  --active-fg: var(--text);
+  --active-icon: var(--accent);
+  --active-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.tab.active,
+.rail-btn.active,
+.tool.active,
+.icon-btn.active,
+.view-controls button.on,
+.tree-row.selected,
+.printer-row.on,
+.help-item.on,
+.bold-toggle.on,
+.btn-ghost.on {
+  background: var(--active-bg);
+  color: var(--active-fg);
+  border-color: transparent;
+  box-shadow: var(--active-shadow);
+}
+.tab.active svg,
+.rail-btn.active svg,
+.tool.active svg,
+.icon-btn.active svg,
+.view-controls button.on svg,
+.tree-row.selected svg,
+.help-item.on svg,
+.bold-toggle.on svg,
+.btn-ghost.on svg { color: var(--active-icon); }
+.segmented-pill, .segmented.bare .segmented-pill { background: var(--active-bg); box-shadow: var(--active-shadow); }
+.segmented > button.on { color: var(--active-fg); }
+.segmented > button.on svg { color: var(--active-icon); }
