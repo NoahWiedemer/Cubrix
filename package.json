@@ -1,6 +1,6 @@
 {
   "name": "cubrix",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cubrix – CAD für den 3D-Druck",
   "scripts": {
     "dev": "vite",
