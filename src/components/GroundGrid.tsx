@@ -25,6 +25,7 @@ const fragment = /* glsl */ `
   varying vec3 vWorld;
 
   uniform float uStep;      // fine spacing in mm (= snap increment)
+  uniform float uStrength;  // 0..1 overall line strength
 
   // Anti-aliased line coverage for a given cell size (pixel-width lines, no moiré).
   float coverage(vec2 p, float cell) {
@@ -34,13 +35,14 @@ const fragment = /* glsl */ `
     return clamp(1.0 - min(g.x, g.y), 0.0, 1.0);
   }
 
-  // One grid level. Its strength depends only on its on-screen spacing: invisible below
-  // ~4 px, faint "fine" at ~6 px, full "major" from ~60 px. So the 10x lines are always
-  // brighter than the fine ones and a level smoothly takes over as you zoom out.
+  // One grid level. Its strength depends only on its on-screen spacing: it fades in
+  // smoothly from ~9 to ~14 px (so a level never pops), is faint as "fine" grid and
+  // reaches full "major" strength from ~120 px. Zooming out never adds brightness:
+  // finer levels fade away as coarser ones take over.
   float level(vec2 p, float cell, float wpp, out float strength) {
     float px = cell / wpp;
-    float show = smoothstep(4.0, 6.5, px);
-    strength = clamp(log(px / 6.0) / log(10.0), 0.0, 1.0);
+    float show = smoothstep(9.0, 14.0, px);
+    strength = clamp(log(px / 12.0) / log(10.0), 0.0, 1.0);
     return coverage(p, cell) * show;
   }
 
@@ -48,8 +50,8 @@ const fragment = /* glsl */ `
     vec2 p = vWorld.xz;
     float wpp = max(length(vec2(dFdx(p.x), dFdy(p.x))), length(vec2(dFdx(p.y), dFdy(p.y))));
     float step0 = max(uStep, 0.1);
-    // First decade whose lines are at least ~4 px apart.
-    float n0 = max(0.0, floor(log(4.0 * wpp / step0) / log(10.0)));
+    // First decade whose lines are at least ~9 px apart.
+    float n0 = max(0.0, floor(log(9.0 * wpp / step0) / log(10.0)));
     float alpha = 0.0, strength = 0.0;
     for (int i = 0; i < 3; i++) {
       float base = step0 * pow(10.0, n0 + float(i));
@@ -72,7 +74,7 @@ const fragment = /* glsl */ `
     float angleFade = smoothstep(0.05, 0.3, abs(viewDir.y));
 
     float fade = distFade * angleFade;
-    alpha *= fade;
+    alpha *= fade * uStrength;
     if (alpha < 0.003) discard;
     vec3 col = mix(uMinor, uMajor, strength);
     gl_FragColor = vec4(col, alpha);
@@ -80,7 +82,7 @@ const fragment = /* glsl */ `
   }
 `;
 
-export function GroundGrid({ fade, step }: { fade: number; step: number }) {
+export function GroundGrid({ fade, step, strength }: { fade: number; step: number; strength: number }) {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -91,6 +93,7 @@ export function GroundGrid({ fade, step }: { fade: number; step: number }) {
           uCamDist: { value: 200 },
           uFade: { value: 600 },
           uStep: { value: 1 },
+          uStrength: { value: 0.45 },
           uMinor: { value: new THREE.Color("#3e4950") },
           uMajor: { value: new THREE.Color("#56646d") },
         },
@@ -109,6 +112,7 @@ export function GroundGrid({ fade, step }: { fade: number; step: number }) {
       : camera.position.distanceTo(target);
     u.uFade.value = fade;
     u.uStep.value = step > 0 ? step : 1;
+    u.uStrength.value = strength / 100;
   });
 
   return (

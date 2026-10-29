@@ -10,21 +10,24 @@ interface ViewSettings {
   showVolume: boolean;
   volumeStrong: boolean;
   showGrid: boolean;
+  /** Grid line strength in % (100 = the original intensity). */
+  gridStrength: number;
   /** Distance (mm) over which the infinite grid fades out. */
   gridFade: number;
 }
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridFade: 600 }),
+    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600 }),
     {
       name: "albedo.settings",
-      version: 2,
+      version: 3,
       // v1: camera inertia removed (damping always off). v2: quality and grid size removed
       // (always high quality; grid spacing follows the snap increment).
+      // v3: grid strength added; everyone starts at the new, weaker default.
       migrate: (stored) => {
         const { inertia: _i, quality: _q, gridSize: _g, ...rest } = (stored ?? {}) as ViewSettings & Record<string, unknown>;
-        return { ...rest, showGrid: rest.showGrid ?? true } as ViewSettings;
+        return { ...rest, showGrid: rest.showGrid ?? true, gridStrength: 45 } as ViewSettings;
       },
     },
   ),

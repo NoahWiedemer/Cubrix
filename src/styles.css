@@ -1067,3 +1067,9 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .dock-stack > .drop-line:first-child::after { top: 1px; }
 .dock-stack > .drop-line:last-child::after { top: -4px; }
 .dock-stack > .drop-line { z-index: 50; } .dock-stack > .drop-line:last-child::after { top: -6px; }
+/* Ansicht tab: few calm sections */
+.view-tab { gap: 18px; padding-top: 12px; }
+.view-tab section { display: flex; flex-direction: column; gap: 8px; }
+.view-tab h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-3); }
+.more-row { display: flex; align-items: center; gap: 6px; height: 28px; font-size: 13px; color: var(--text-3); align-self: flex-start; }
+.more-row:hover { color: var(--text-2); }

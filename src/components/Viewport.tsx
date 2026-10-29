@@ -250,12 +250,13 @@ function Bed({ volume }: { volume: Vec3 }) {
   const showVolume = useSettings((s) => s.showVolume);
   const volumeStrong = useSettings((s) => s.volumeStrong);
   const showGrid = useSettings((s) => s.showGrid);
+  const gridStrength = useSettings((s) => s.gridStrength);
   const snap = useApp((s) => s.snap);
   const gridFade = useSettings((s) => s.gridFade);
   const outline = useMemo(() => [[-w / 2, 0.02, -d / 2], [w / 2, 0.02, -d / 2], [w / 2, 0.02, d / 2], [-w / 2, 0.02, d / 2], [-w / 2, 0.02, -d / 2]] as [number, number, number][], [w, d]);
   return (
     <group>
-      {showGrid && <GroundGrid fade={gridFade} step={snap} />}
+      {showGrid && <GroundGrid fade={gridFade} step={snap} strength={gridStrength} />}
       {showVolume && (
         <>
           <Line points={outline} color={volumeStrong ? "#6f808a" : "#46535b"} lineWidth={1.2} />

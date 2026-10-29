@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { create } from "zustand";
 import * as THREE from "three";
 import { execute, shortcutKeys } from "../core/commands";
@@ -82,7 +83,7 @@ function Printer() {
   );
 }
 
-/** Build-volume display options; shown in both the Drucker and the Ansicht tab. */
+/** Build-volume display options (Drucker tab). */
 function VolumeToggles() {
   const showVolume = useSettings((s) => s.showVolume);
   const volumeStrong = useSettings((s) => s.volumeStrong);
@@ -106,24 +107,40 @@ function Toggle({ label, kbd, value, onChange }: { label: string; kbd?: string; 
 function View() {
   const s = useSettings();
   const snap = useApp((st) => st.snap);
+  const [more, setMore] = useState(false);
   return (
-    <div className="inspector-section">
-      <div className="group-label"><span><Icon name="grid" size={15} />Raster</span></div>
-      <Toggle label="Raster anzeigen" kbd="g" value={s.showGrid} onChange={(showGrid) => useSettings.setState({ showGrid })} />
-      <div className="field-label">Einrasten (Rasterweite)</div>
-      <SegmentedControl size="sm" className="block" value={String(snap)} onChange={(v) => execute("view.snap", { mm: Number(v) })}
-        options={SNAPS.map((mm) => ({ value: String(mm), label: mm === 0 ? "Aus" : mm.toLocaleString("de-DE") }))} />
-      <label className="slider-row">
-        <span>Ausblenden ab</span>
-        <input type="range" min={150} max={1500} step={50} value={s.gridFade} onChange={(e) => useSettings.setState({ gridFade: Number(e.target.value) })} />
-        <b>{s.gridFade} mm</b>
-      </label>
-      <VolumeToggles />
-
-      <div className="group-label" style={{ marginTop: 16 }}><span><Icon name="perspective" size={15} />Kamera</span></div>
-      <SegmentedControl size="sm" className="block" value={s.projection} onChange={(mode) => execute("view.projection", { mode })}
-        options={[{ value: "perspective", label: "Perspektive" }, { value: "orthographic", label: "Orthografisch" }]} />
-
+    <div className="inspector-section view-tab">
+      <section>
+        <h4>Raster</h4>
+        <Toggle label="Raster anzeigen" kbd="g" value={s.showGrid} onChange={(showGrid) => useSettings.setState({ showGrid })} />
+        {s.showGrid && (
+          <label className="slider-row">
+            <span>Stärke</span>
+            <input type="range" min={0} max={100} step={5} value={s.gridStrength} onChange={(e) => useSettings.setState({ gridStrength: Number(e.target.value) })} />
+            <b>{s.gridStrength} %</b>
+          </label>
+        )}
+      </section>
+      <section>
+        <h4>Einrasten</h4>
+        <SegmentedControl size="sm" className="block" value={String(snap)} onChange={(v) => execute("view.snap", { mm: Number(v) })}
+          options={SNAPS.map((mm) => ({ value: String(mm), label: mm === 0 ? "Aus" : mm.toLocaleString("de-DE") }))} />
+      </section>
+      <section>
+        <h4>Kamera</h4>
+        <SegmentedControl size="sm" className="block" value={s.projection} onChange={(mode) => execute("view.projection", { mode })}
+          options={[{ value: "perspective", label: "Perspektive" }, { value: "orthographic", label: "Orthografisch" }]} />
+      </section>
+      <button className="more-row" onClick={() => setMore(!more)}>
+        {more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}Mehr
+      </button>
+      {more && (
+        <label className="slider-row">
+          <span>Raster ausblenden ab</span>
+          <input type="range" min={150} max={1500} step={50} value={s.gridFade} onChange={(e) => useSettings.setState({ gridFade: Number(e.target.value) })} />
+          <b>{s.gridFade} mm</b>
+        </label>
+      )}
     </div>
   );
 }
