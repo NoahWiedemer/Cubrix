@@ -4,6 +4,14 @@ CAD für den 3D-Druck – einfach, ruhig, auf Deutsch. Desktop-App (macOS, spät
 
 ![Albedo](docs/screenshot.png)
 
+## Download
+
+Fertige Versionen für macOS (`.dmg`) und Windows (`.exe`/`.msi`):
+**https://github.com/NoahWiedemer/modelonio/releases/latest**
+
+Hinweis: Die Builds sind noch nicht signiert – auf dem Mac beim ersten Start Rechtsklick → „Öffnen“.
+Wie Releases entstehen, steht in [RELEASING.md](RELEASING.md).
+
 ## Starten
 
 ```bash

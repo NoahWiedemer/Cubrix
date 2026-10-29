@@ -8,7 +8,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "license": "UNLICENSED",
   "type": "module",
