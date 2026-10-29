@@ -1,8 +1,8 @@
-// Boot splash: a still image (swappable in src/assets/splash/), logo + wordmark,
+// Boot splash: a still image (src/assets/splash/splash.webp, 1280 × 800 for the 640 × 400 window), logo + wordmark,
 // a small mint spinner and the version. Fades out once the app reports ready.
 import "./splash.css";
 import pkg from "../../package.json";
-import image from "../assets/splash/splash-a.png";
+import image from "../assets/splash/splash.webp";
 import logo from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
 
 const MIN_MS = 800;
