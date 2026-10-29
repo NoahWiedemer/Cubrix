@@ -8,6 +8,8 @@ import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useApp } from "../core/store";
+import { cameraState } from "../ui/cameraState";
+import type { Vec3 } from "../core/document";
 import { useSpacePan } from "../ui/spacePan";
 import { useLayout } from "../ui/layout";
 import { dockedInsets, viewShift } from "../ui/viewportFrame";
@@ -150,6 +152,34 @@ export function CameraRig() {
       ctl.enabled = true;
       ctl.update();
     }
+  });
+
+  // Project files save and restore the camera.
+  useEffect(() => {
+    cameraState.get = () => {
+      const c = camera as THREE.PerspectiveCamera & THREE.OrthographicCamera;
+      const r = (v: number) => Math.round(v * 1000) / 1000;
+      return {
+        position: c.position.toArray().map(r) as Vec3,
+        target: target.current.toArray().map(r) as Vec3,
+        projection: c.isOrthographicCamera ? "orthographic" : "perspective",
+        zoom: c.isOrthographicCamera ? c.zoom : undefined,
+      };
+    };
+    cameraState.set = (d) => {
+      tween.current = null;
+      target.current.set(...d.target);
+      const ctl = controls as unknown as Controls | null;
+      if (ctl) ctl.target.set(...d.target);
+      useSettings.setState({ projection: d.projection });
+      const cam = d.projection === "orthographic" ? ortho : persp.current;
+      cam.position.set(...d.position);
+      cam.lookAt(target.current);
+      if (d.projection === "orthographic" && d.zoom) ortho.zoom = d.zoom;
+      cam.updateProjectionMatrix();
+      set({ camera: cam });
+      ctl?.update();
+    };
   });
 
   // Projection toggle (O, Ansicht menu, Inspektor).

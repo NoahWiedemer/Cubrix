@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { create } from "zustand";
 import { ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { execute } from "../core/commands";
 import { isTauri } from "../core/platform";
@@ -10,11 +9,12 @@ import { usePopover } from "../ui/usePopover";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
+import { useChat, type ChatEntry, type ChatStep } from "../ai/chatStore";
 import { VoiceButton } from "./VoiceButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { friendlyError, type FriendlyError } from "../ai/errors";
 import { logError } from "../core/errorLog";
-import { tauriTransport, type Message, type Provider } from "../ai/providers";
+import { tauriTransport, type Provider } from "../ai/providers";
 import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, modelInfo, type Effort, type ModelInfo } from "../ai/models";
 import { connectedProviders, refreshKeys, useKeys } from "../ai/keys";
 import { endRun, setPhase, startRun, useAiRun } from "../ai/run";
@@ -22,26 +22,8 @@ import { useApp } from "../core/store";
 import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
 
-interface Step {
-  label: string;
-  nodeId?: string;
-  ok: boolean;
-  error?: string;
-}
-interface ChatEntry {
-  role: "user" | "assistant";
-  text: string;
-  steps: Step[];
-  error?: FriendlyError;
-  prompt?: string;
-  /** History group of the run (to undo it as a whole). */
-  groupId?: string;
-  durationMs?: number;
-  sources?: { url: string; title: string }[];
-}
+type Step = ChatStep;
 
-/** Conversation state survives closing/reopening the panel. */
-const useChat = create<{ entries: ChatEntry[]; api: Message[]; running: boolean }>(() => ({ entries: [], api: [], running: false }));
 let controller: AbortController | null = null;
 
 const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Schlüsselanhänger mit Loch", "Wie ziehe ich eine Skizze in 3D?"];

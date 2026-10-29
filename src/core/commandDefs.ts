@@ -8,7 +8,6 @@ import {
   createDocument,
   findFeature,
   geometryKey,
-  isModelDocument,
   newId,
   uniqueName,
   parentsOf,
@@ -37,6 +36,9 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
+import { parseProject, serializeProject } from "./projectFile";
+import { useChat } from "../ai/chatStore";
+import { cameraState } from "../ui/cameraState";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { SHAPE_DEFAULTS, type ExtraType, type ShapeDef } from "./shapeDefs";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
@@ -1808,12 +1810,16 @@ const fileSafe = (name: string) => name.replace(/[\\/:*?"<>|]/g, "_");
 async function saveProject(forceDialog: boolean) {
   const s = useApp.getState();
   const doc = s.nodes[s.currentId].doc;
-  const path = await saveFile(
-    `${fileSafe(doc.name)}.cubrix`,
-    PROJECT_FILTER,
-    JSON.stringify(doc, null, 2),
-    forceDialog ? null : s.filePath,
-  );
+  const chat = useChat.getState();
+  // Document + history (branches, AI groups) + chat + camera + selection; no layout, no keys.
+  const text = serializeProject({
+    document: doc,
+    history: { rootId: s.rootId, currentId: s.currentId, nodes: s.nodes },
+    chat: { entries: chat.entries.map(({ error: _e, prompt: _p, ...e }) => e), api: chat.api },
+    camera: cameraState.get?.(),
+    selection: s.selection,
+  });
+  const path = await saveFile(`${fileSafe(doc.name)}.cubrix`, PROJECT_FILTER, text, forceDialog ? null : s.filePath);
   if (!path) return;
   useApp.setState({ savedNodeId: s.currentId, filePath: isTauri ? path : null });
   s.toast("success", `Gespeichert: ${baseName(path)}`);
@@ -1845,10 +1851,17 @@ defineCommand({
     if (!(await confirmDiscard())) return;
     const file = await openTextFile(OPEN_FILTER);
     if (!file) return;
-    const doc = JSON.parse(file.text);
-    if (!isModelDocument(doc)) throw new Error("Keine gültige Cubrix-Datei");
-    doc.format = "cubrix";
-    useApp.getState().reset(doc, `${baseName(file.path)} geöffnet`, isTauri ? file.path : null);
+    const { file: project, migratedFrom } = parseProject(file.text);
+    const app = useApp.getState();
+    app.reset(project.document, `${baseName(file.path)} geöffnet`, isTauri ? file.path : null);
+    if (project.history) {
+      const h = project.history;
+      useApp.setState({ nodes: h.nodes, rootId: h.rootId, currentId: h.currentId, savedNodeId: h.currentId });
+    }
+    useApp.setState({ selection: project.selection.filter((id) => !!findFeature(project.document, id)) });
+    useChat.setState({ entries: project.chat.entries, api: project.chat.api, running: false });
+    if (project.camera) setTimeout(() => cameraState.set?.(project.camera!), 50);
+    if (migratedFrom < 2) app.toast("info", "Ältere Projektdatei geöffnet – beim Speichern wird sie ins neue Format übernommen.");
   },
 });
 
