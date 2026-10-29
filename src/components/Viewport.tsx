@@ -29,6 +29,7 @@ import { usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
+import { addMeasurePoint, useMeasure } from "../ui/measureTool";
 import { viewportPick } from "../ui/viewportPick";
 import { volumeCorners, volumeEdges } from "../ui/buildVolume";
 import { useViewportFrame } from "../ui/viewportFrame";
@@ -102,6 +103,10 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
     if (presenting) return; // Vorschau: clicks only orbit
     e.stopPropagation();
     if (e.delta > 4) return;
+    if (useMeasure.getState().active) {
+      addMeasurePoint(snapToCorner(e));
+      return;
+    }
     if (useTextTool.getState().active) {
       // Scene is Y-up; the CAD frame is Z-up: (x, y, z)cad = (x, -z, y)world.
       placeText({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }, [e.point.x, -e.point.z, e.point.y], f.id);
@@ -366,6 +371,74 @@ function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; str
   );
 }
 
+/** Measure point from a click on a body: the nearest mesh corner if it's close on screen, else the hit point (CAD frame). */
+function snapToCorner(e: ThreeEvent<MouseEvent>): Vec3 {
+  const hit = e.point.clone();
+  const mesh = e.object as THREE.Mesh;
+  const pos = mesh.geometry?.getAttribute("position");
+  const tol = e.camera.position.distanceTo(hit) * 0.025;
+  let best = hit;
+  if (pos) {
+    const v = new THREE.Vector3();
+    let d = tol;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      const dd = v.distanceTo(hit);
+      if (dd < d) {
+        d = dd;
+        best = v.clone();
+      }
+    }
+  }
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return [r(best.x), r(-best.z), r(best.y)];
+}
+
+/** Invisible bed plane catching measure clicks (CAD frame, z = 0). */
+function MeasurePlane() {
+  return (
+    <mesh
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.delta > 4) return;
+        const r = (n: number) => Math.round(n * 100) / 100;
+        addMeasurePoint([r(e.point.x), r(-e.point.z), 0]);
+      }}
+    >
+      <planeGeometry args={[4000, 4000]} />
+      <meshBasicMaterial visible={false} />
+    </mesh>
+  );
+}
+
+/** Measured points, the line between them and the distance label (CAD frame). */
+function MeasureOverlay() {
+  const points = useMeasure((s) => s.points);
+  if (!points.length) return null;
+  const [a, b] = points;
+  const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString("de-DE");
+  const mid: Vec3 | null = b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] : null;
+  return (
+    <>
+      {points.map((p, i) => (
+        <mesh key={i} position={p} renderOrder={30} raycast={() => null}>
+          <sphereGeometry args={[0.6, 16, 12]} />
+          <meshBasicMaterial color={ACCENT} depthTest={false} toneMapped={false} />
+        </mesh>
+      ))}
+      {b && <Line points={[a, b]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={29} />}
+      {b && mid && (
+        <Html position={mid} center zIndexRange={[40, 0]} style={{ pointerEvents: "none" }}>
+          <div className="measure-label">
+            <b>{fmt(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]))} mm</b>
+            <span>ΔX {fmt(b[0] - a[0])} · ΔY {fmt(b[1] - a[1])} · ΔZ {fmt(b[2] - a[2])}</span>
+          </div>
+        </Html>
+      )}
+    </>
+  );
+}
+
 /** Invisible bed plane that catches the text tool's click (CAD frame, z = 0). */
 function TextPlacementPlane() {
   return (
@@ -472,6 +545,7 @@ export function Viewport() {
   const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
   const singleParents = single ? parentsOf(doc, single.id) : [];
   const textTool = useTextTool((s) => s.active);
+  const measuring = useMeasure((s) => s.active);
   const frame = useViewportFrame();
   const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
   const aiAnimations = useSettings((s) => s.aiAnimations);
@@ -480,7 +554,7 @@ export function Viewport() {
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className={`viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""}`}
+      className={`viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""} ${measuring ? "measuring" : ""}`}
       style={{ clipPath: `inset(0 ${free.right}px 0 ${free.left}px round 12px)` }}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
     >
@@ -531,6 +605,8 @@ export function Viewport() {
             f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
           )}
           {textTool && <TextPlacementPlane />}
+          {measuring && <MeasurePlane />}
+          {measuring && <MeasureOverlay />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
           {single && workspace === "model" && singleParents.length === 0 && (
             <>
@@ -544,8 +620,11 @@ export function Viewport() {
         <CameraRig />
         <SelectionOutline />
         {workspace !== "preview" && (
-          <GizmoHelper alignment="bottom-left" margin={[free.left + 58, 58]} renderPriority={2}>
-            <AxisIndicator />
+          // Top left, under the projection toggle, ~78 % size; follows the free area.
+          <GizmoHelper alignment="top-left" margin={[free.left + 44, 94]} renderPriority={2}>
+            <group scale={0.78}>
+              <AxisIndicator />
+            </group>
           </GizmoHelper>
         )}
       </Canvas>

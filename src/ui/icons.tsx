@@ -1,6 +1,9 @@
 // Icon names are plain strings in commands and history (so they serialize);
 // this maps them to lucide components.
 import {
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalSpaceBetween,
+  Ruler as RulerIcon,
   Globe,
   Pill,
   Egg,
@@ -93,6 +96,9 @@ import {
 } from "lucide-react";
 
 export const ICONS = {
+  align: AlignHorizontalJustifyCenter,
+  distribute: AlignHorizontalSpaceBetween,
+  ruler: RulerIcon,
   spline: Spline,
   globe: Globe,
   capsule: Pill,

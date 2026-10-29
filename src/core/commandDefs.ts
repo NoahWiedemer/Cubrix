@@ -41,6 +41,8 @@ import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { SHAPE_DEFAULTS, type ExtraType, type ShapeDef } from "./shapeDefs";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
+import { useMeasure } from "../ui/measureTool";
+import { useAlign } from "../components/AlignPanel";
 import { useLibrary } from "../components/Library";
 import { useSettingsDialog } from "../components/SettingsDialog";
 import { useHelp } from "../help/HelpCenter";
@@ -385,6 +387,92 @@ defineCommand({
     }
     const txt = by.map((v, i) => (v ? `${"XYZ"[i]} ${v > 0 ? "+" : ""}${v}°` : "")).filter(Boolean).join(" ");
     return { doc: updateFeature(doc, f.id, (x) => ({ ...x, transform: next })), label: `${f.name} drehen (${txt})` };
+  },
+});
+
+// ── Ausrichten ───────────────────────────────────────────────────────────────
+
+const AXIS_INDEX = { x: 0, y: 1, z: 2 } as const;
+const boxMin = (b: THREE.Box3, k: number) => (k === 0 ? b.min.x : k === 1 ? b.min.y : b.min.z);
+const boxMax = (b: THREE.Box3, k: number) => (k === 0 ? b.max.x : k === 1 ? b.max.y : b.max.z);
+
+defineCommand({
+  id: "objects.align",
+  kind: "document",
+  label: "Ausrichten",
+  description:
+    "Richtet Objekte an einer Achse aus: mode min/center/max (X: links/Mitte/rechts, Y: vorne/Mitte/hinten, Z: unten/Mitte/oben) an der gemeinsamen Bounding-Box. Ein einzelnes Objekt wird am Druckbett ausgerichtet (X/Y: Bettmitte bzw. -rand, Z: auf das Bett).",
+  icon: "align",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    axis: { type: "enum", options: ["x", "y", "z"], description: "Achse" },
+    mode: { type: "enum", options: ["min", "center", "max"], description: "Wo ausrichten" },
+  },
+  isEnabled: hasSelection,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    const entries = useMeshes.getState().entries;
+    const items = ids.map((id) => doc.features.find((f) => f.id === id)).filter((f): f is Feature => !!f && isSolid(f));
+    const boxes = items.map((f) => worldBox(f, entries));
+    if (!items.length || boxes.some((b) => !b)) throw new Error("Objekte werden noch berechnet – bitte gleich noch einmal.");
+    const k = AXIS_INDEX[p.axis as "x" | "y" | "z"];
+    // Reference: the combined box, or the bed for a single object.
+    let ref: number;
+    if (items.length === 1) {
+      const half = doc.printer.volume[k] / 2;
+      ref = k === 2 ? (p.mode === "max" ? doc.printer.volume[2] : p.mode === "center" ? doc.printer.volume[2] / 2 : 0) : p.mode === "min" ? -half : p.mode === "max" ? half : 0;
+    } else {
+      const lo = Math.min(...boxes.map((b) => boxMin(b!, k)));
+      const hi = Math.max(...boxes.map((b) => boxMax(b!, k)));
+      ref = p.mode === "min" ? lo : p.mode === "max" ? hi : (lo + hi) / 2;
+    }
+    let next = doc;
+    items.forEach((f, i) => {
+      const b = boxes[i]!;
+      const cur = p.mode === "min" ? boxMin(b, k) : p.mode === "max" ? boxMax(b, k) : (boxMin(b, k) + boxMax(b, k)) / 2;
+      const d = ref - cur;
+      if (Math.abs(d) < 1e-6) return;
+      next = updateFeature(next, f.id, (x) => ({ ...x, transform: { ...x.transform, position: x.transform.position.map((v, j) => (j === k ? round(v + d) : v)) as Vec3 } }));
+    });
+    if (next === doc) return null;
+    const words = { x: ["links", "mittig", "rechts"], y: ["vorne", "mittig", "hinten"], z: ["unten", "mittig", "oben"] }[p.axis as "x" | "y" | "z"][["min", "center", "max"].indexOf(p.mode)];
+    return { doc: next, label: `${items.length === 1 ? items[0].name : `${items.length} Objekte`} ${p.axis.toUpperCase()} ${words} ausrichten` };
+  },
+});
+
+defineCommand({
+  id: "objects.distribute",
+  kind: "document",
+  label: "Verteilen",
+  description: "Verteilt 3 oder mehr Objekte entlang einer Achse mit gleichen Abständen zwischen ihnen (äußere bleiben stehen).",
+  icon: "distribute",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    axis: { type: "enum", options: ["x", "y", "z"], description: "Achse" },
+  },
+  isEnabled: (ctx) => ctx.selection.length >= 3,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    const entries = useMeshes.getState().entries;
+    const k = AXIS_INDEX[p.axis as "x" | "y" | "z"];
+    const items = ids
+      .map((id) => doc.features.find((f) => f.id === id))
+      .filter((f): f is Feature => !!f && isSolid(f))
+      .map((f) => ({ f, b: worldBox(f, entries)! }))
+      .filter((x) => x.b)
+      .sort((a, b) => boxMin(a.b, k) - boxMin(b.b, k));
+    if (items.length < 3) throw new Error("Zum Verteilen mindestens drei Objekte auswählen.");
+    const total = boxMax(items[items.length - 1].b, k) - boxMin(items[0].b, k);
+    const sizes = items.reduce((s, x) => s + boxMax(x.b, k) - boxMin(x.b, k), 0);
+    const gap = (total - sizes) / (items.length - 1);
+    let cursor = boxMin(items[0].b, k);
+    let next = doc;
+    for (const { f, b } of items) {
+      const d = cursor - boxMin(b, k);
+      if (Math.abs(d) > 1e-6) next = updateFeature(next, f.id, (x) => ({ ...x, transform: { ...x.transform, position: x.transform.position.map((v, j) => (j === k ? round(v + d) : v)) as Vec3 } }));
+      cursor += boxMax(b, k) - boxMin(b, k) + gap;
+    }
+    return next === doc ? null : { doc: next, label: `${items.length} Objekte in ${p.axis.toUpperCase()} verteilen` };
   },
 });
 
@@ -1477,6 +1565,7 @@ defineCommand({
 /** Back to plain selecting/moving: ends text, scale and library modes (and leaves 2D). */
 export function selectTool() {
   useTextTool.setState({ active: false });
+  useMeasure.setState({ active: false, points: [] });
   useLibrary.setState({ open: false });
   useGizmo.setState({ mode: "move" });
   if (useApp.getState().workspace !== "model") useApp.setState({ workspace: "model" });
@@ -1505,6 +1594,36 @@ defineCommand({
   isEnabled: () => useApp.getState().workspace !== "sketch",
   perform() {
     useLibrary.setState((s) => ({ open: !s.open }));
+  },
+});
+
+defineCommand({
+  id: "tool.measure",
+  kind: "action",
+  label: "Messen",
+  description: "Messwerkzeug: zwei Punkte anklicken (Körper oder Bett) zeigt Abstand und ΔX/ΔY/ΔZ.",
+  icon: "ruler",
+  shortcut: "m",
+  params: {},
+  isEnabled: () => useApp.getState().workspace !== "sketch",
+  perform() {
+    const on = !useMeasure.getState().active;
+    useMeasure.setState({ active: on, points: [] });
+    if (on) useTextTool.setState({ active: false });
+  },
+});
+
+defineCommand({
+  id: "tool.align",
+  kind: "action",
+  label: "Ausrichten",
+  description: "Öffnet das Ausrichten-Fenster (Achsen bündig/mittig, Verteilen).",
+  icon: "align",
+  shortcut: "a",
+  params: {},
+  isEnabled: () => useApp.getState().workspace !== "sketch",
+  perform() {
+    useAlign.setState((s) => ({ open: !s.open }));
   },
 });
 

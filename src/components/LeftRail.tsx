@@ -7,6 +7,8 @@ import { useHelp } from "../help/HelpCenter";
 import { useLibrary } from "./Library";
 import { useTextTool } from "../ui/textTool";
 import { useGizmo } from "../ui/gizmo";
+import { useMeasure } from "../ui/measureTool";
+import { AlignPanel, useAlign } from "./AlignPanel";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -53,13 +55,20 @@ export function LeftRail() {
   const library = useLibrary((s) => s.open);
   const textTool = useTextTool((s) => s.active);
   const gizmoMode = useGizmo((s) => s.mode);
-  const selecting = workspace === "model" && !library && !textTool && gizmoMode === "move";
+  const measuring = useMeasure((s) => s.active);
+  const aligning = useAlign((s) => s.open);
+  const selecting = workspace === "model" && !library && !textTool && !measuring && gizmoMode === "move";
 
   return (
     <aside className="panel rail">
       <RailButton icon="select" tip="Auswählen" kbd="v" active={selecting} onClick={selectTool} />
       <span data-library-toggle>
         <RailButton icon="shapes" tip="Formen-Bibliothek" kbd="l" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      </span>
+      <RailButton icon="ruler" tip="Messen" kbd="m" active={measuring} onClick={() => execute("tool.measure")} />
+      <span data-align-toggle style={{ position: "relative" }}>
+        <RailButton icon="align" tip="Ausrichten" kbd="a" active={aligning} onClick={() => useAlign.setState({ open: !aligning })} />
+        <AlignPanel />
       </span>
       <RailButton icon="scale" tip="Skalieren" kbd="s" active={gizmoMode === "scale"} onClick={() => execute("tool.scale")} />
       <RailButton icon="text" tip="Text" kbd="t" active={textTool} onClick={() => execute("tool.text")} />
