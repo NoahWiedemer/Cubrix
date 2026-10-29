@@ -839,6 +839,80 @@ defineCommand({
   },
 });
 
+// ── Zwischenablage ──────────────────────────────────────────────────────────
+
+/** Copied objects (deep copies incl. the import data they need) and how often they were pasted. */
+let clipboard: { features: Feature[]; assets: NonNullable<ModelDocument["assets"]>; pastes: number } | null = null;
+
+const assetIdsOf = (f: Feature): string[] => (f.type === "import" ? [f.assetId] : f.type === "boolean" ? f.children.flatMap(assetIdsOf) : []);
+
+function copySelection(doc: ModelDocument, ids: string[]) {
+  const features = ids.map((id) => doc.features.find((f) => f.id === id)).filter((f): f is Feature => !!f);
+  if (!features.length) return 0;
+  const assets = Object.fromEntries(features.flatMap(assetIdsOf).map((a) => [a, doc.assets![a]]));
+  clipboard = { features: structuredClone(features), assets, pastes: 0 };
+  return features.length;
+}
+
+defineCommand({
+  id: "edit.copy",
+  kind: "action",
+  label: "Kopieren",
+  description: "Kopiert die ausgewählten Objekte in die Zwischenablage.",
+  icon: "duplicate",
+  shortcut: "mod+c",
+  params: {},
+  isEnabled: hasSelection,
+  perform(_p, ctx) {
+    const n = copySelection(ctx.doc, ctx.selection);
+    if (n) useApp.getState().toast("info", n === 1 ? "1 Objekt kopiert" : `${n} Objekte kopiert`);
+  },
+});
+
+defineCommand({
+  id: "edit.cut",
+  kind: "document",
+  label: "Ausschneiden",
+  description: "Kopiert die ausgewählten Objekte und entfernt sie.",
+  icon: "delete",
+  shortcut: "mod+x",
+  params: {},
+  isEnabled: hasSelection,
+  apply(doc, _p, ctx) {
+    if (!copySelection(doc, ctx.selection)) return null;
+    clipboard!.pastes = -1; // pasting a cut puts it back in place first
+    const gone = new Set(ctx.selection);
+    return { doc: { ...doc, features: doc.features.filter((f) => !gone.has(f.id)) }, selection: [], label: `${gone.size === 1 ? "Objekt" : `${gone.size} Objekte`} ausschneiden` };
+  },
+});
+
+defineCommand({
+  id: "edit.paste",
+  kind: "document",
+  label: "Einfügen",
+  description: "Fügt die kopierten Objekte ein, bei jedem Einfügen um 10 mm weiter versetzt.",
+  icon: "duplicate",
+  shortcut: "mod+v",
+  params: {},
+  isEnabled: () => !!clipboard,
+  apply(doc) {
+    if (!clipboard) return null;
+    clipboard.pastes++;
+    const off = 10 * clipboard.pastes;
+    const copies = clipboard.features.map((f) => {
+      const c = cloneFeature(f);
+      const [x, y, z] = f.transform.position;
+      return { ...c, transform: { ...c.transform, position: [round(x + off), round(y + off), z] as Vec3 } };
+    });
+    let working: ModelDocument = { ...doc, assets: { ...(doc.assets ?? {}), ...clipboard.assets } };
+    for (const c of copies) {
+      c.name = uniqueName(working, c.name.replace(/\s\d+$/, ""));
+      working = { ...working, features: [...working.features, c] };
+    }
+    return { doc: working, selection: copies.map((c) => c.id), label: copies.length === 1 ? `${copies[0].name} einfügen` : `${copies.length} Objekte einfügen` };
+  },
+});
+
 defineCommand({
   id: "object.duplicate",
   kind: "document",

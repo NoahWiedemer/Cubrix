@@ -31,6 +31,7 @@ import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
 import { addMeasurePoint, useMeasure } from "../ui/measureTool";
 import { viewportPick } from "../ui/viewportPick";
+import { makeRectPicker, setPickInRect, useBoxSelect } from "./BoxSelect";
 import { volumeCorners, volumeEdges } from "../ui/buildVolume";
 import { useViewportFrame } from "../ui/viewportFrame";
 import { useAiRun } from "../ai/run";
@@ -546,6 +547,7 @@ export function Viewport() {
   const singleParents = single ? parentsOf(doc, single.id) : [];
   const textTool = useTextTool((s) => s.active);
   const measuring = useMeasure((s) => s.active);
+  const box = useBoxSelect();
   const frame = useViewportFrame();
   const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
   const aiAnimations = useSettings((s) => s.aiAnimations);
@@ -557,7 +559,9 @@ export function Viewport() {
       className={`viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""} ${measuring ? "measuring" : ""}`}
       style={{ clipPath: `inset(0 ${free.right}px 0 ${free.left}px round 12px)` }}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
+      onPointerDownCapture={box.onPointerDownCapture}
     >
+      {box.overlay}
       <Canvas
         shadows
         dpr={[1, 2]}
@@ -566,6 +570,7 @@ export function Viewport() {
         onCreated={(state) => {
           const { gl } = state;
           if (import.meta.env.DEV) Object.assign(window, { __viewer: state });
+          setPickInRect(makeRectPicker(() => state.get().camera, () => state.get().gl.domElement));
           viewportPick.pick = (x, y) => {
             const { camera, raycaster, gl: renderer } = state.get();
             const r = renderer.domElement.getBoundingClientRect();

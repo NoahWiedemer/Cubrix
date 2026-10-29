@@ -21,6 +21,12 @@ for (const s of steps) {
   if (s.down) await mouse("mousePressed", ...s.down);
   if (s.hold) await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: s.hold[0], y: s.hold[1], button: "left", buttons: 1 });
   if (s.up) await mouse("mouseReleased", ...s.up);
+  if (s.sdrag) {
+    const [x1, y1, x2, y2, n] = s.sdrag;
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: x1, y: y1, button: "left", buttons: 1, clickCount: 1, modifiers: 8 });
+    for (let i = 1; i <= n; i++) { await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x1 + ((x2 - x1) * i) / n, y: y1 + ((y2 - y1) * i) / n, button: "left", buttons: 1, modifiers: 8 }); await sleep(16); }
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x2, y: y2, button: "left", buttons: 0, clickCount: 1, modifiers: 8 });
+  }
   if (s.drag) {
     const [x1, y1, x2, y2, n, shotAt, shotPath] = s.drag;
     await mouse("mousePressed", x1, y1);

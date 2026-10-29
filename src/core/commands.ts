@@ -223,6 +223,8 @@ export function installShortcuts(): () => void {
     const t = e.target as HTMLElement;
     if (t.closest("input, textarea, [contenteditable=true]")) return;
     const combo = eventShortcut(e);
+    // Selected page text (e.g. in the chat) keeps the normal copy/cut.
+    if ((combo === "mod+c" || combo === "mod+x") && window.getSelection()?.toString()) return;
     // The first enabled command with this key wins (e.g. "l": Linie in 2D, Bibliothek in 3D).
     for (const cmd of registry.values()) {
       if (cmd.shortcut === combo && (cmd.isEnabled?.(context("user")) ?? true)) {
