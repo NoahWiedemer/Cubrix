@@ -6,6 +6,7 @@ import {
   cloneFeature,
   createDocument,
   findFeature,
+  geometryKey,
   isModelDocument,
   newId,
   uniqueName,
@@ -23,7 +24,10 @@ import { useApp } from "./store";
 import { useGizmo } from "../ui/gizmo";
 import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
+import { usePreview } from "../ui/preview";
 import { useMeshes, exportFeatures } from "../cad/kernel";
+import type { ExportFormat } from "../cad/protocol";
+import { PRINTERS, bestOrientation } from "./printAnalysis";
 import { worldBox } from "./bounds";
 import { baseName, isTauri, openTextFile, saveFile } from "./platform";
 import type { IconName } from "../ui/icons";
@@ -386,6 +390,51 @@ defineCommand({
   },
 });
 
+// ── Print preparation ───────────────────────────────────────────────────────
+
+defineCommand({
+  id: "printer.set",
+  kind: "document",
+  label: "Drucker wählen",
+  description: "Setzt das Druckerprofil (Bauraum) des Projekts.",
+  icon: "printer",
+  params: { name: { type: "enum", options: PRINTERS.map((p) => p.name), description: "Druckername" } },
+  apply(doc, p) {
+    const printer = PRINTERS.find((x) => x.name === p.name);
+    if (!printer || printer.name === doc.printer.name) return null;
+    return { doc: { ...doc, printer: { ...printer, volume: [...printer.volume] as Vec3 } }, label: `Drucker: ${printer.name}` };
+  },
+});
+
+defineCommand({
+  id: "print.orient",
+  kind: "document",
+  label: "Beste Drucklage finden",
+  description: "Dreht Objekte in die Lage mit den wenigsten Überhängen und legt sie aufs Bett.",
+  icon: "orient",
+  params: { ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl oder alle)" } },
+  isEnabled: (ctx) => ctx.doc.features.some((f) => f.visible),
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? (ctx.selection.length ? ctx.selection : doc.features.filter((f) => f.visible).map((f) => f.id));
+    const entries = useMeshes.getState().entries;
+    let changed = false;
+    const features = doc.features.map((f) => {
+      const entry = entries[geometryKey(f)];
+      if (!ids.includes(f.id) || !entry) return f;
+      const rotation = bestOrientation(entry);
+      const t = { ...f.transform, rotation };
+      const b = worldBox(f, entries, t);
+      const pos = [...f.transform.position] as Vec3;
+      if (b) pos[2] = round(pos[2] - b.min.z);
+      if (rotation.join() === f.transform.rotation.join() && pos[2] === f.transform.position[2]) return f;
+      changed = true;
+      return { ...f, transform: { position: pos, rotation } };
+    });
+    if (!changed) throw new Error("Die Objekte liegen schon in der besten Lage.");
+    return { doc: { ...doc, features }, label: "Beste Drucklage" };
+  },
+});
+
 // ── Booleans ─────────────────────────────────────────────────────────────────
 
 function defineBoolean(op: BooleanOp, icon: IconName, label: string, description: string) {
@@ -656,6 +705,18 @@ defineCommand({
 });
 
 defineCommand({
+  id: "view.screenshot",
+  kind: "action",
+  label: "Bild speichern",
+  description: "Speichert die aktuelle Ansicht als PNG-Bild.",
+  icon: "camera",
+  params: {},
+  perform() {
+    usePreview.setState({ captureAt: Date.now() });
+  },
+});
+
+defineCommand({
   id: "view.snap",
   kind: "action",
   label: "Einrasten",
@@ -752,7 +813,7 @@ defineCommand({
   perform: () => saveProject(true),
 });
 
-function defineExport(format: "stl" | "3mf", description: string, shortcut?: string) {
+function defineExport(format: ExportFormat, description: string, shortcut?: string) {
   defineCommand({
     id: `export.${format}`,
     kind: "action",
@@ -777,6 +838,8 @@ function defineExport(format: "stl" | "3mf", description: string, shortcut?: str
 
 defineExport("stl", "Exportiert alle sichtbaren Objekte als binäre STL-Datei für den Slicer.", "mod+e");
 defineExport("3mf", "Exportiert alle sichtbaren Objekte als 3MF-Datei (ein Objekt je Körper).");
+defineExport("obj", "Exportiert alle sichtbaren Objekte als OBJ-Netz.");
+defineExport("step", "Exportiert alle sichtbaren Objekte als STEP (exakte CAD-Geometrie, z. B. für Fusion).");
 
 
 // ── Example ──────────────────────────────────────────────────────────────────

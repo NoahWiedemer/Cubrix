@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { create } from "zustand";
 import { geometryKey, type Feature } from "../core/document";
-import type { MeshData, WorkerRequest, WorkerResponse } from "./protocol";
+import type { ExportFormat, MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 
 type Pending = { resolve: (r: WorkerResponse) => void };
 type Distribute<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -99,7 +99,7 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
 
 export async function exportFeatures(
   features: Feature[],
-  format: "stl" | "3mf",
+  format: ExportFormat,
   name: string,
 ): Promise<Uint8Array> {
   const r = await request({ kind: "export", features, format, name });

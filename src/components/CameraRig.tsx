@@ -6,11 +6,16 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
+import { usePreview } from "../ui/preview";
+import { useApp } from "../core/store";
 
 type Controls = { target: THREE.Vector3; update(): void; object: THREE.Camera };
 
 export function CameraRig() {
   const projection = useSettings((s) => s.projection);
+  const inPreview = useApp((s) => s.workspace === "preview");
+  const turntableOn = usePreview((s) => s.turntable);
+  const turntable = inPreview && turntableOn;
   const { camera, set, size } = useThree();
   const controls = useThree((s) => s.controls) as unknown as Controls | null;
   const persp = useRef<THREE.PerspectiveCamera>(camera as THREE.PerspectiveCamera);
@@ -71,6 +76,8 @@ export function CameraRig() {
       key={projection}
       makeDefault
       enableDamping
+      autoRotate={turntable}
+      autoRotateSpeed={0.8}
       dampingFactor={0.12}
       target={target.current.toArray()}
       minDistance={20}

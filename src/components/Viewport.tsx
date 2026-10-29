@@ -18,6 +18,11 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { useLayout } from "../ui/layout";
+import { useAnimatedNumber } from "../ui/useAnimatedNumber";
+import { PreviewControls, PreviewEffects } from "./PreviewControls";
+import { usePreview } from "../ui/preview";
+import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { QUALITY, useSettings } from "../ui/settings";
 import { PropertiesOverlay } from "./PropertiesPanel";
@@ -31,6 +36,28 @@ const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("de-DE");
 function useTransform(f: Feature): Transform {
   const preview = useApp((s) => (s.preview?.id === f.id ? s.preview.transform : null));
   return preview ?? f.transform;
+}
+
+/**
+ * Tints faces red where they point down steeper than 45° (overhangs). Uses world
+ * space: the scene is Y-up, so "down" is -Y. Faces lying on the bed are excluded.
+ */
+function overhangShader(shader: THREE.WebGLProgramParametersWithUniforms) {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
+    .replace(
+      "#include <worldpos_vertex>",
+      "#include <worldpos_vertex>\nvWorldN = normalize(mat3(modelMatrix) * objectNormal);\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+    );
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
+    .replace(
+      "#include <dithering_fragment>",
+      `#include <dithering_fragment>
+      float down = -normalize(vWorldN).y;
+      float over = smoothstep(0.69, 0.73, down) * step(0.15, vWorldP.y);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.86, 0.28, 0.27), over * 0.85);`,
+    );
 }
 
 // ── Objects ──────────────────────────────────────────────────────────────────
@@ -59,6 +86,9 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
 
   const t = useTransform(f);
   const selected = useApp((s) => s.selection.includes(f.id));
+  const inPrint = useApp((s) => s.workspace === "print");
+  const overhangsOn = usePrintView((s) => s.overhangs);
+  const showOverhangs = inPrint && overhangsOn;
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -92,6 +122,9 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
           // the selected body wins, then later bodies over earlier ones.
           polygonOffsetFactor={1}
           polygonOffsetUnits={selected ? 1 : 2 + Math.max(0, 40 - order) * 2}
+          key={showOverhangs ? "overhang" : "plain"}
+          onBeforeCompile={showOverhangs ? overhangShader : undefined}
+          customProgramCacheKey={() => (showOverhangs ? "overhang" : "plain")}
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null}>
@@ -220,10 +253,10 @@ function Lights() {
 }
 
 /** Small projection toggle next to the axis indicator. */
-function ViewControls() {
+function ViewControls({ shift }: { shift: number }) {
   const projection = useSettings((s) => s.projection);
   return (
-    <div className="view-controls">
+    <div className="view-controls" style={{ transform: `translateX(${-shift}px)` }}>
       <button
         className={projection === "perspective" ? "on" : ""}
         onClick={() => execute("view.projection", { mode: "perspective" })}
@@ -257,20 +290,25 @@ export function Viewport() {
   const selection = useApp((s) => s.selection);
   const workspace = useApp((s) => s.workspace);
   const kernel = useKernel();
+  const background = usePreview((s) => s.background);
+  // Axis indicator + projection toggle sit top right and slide left of the floating card.
+  const propsOpen = useLayout((s) => s.panels.props.open);
+  const cardVisible = workspace === "print" || (workspace === "model" && propsOpen && selection.length > 0);
+  const clusterShift = useAnimatedNumber(cardVisible ? 316 : 0, 150);
   const quality = QUALITY[useSettings((s) => s.quality)];
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
 
   return (
     <div
-      className="panel viewport"
+      className={`panel viewport ${workspace === "preview" ? `bg-${background}` : ""}`}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
     >
       <Canvas
         shadows
         dpr={[1, quality.dpr]}
         camera={{ position: [150, 135, 205], fov: 35, near: 0.5, far: 5000 }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, preserveDrawingBuffer: false }}
         onCreated={(state) => {
           const { gl } = state;
           if (import.meta.env.DEV) Object.assign(window, { __viewer: state });
@@ -283,7 +321,8 @@ export function Viewport() {
         }}
       >
         <Lights />
-        <Bed volume={doc.printer.volume} />
+        {workspace !== "preview" && <Bed volume={doc.printer.volume} />}
+        <PreviewEffects />
         {quality.shadows > 0 && (
           <ContactShadows position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
         )}
@@ -292,7 +331,7 @@ export function Viewport() {
           {doc.features.map((f, i) => (
             <FeatureObject key={f.id} f={f} order={i} />
           ))}
-          {single && workspace === "model" && (
+          {single && workspace !== "preview" && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -302,7 +341,7 @@ export function Viewport() {
         <DepthRange />
         <CameraRig />
         <SelectionOutline />
-        <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
+        <GizmoHelper alignment="top-right" margin={[52 + clusterShift, 52]} renderPriority={2}>
           <AxisIndicator />
         </GizmoHelper>
       </Canvas>
@@ -341,9 +380,11 @@ export function Viewport() {
 
       {workspace === "model" && <Toolbar />}
       {workspace === "model" && <PropertiesOverlay />}
-      <ViewControls />
+      {workspace === "print" && <PrintPanel />}
+      {workspace === "preview" && <PreviewControls />}
+      <ViewControls shift={clusterShift} />
 
-      {workspace !== "model" && (
+      {workspace === "sketch" && (
         <div className="soon">
           <div className="soon-card">
             <Icon name={workspace === "sketch" ? "sketch" : workspace === "print" ? "export" : "visible"} size={22} />

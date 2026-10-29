@@ -4,7 +4,7 @@
 
 import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
-import { setOC, type Face, type Shape3D } from "replicad";
+import { makeCompound, setOC, type Face, type Shape3D } from "replicad";
 import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
 import { zipSync, strToU8 } from "fflate";
 import type { MeshData, WorkerRequest, WorkerResponse } from "./protocol";
@@ -134,6 +134,26 @@ function export3mf(shapes: Shape3D[], names: string[]): ArrayBuffer {
   return zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer;
 }
 
+function exportObj(shapes: Shape3D[], names: string[]): ArrayBuffer {
+  const out: string[] = ["# Modelonio OBJ export (mm)"];
+  let offset = 1;
+  shapes.forEach((s, idx) => {
+    const m = s.mesh({ tolerance: 0.01, angularTolerance: 0.1 });
+    out.push(`o ${names[idx].replace(/\s+/g, "_")}`);
+    for (let i = 0; i < m.vertices.length; i += 3)
+      out.push(`v ${m.vertices[i].toFixed(4)} ${m.vertices[i + 1].toFixed(4)} ${m.vertices[i + 2].toFixed(4)}`);
+    for (let i = 0; i < m.triangles.length; i += 3)
+      out.push(`f ${m.triangles[i] + offset} ${m.triangles[i + 1] + offset} ${m.triangles[i + 2] + offset}`);
+    offset += m.vertices.length / 3;
+  });
+  return strToU8(out.join("\n") + "\n").buffer as ArrayBuffer;
+}
+
+async function exportStep(shapes: Shape3D[]): Promise<ArrayBuffer> {
+  const compound = shapes.length === 1 ? shapes[0] : (makeCompound(shapes) as Shape3D);
+  return compound.blobSTEP().arrayBuffer();
+}
+
 function post(msg: WorkerResponse, transfer: Transferable[] = []) {
   self.postMessage(msg, transfer);
 }
@@ -169,8 +189,15 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
 
     if (req.kind === "export") {
       const shapes = req.features.map((f) => buildPlaced(f));
+      const names = req.features.map((f) => f.name);
       const data =
-        req.format === "stl" ? exportStl(shapes) : export3mf(shapes, req.features.map((f) => f.name));
+        req.format === "stl"
+          ? exportStl(shapes)
+          : req.format === "3mf"
+            ? export3mf(shapes, names)
+            : req.format === "obj"
+              ? exportObj(shapes, names)
+              : await exportStep(shapes);
       shapes.forEach((s) => s.delete());
       return post({ id: req.id, ok: true, kind: "export", data }, [data]);
     }

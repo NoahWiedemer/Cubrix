@@ -65,16 +65,30 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly,
     el.addEventListener("pointerup", up);
   };
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Long values shrink a little instead of being clipped by the unit.
+  const fontSize = text.length > 6 ? 12 : text.length > 4 ? 13 : undefined;
   return (
-    <div className="field">
+    <div
+      className="field"
+      onMouseDown={(e) => {
+        // The whole box is the hit target (except the scrub label): focus and select all.
+        if ((e.target as HTMLElement).tagName === "LABEL" || readOnly) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }}
+    >
       {label && (
         <label className={axis} onPointerDown={scrub} title={readOnly ? undefined : "Ziehen zum Ändern"}>
           {label}
         </label>
       )}
       <input
+        ref={inputRef}
         value={text}
         readOnly={readOnly}
+        style={fontSize ? { fontSize } : undefined}
         inputMode="decimal"
         onFocus={(e) => {
           focused.current = true;
@@ -98,7 +112,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly,
           }
         }}
       />
-      {unit && <span className="unit">{unit}</span>}
+      {unit && text.length <= 3 && <span className="unit">{unit}</span>}
     </div>
   );
 }
@@ -180,6 +194,7 @@ function TransformFields({ f, kind }: { f: Feature; kind: "position" | "rotation
     <div className="group">
       <div className="group-label">
         <span><Icon name={kind === "position" ? "position" : "rotateCw"} size={15} />{kind === "position" ? "Position" : "Drehung"}</span>
+        <span className="group-unit">{kind === "position" ? "mm" : "°"}</span>
       </div>
       <div className="field-row">
         {(["x", "y", "z"] as const).map((axis, i) => (

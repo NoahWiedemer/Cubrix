@@ -10,6 +10,7 @@ import { Toasts } from "./components/Toasts";
 import { TooltipLayer } from "./ui/Tooltip";
 
 export function App() {
+  const preview = useApp((s) => s.workspace === "preview");
   useEffect(() => installShortcuts(), []);
 
   // Keep the native window title in sync with the project name.
@@ -19,13 +20,13 @@ export function App() {
   }, [name]);
 
   return (
-    <div className="app">
+    <div className={`app ${preview ? "presenting" : ""}`}>
       <TopBar />
       <div className="main">
-        <LeftRail />
-        <DockColumn side="left" />
+        {!preview && <LeftRail />}
+        {!preview && <DockColumn side="left" />}
         <Viewport />
-        <DockColumn side="right" />
+        {!preview && <DockColumn side="right" />}
       </div>
       <StatusBar />
       <Toasts />
