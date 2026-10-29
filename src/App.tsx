@@ -14,6 +14,7 @@ import { HelpCenter } from "./help/HelpCenter";
 import { useViewportFrame } from "./ui/viewportFrame";
 import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ProviderDialog } from "./components/ProviderKeys";
 
 /**
  * Sidebars slide out (width → 0, slight offset, fade) when entering Vorschau and back in
@@ -91,6 +92,7 @@ export function App() {
       <Library />
       <HelpCenter />
       <SettingsDialog />
+      <ProviderDialog />
     </div>
   );
 }

@@ -236,3 +236,62 @@ describe("Verlauf für die API (keine verwaisten Tool-Aufrufe)", () => {
     expect(out).toBeGreaterThan(fc);
   });
 });
+
+describe("Modellwechsel mitten im Chat", () => {
+  const prompt = (text: string): Message => ({ role: "user", content: [{ type: "text", text }] });
+  const capture = () => {
+    const bodies: any[] = [];
+    const t: Transport = {
+      async stream(p, body, onChunk) {
+        bodies.push(body);
+        onChunk(
+          p === "anthropic"
+            ? sse([
+                { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+                { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } },
+                { type: "message_delta", delta: { stop_reason: "end_turn" } },
+              ])
+            : sse([{ type: "response.completed", response: { output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] } }]),
+        );
+      },
+    };
+    return { t, bodies };
+  };
+  const run = (provider: "anthropic" | "openai", model: string, history: Message[], t: Transport) =>
+    runAgent({ provider, model, transport: t, history, prompt: "weiter", signal: new AbortController().signal, events: { onText() {}, onStep() {} } });
+
+  it("OpenAI → Anthropic: function_call wird zu tool_use mit passendem tool_result", async () => {
+    const history: Message[] = [
+      prompt("a"),
+      {
+        role: "assistant",
+        model: "gpt-6.1-terra",
+        content: [
+          { type: "openai_item", item: { type: "reasoning", id: "rs_1", summary: [] } },
+          { type: "openai_item", item: { type: "function_call", call_id: "c1", name: "get_model", arguments: "{}" } },
+          { type: "tool_use", id: "c1", name: "get_model", input: {} },
+        ],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "{}" }] },
+    ];
+    const { t, bodies } = capture();
+    await run("anthropic", "claude-sonnet-5-5", history, t);
+    const msgs = bodies[0].messages as any[];
+    expect(JSON.stringify(msgs)).not.toContain("openai_item");
+    const i = msgs.findIndex((m) => m.content.some((b: any) => b.type === "tool_use" && b.id === "c1"));
+    expect(msgs[i + 1].content.some((b: any) => b.type === "tool_result" && b.tool_use_id === "c1")).toBe(true);
+  });
+
+  it("Anthropic-Thinking geht nur an dasselbe Modell zurück", async () => {
+    const history: Message[] = [
+      prompt("a"),
+      { role: "assistant", model: "claude-opus-5-5", content: [{ type: "thinking", thinking: "…", signature: "sig" }, { type: "text", text: "hi" }] },
+    ];
+    const same = capture();
+    await run("anthropic", "claude-opus-5-5", history, same.t);
+    expect(JSON.stringify(same.bodies[0].messages)).toContain("thinking");
+    const other = capture();
+    await run("anthropic", "claude-sonnet-5-5", history, other.t);
+    expect(JSON.stringify(other.bodies[0].messages)).not.toContain('"thinking"');
+  });
+});

@@ -14,7 +14,9 @@ import { VoiceButton } from "./VoiceButton";
 import { friendlyError, type FriendlyError } from "../ai/errors";
 import { logError } from "../core/errorLog";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
-import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, extraModels, modelInfo, type Effort, type ModelInfo } from "../ai/models";
+import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, modelInfo, type Effort, type ModelInfo } from "../ai/models";
+import { connectedProviders, refreshKeys, useKeys } from "../ai/keys";
+import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
 
 interface Step {
@@ -37,91 +39,21 @@ let controller: AbortController | null = null;
 
 const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Schlüsselanhänger mit Loch", "Wie ziehe ich eine Skizze in 3D?"];
 
-const PROVIDERS: { id: Provider; label: string; url: string }[] = [
-  { id: "anthropic", label: "Anthropic", url: "https://console.anthropic.com/settings/keys" },
-  { id: "openai", label: "OpenAI", url: "https://platform.openai.com/api-keys" },
-];
-
-async function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(cmd, args);
-}
-
 const markFor = (p: Provider) => (p === "anthropic" ? "claude" : "openai");
+const PROVIDER_LABEL: Record<Provider, string> = { anthropic: "Anthropic", openai: "OpenAI" };
 
-/** Extra chat models from the provider's /v1/models list, loaded once per provider. */
-const useModelList = create<Record<Provider, ModelInfo[]>>(() => ({ anthropic: [], openai: [] }));
-async function loadExtraModels(provider: Provider) {
-  if (!isTauri) return;
-  try {
-    const res = await invoke<{ data?: { id: string; display_name?: string }[] }>("ai_models", { provider });
-    useModelList.setState({ [provider]: extraModels(provider, res.data ?? []) });
-  } catch {
-    /* offline or no key: catalog only */
-  }
-}
-
-function SetupCard({ onDone }: { onDone(): void }) {
-  const { provider } = useAiSettings();
-  const [key, setKey] = useState("");
-  const [state, setState] = useState<"idle" | "testing" | "error">("idle");
-  const [error, setError] = useState("");
-  const info = PROVIDERS.find((p) => p.id === provider)!;
-
-  const test = async () => {
-    setState("testing");
-    try {
-      await invoke("ai_set_key", { provider, key });
-      const model = DEFAULT_MODEL[provider];
-      const body =
-        provider === "anthropic"
-          ? { model, max_tokens: 16, messages: [{ role: "user", content: "Hallo" }] }
-          : { model, input: "Hallo", max_output_tokens: 16 };
-      await invoke("ai_test", { provider, body });
-      void loadExtraModels(provider);
-      onDone();
-    } catch (e) {
-      setState("error");
-      setError(friendlyError(e).title);
-    }
-  };
-
-  return (
-    <div className="chat-setup">
-      <div className="chat-setup-title"><Icon name="key" size={16} />KI verbinden</div>
-      <SegmentedControl
-        className="block"
-        size="sm"
-        value={provider}
-        onChange={(p) => useAiSettings.setState({ provider: p })}
-        options={PROVIDERS.map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo mark={p.id} /> }))}
-      />
-      <div className="field chat-key">
-        <input type="password" placeholder="API-Schlüssel einfügen" value={key} onChange={(e) => setKey(e.target.value)} />
-      </div>
-      <button className="btn-primary" disabled={!isTauri || !key.trim() || state === "testing"} onClick={test} style={{ width: "100%", justifyContent: "center" }}>
-        {state === "testing" ? "Teste Verbindung …" : "Verbindung testen"}
-      </button>
-      {!isTauri && <div className="chat-note">Nur in der Desktop-App verfügbar.</div>}
-      {state === "error" && <div className="chat-error">{error}</div>}
-      <button className="chat-link" onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(info.url))}>
-        Wo bekomme ich einen Schlüssel?
-      </button>
-    </div>
-  );
-}
-
-/** Model + reasoning depth in one compact dropdown. */
+/**
+ * Model + reasoning depth in one compact dropdown. Lists the models of every provider
+ * with an active key, grouped by provider; picking a model picks its provider too.
+ */
 function ModelMenu() {
   const { provider, model, effort } = useAiSettings();
-  const extra = useModelList((s) => s[provider]);
+  const keys = useKeys((s) => s.keys);
   const pop = usePopover();
-  const [more, setMore] = useState(false);
   const current = modelInfo(provider, model[provider] || DEFAULT_MODEL[provider]);
-  const recommended = CATALOG[provider].filter((m) => m.recommended);
-  const others = [...CATALOG[provider].filter((m) => !m.recommended), ...extra];
-  const pick = (id: string) => {
-    useAiSettings.setState((s) => ({ model: { ...s.model, [provider]: id } }));
+  const providers = connectedProviders(keys);
+  const pick = (p: Provider, id: string) => {
+    useAiSettings.setState((s) => ({ provider: p, model: { ...s.model, [p]: id } }));
     pop.setOpen(false);
   };
   return (
@@ -133,18 +65,14 @@ function ModelMenu() {
       </button>
       {pop.open && (
         <Menu style={{ top: 36, left: 0 }} className="model-menu">
-          <MenuTitle>Modell</MenuTitle>
-          {recommended.map((m) => (
-            <MenuItem key={m.id} iconNode={<ProviderLogo mark={markFor(provider)} />} label={<ModelLabel m={m} />} checked={m.id === current.id} onClick={() => pick(m.id)} />
-          ))}
-          {others.length > 0 && (
-            <button className="menu-item more" onClick={() => setMore(!more)}>
-              <span className="menu-icon">{more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-              <span className="menu-label">Weitere Modelle</span>
-            </button>
-          )}
-          {more && others.map((m) => (
-            <MenuItem key={m.id} iconNode={<span />} label={m.name} checked={m.id === current.id} onClick={() => pick(m.id)} />
+          {(providers.length ? providers : [provider]).map((p, i) => (
+            <div key={p}>
+              {i > 0 && <MenuSeparator />}
+              <MenuTitle>{PROVIDER_LABEL[p]}</MenuTitle>
+              {CATALOG[p].map((m) => (
+                <MenuItem key={m.id} iconNode={<ProviderLogo mark={markFor(p)} />} label={<ModelLabel m={m} />} checked={p === provider && m.id === current.id} onClick={() => pick(p, m.id)} />
+              ))}
+            </div>
           ))}
           {current.effort && (
             <>
@@ -161,6 +89,8 @@ function ModelMenu() {
               </div>
             </>
           )}
+          <MenuSeparator />
+          <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { pop.setOpen(false); useProviderDialog.setState({ open: true }); }} />
         </Menu>
       )}
     </div>
@@ -215,8 +145,11 @@ function Steps({ steps }: { steps: Step[] }) {
 export function ChatPanel() {
   const { entries, running } = useChat();
   const { provider, model, effort } = useAiSettings();
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-  const [showSetup, setShowSetup] = useState(false);
+  const keys = useKeys((s) => s.keys);
+  const keysLoaded = useKeys((s) => s.loaded);
+  const [demo, setDemo] = useState(false);
+  const connected = connectedProviders(keys);
+  const hasKey = demo || connected.length > 0;
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -226,7 +159,7 @@ export function ChatPanel() {
     // Dev-only preview of the connected panel in a plain browser (?kiDemo, ?kiDemo=chat).
     const demo = import.meta.env.DEV ? new URLSearchParams(location.search).get("kiDemo") : null;
     if (demo !== null) {
-      setHasKey(true);
+      setDemo(true);
       if (demo === "chat" && !useChat.getState().entries.length)
         useChat.setState({
           entries: [
@@ -245,21 +178,13 @@ export function ChatPanel() {
         });
       return;
     }
-    if (!isTauri) return setHasKey(false);
-    void (async () => {
-      const ok = await invoke<boolean>("ai_has_key", { provider }).catch(() => false);
-      if (!ok) {
-        // Use the other provider automatically if only that one has a key.
-        const other: Provider = provider === "anthropic" ? "openai" : "anthropic";
-        if (await invoke<boolean>("ai_has_key", { provider: other }).catch(() => false)) {
-          useAiSettings.setState({ provider: other });
-          return;
-        }
-      }
-      setHasKey(ok);
-      if (ok) void loadExtraModels(provider);
-    })();
-  }, [provider]);
+    void refreshKeys();
+  }, []);
+
+  // The chosen provider must have a key; otherwise use one that has.
+  useEffect(() => {
+    if (connected.length && !connected.includes(provider)) useAiSettings.setState({ provider: connected[0] });
+  }, [connected.join(), provider]);
 
   useEffect(() => {
     const focus = () => inputRef.current?.focus();
@@ -314,10 +239,11 @@ export function ChatPanel() {
     void send(prompt);
   };
 
-  if (hasKey === false || showSetup)
+  if (!hasKey)
     return (
       <div className="scroll chat-scroll">
-        <SetupCard onDone={() => { setHasKey(true); setShowSetup(false); }} />
+        <div className="chat-setup-title"><Icon name="key" size={16} />KI verbinden</div>
+        {keysLoaded || !isTauri ? <ProviderKeys /> : null}
       </div>
     );
 
@@ -332,7 +258,7 @@ export function ChatPanel() {
           {more.open && (
             <Menu style={{ top: 34, right: 0 }}>
               <MenuItem icon="file" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
-              <MenuItem icon="key" label="Anbieter und Schlüssel" onClick={() => { setShowSetup(true); more.setOpen(false); }} />
+              <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
             </Menu>
           )}
         </div>

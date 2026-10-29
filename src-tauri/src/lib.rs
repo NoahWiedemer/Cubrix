@@ -130,7 +130,11 @@ pub fn run() {
             ai::ai_stream,
             ai::ai_cancel,
             ai::ai_test,
-            ai::ai_models,
+            ai::ai_keys_list,
+            ai::ai_key_add,
+            ai::ai_key_rename,
+            ai::ai_key_delete,
+            ai::ai_key_activate,
             ai::ai_transcribe,
             e2e_audio
         ])

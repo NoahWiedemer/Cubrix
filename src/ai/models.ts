@@ -18,21 +18,18 @@ export interface ModelInfo {
   recommended: boolean;
 }
 
+/** The current lineup per provider (no legacy or list-extended models). */
 export const CATALOG: Record<Provider, ModelInfo[]> = {
   anthropic: [
     { id: "claude-fable-5-1", name: "Claude Fable 5.1", hint: "Am stärksten", effort: true, recommended: true },
     { id: "claude-opus-5-5", name: "Claude Opus 5.5", hint: "Sehr stark für komplexe Teile", effort: true, recommended: true },
     { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", hint: "Ausgewogen", effort: true, recommended: true },
     { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", hint: "Am schnellsten", effort: true, recommended: true },
-    { id: "claude-opus-5", name: "Claude Opus 5", effort: true, recommended: false },
-    { id: "claude-sonnet-5", name: "Claude Sonnet 5", effort: true, recommended: false },
-    { id: "claude-opus-4-8", name: "Claude Opus 4.8", effort: true, recommended: false },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", effort: false, recommended: false },
   ],
   openai: [
     { id: "gpt-6-astra", name: "GPT-6 Astra", hint: "Am stärksten", effort: true, recommended: true },
+    { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", hint: "Sehr stark", effort: true, recommended: true },
     { id: "gpt-6.1-terra", name: "GPT-6.1 Terra", hint: "Empfohlen", effort: true, recommended: true },
-    { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", hint: "Ausgewogen", effort: true, recommended: true },
     { id: "gpt-6-luna", name: "GPT-6 Luna", hint: "Am schnellsten", effort: true, recommended: true },
   ],
 };
@@ -42,10 +39,9 @@ export const DEFAULT_MODEL: Record<Provider, string> = { anthropic: "claude-sonn
 export const EFFORT_LABELS: Record<Effort, string> = { low: "Niedrig", medium: "Mittel", high: "Hoch" };
 
 /** Friendly name for any id; unknown ids get a tidy version (never shown raw). */
-export function modelName(provider: Provider, id: string, apiNames: Record<string, string> = {}): string {
+export function modelName(provider: Provider, id: string): string {
   const known = CATALOG[provider].find((m) => m.id === id);
   if (known) return known.name;
-  if (apiNames[id]) return apiNames[id];
   return id
     .replace(/^gpt-/i, "GPT-")
     .replace(/^claude-/i, "Claude ")
@@ -58,11 +54,5 @@ export function modelInfo(provider: Provider, id: string): ModelInfo {
   return CATALOG[provider].find((m) => m.id === id) ?? { id, name: modelName(provider, id), effort: provider === "openai", recommended: false };
 }
 
-/** Chat models from the provider's /v1/models list that are not in the catalog. */
-export function extraModels(provider: Provider, list: { id: string; display_name?: string }[]): ModelInfo[] {
-  const known = new Set(CATALOG[provider].map((m) => m.id));
-  return list
-    .filter((m) => !known.has(m.id))
-    .filter((m) => (provider === "anthropic" ? m.id.startsWith("claude-") : /^(gpt-|o\d)/.test(m.id) && !/(audio|realtime|tts|transcribe|image|embedding|search|instruct)/.test(m.id)))
-    .map((m) => ({ id: m.id, name: m.display_name ?? modelName(provider, m.id), effort: provider === "openai", recommended: false }));
-}
+/** Provider of a catalog model id. */
+export const providerOf = (id: string): Provider => (CATALOG.anthropic.some((m) => m.id === id) || id.startsWith("claude") ? "anthropic" : "openai");

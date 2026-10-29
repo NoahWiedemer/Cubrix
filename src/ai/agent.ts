@@ -160,7 +160,7 @@ export function prepareHistory(messages: Message[], turns = CONTEXT_TURNS): Mess
     if (m.role === "assistant") {
       const content = m.content.filter((b) => !(b.type === "text" && !b.text.trim()));
       if (!content.length) continue;
-      out.push({ role: "assistant", content });
+      out.push({ role: "assistant", content, ...(m.model ? { model: m.model } : {}) });
       const calls = content.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use").map((b) => b.id);
       if (!calls.length) continue;
       // The answers must come right after the calls.
@@ -202,7 +202,7 @@ export async function runAgent(opts: {
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
     if (opts.signal.aborted) break;
     const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, prepareHistory(messages), opts.events.onText, opts.signal);
-    messages.push({ role: "assistant", content: res.blocks });
+    messages.push({ role: "assistant", content: res.blocks, model: opts.model });
     const calls = res.blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");
     if (!calls.length || res.stop !== "tool_use") break;
     const results: Block[] = [];

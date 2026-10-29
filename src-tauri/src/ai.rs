@@ -58,36 +58,246 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok()).collect()
 }
 
-fn load_secrets(app: &AppHandle) -> HashMap<String, String> {
-    let Ok(dir) = secrets_dir(app) else { return HashMap::new() };
-    fs::read_to_string(dir.join("secrets.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+/// Stored key (the secret itself stays obfuscated on disk and never leaves Rust).
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct StoredKey {
+    id: String,
+    provider: String,
+    name: String,
+    /// Hex of the XOR-obfuscated key.
+    key: String,
+    #[serde(rename = "createdAt")]
+    created_at: u64,
 }
 
-fn key(app: &AppHandle, provider: &str) -> Result<String, String> {
-    let stored = load_secrets(app).remove(provider).ok_or("Kein API-Schlüssel hinterlegt")?;
-    let bytes = unhex(&stored).ok_or("Gespeicherter Schlüssel ist beschädigt")?;
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct Secrets {
+    version: u32,
+    keys: Vec<StoredKey>,
+    /// Active key id per provider.
+    active: HashMap<String, String>,
+}
+
+/// What the webview may see about a key.
+#[derive(serde::Serialize)]
+pub struct KeyInfo {
+    id: String,
+    provider: String,
+    name: String,
+    masked: String,
+    #[serde(rename = "createdAt")]
+    created_at: u64,
+    active: bool,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+fn provider_label(p: &str) -> &'static str {
+    if p == "anthropic" { "Anthropic" } else { "OpenAI" }
+}
+
+fn default_name(secrets: &Secrets, provider: &str) -> String {
+    let base = format!("{}-Schlüssel", provider_label(provider));
+    (1..).map(|i| format!("{base} {i}")).find(|n| !secrets.keys.iter().any(|k| &k.name == n)).unwrap()
+}
+
+/// Reads secrets.json; the old format (`{"openai": "<hex>", …}`) is migrated once.
+fn load_secrets(app: &AppHandle) -> Secrets {
+    let Ok(dir) = secrets_dir(app) else { return Secrets::default() };
+    let Ok(text) = fs::read_to_string(dir.join("secrets.json")) else { return Secrets { version: 2, ..Default::default() } };
+    if let Ok(s) = serde_json::from_str::<Secrets>(&text) {
+        if s.version >= 2 {
+            return s;
+        }
+    }
+    let s = migrate_v1(&text);
+    let _ = save_secrets(app, &s);
+    s
+}
+
+/// v1 stored one obfuscated key per provider: `{"openai": "<hex>", …}`. Each becomes a
+/// named key ("OpenAI-Schlüssel 1") and the active one of its provider.
+fn migrate_v1(text: &str) -> Secrets {
+    let old: HashMap<String, String> = serde_json::from_str(text).unwrap_or_default();
+    let mut s = Secrets { version: 2, ..Default::default() };
+    for provider in ["openai", "anthropic"] {
+        if let Some(hex_key) = old.get(provider) {
+            let id = format!("k{}-{provider}", now_ms());
+            let name = default_name(&s, provider);
+            s.keys.push(StoredKey { id: id.clone(), provider: provider.into(), name, key: hex_key.clone(), created_at: now_ms() });
+            s.active.insert(provider.into(), id);
+        }
+    }
+    s
+}
+
+fn save_secrets(app: &AppHandle, s: &Secrets) -> Result<(), String> {
+    let json = serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?;
+    write_private(&secrets_dir(app)?.join("secrets.json"), &json)
+}
+
+fn reveal(app: &AppHandle, k: &StoredKey) -> Result<String, String> {
+    let bytes = unhex(&k.key).ok_or("Gespeicherter Schlüssel ist beschädigt")?;
     String::from_utf8(xor(&bytes, &install_key(app)?)).map_err(|e| e.to_string())
 }
 
+fn mask(key: &str) -> String {
+    let chars: Vec<char> = key.chars().collect();
+    if chars.len() < 10 {
+        return "…".into();
+    }
+    let head: String = chars[..3].iter().collect();
+    let tail: String = chars[chars.len() - 4..].iter().collect();
+    format!("{head}…{tail}")
+}
+
+/// The active key of a provider.
+fn key(app: &AppHandle, provider: &str) -> Result<String, String> {
+    let s = load_secrets(app);
+    let id = s.active.get(provider).ok_or("Kein API-Schlüssel hinterlegt")?;
+    let k = s.keys.iter().find(|k| &k.id == id).ok_or("Kein API-Schlüssel hinterlegt")?;
+    reveal(app, k)
+}
+
+fn info(app: &AppHandle, s: &Secrets, k: &StoredKey) -> KeyInfo {
+    KeyInfo {
+        id: k.id.clone(),
+        provider: k.provider.clone(),
+        name: k.name.clone(),
+        masked: reveal(app, k).map(|v| mask(&v)).unwrap_or_else(|_| "…".into()),
+        created_at: k.created_at,
+        active: s.active.get(&k.provider) == Some(&k.id),
+    }
+}
+
+#[tauri::command]
+pub fn ai_keys_list(app: AppHandle) -> Vec<KeyInfo> {
+    let s = load_secrets(&app);
+    s.keys.iter().map(|k| info(&app, &s, k)).collect()
+}
+
+/// Checks a key against GET /v1/models before it is stored.
+async fn validate(provider: &str, key: &str) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let req = match provider {
+        "anthropic" => client.get("https://api.anthropic.com/v1/models?limit=1").header("x-api-key", key).header("anthropic-version", "2023-06-01"),
+        "openai" => client.get("https://api.openai.com/v1/models").bearer_auth(key),
+        _ => return Err(format!("Unbekannter Anbieter: {provider}")),
+    };
+    let res = req.send().await.map_err(|e| e.to_string())?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        let status = res.status();
+        Err(format!("{status}: {}", res.text().await.unwrap_or_default()))
+    }
+}
+
+/// Adds a key (validated first); the first key of a provider becomes active.
+#[tauri::command]
+pub async fn ai_key_add(app: AppHandle, provider: String, key: String, name: Option<String>) -> Result<KeyInfo, String> {
+    let k = key.trim().to_string();
+    if k.is_empty() {
+        return Err("Bitte einen Schlüssel einfügen.".into());
+    }
+    validate(&provider, &k).await?;
+    let mut s = load_secrets(&app);
+    let id = format!("k{}", now_ms());
+    let name = name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| default_name(&s, &provider));
+    let stored = StoredKey { id: id.clone(), provider: provider.clone(), name, key: hex(&xor(k.as_bytes(), &install_key(&app)?)), created_at: now_ms() };
+    s.keys.push(stored.clone());
+    s.active.entry(provider).or_insert(id);
+    save_secrets(&app, &s)?;
+    Ok(info(&app, &s, &stored))
+}
+
+#[tauri::command]
+pub fn ai_key_rename(app: AppHandle, id: String, name: String) -> Result<(), String> {
+    let mut s = load_secrets(&app);
+    let k = s.keys.iter_mut().find(|k| k.id == id).ok_or("Schlüssel nicht gefunden")?;
+    let n = name.trim();
+    if n.is_empty() {
+        return Err("Der Name darf nicht leer sein.".into());
+    }
+    k.name = n.to_string();
+    save_secrets(&app, &s)
+}
+
+/// Deletes a key; if it was active, the provider's newest remaining key takes over.
+#[tauri::command]
+pub fn ai_key_delete(app: AppHandle, id: String) -> Result<(), String> {
+    let mut s = load_secrets(&app);
+    let Some(pos) = s.keys.iter().position(|k| k.id == id) else { return Ok(()) };
+    let removed = s.keys.remove(pos);
+    if s.active.get(&removed.provider) == Some(&removed.id) {
+        match s.keys.iter().filter(|k| k.provider == removed.provider).max_by_key(|k| k.created_at) {
+            Some(next) => {
+                let nid = next.id.clone();
+                s.active.insert(removed.provider.clone(), nid);
+            }
+            None => {
+                s.active.remove(&removed.provider);
+            }
+        }
+    }
+    save_secrets(&app, &s)
+}
+
+#[tauri::command]
+pub fn ai_key_activate(app: AppHandle, id: String) -> Result<(), String> {
+    let mut s = load_secrets(&app);
+    let provider = s.keys.iter().find(|k| k.id == id).ok_or("Schlüssel nicht gefunden")?.provider.clone();
+    s.active.insert(provider, id);
+    save_secrets(&app, &s)
+}
+
+/// Kept for the dev E2E hook: stores a key without validation and makes it active.
 #[tauri::command]
 pub fn ai_set_key(app: AppHandle, provider: String, key: String) -> Result<(), String> {
-    let mut secrets = load_secrets(&app);
     let k = key.trim();
     if k.is_empty() {
-        secrets.remove(&provider);
-    } else {
-        secrets.insert(provider, hex(&xor(k.as_bytes(), &install_key(&app)?)));
+        return Ok(());
     }
-    let json = serde_json::to_vec_pretty(&secrets).map_err(|e| e.to_string())?;
-    write_private(&secrets_dir(&app)?.join("secrets.json"), &json)
+    let mut s = load_secrets(&app);
+    let id = format!("k{}", now_ms());
+    let name = default_name(&s, &provider);
+    s.keys.push(StoredKey { id: id.clone(), provider: provider.clone(), name, key: hex(&xor(k.as_bytes(), &install_key(&app)?)), created_at: now_ms() });
+    s.active.insert(provider, id);
+    save_secrets(&app, &s)
 }
 
 #[tauri::command]
 pub fn ai_has_key(app: AppHandle, provider: String) -> bool {
     key(&app, &provider).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn masks_keys() {
+        assert_eq!(mask("sk-ant-api03-abcdefghijklmnop-a1b2"), "sk-…a1b2");
+        assert_eq!(mask("short"), "…");
+    }
+
+    #[test]
+    fn migrates_v1_single_keys() {
+        let s = migrate_v1(r#"{"openai":"aa11","anthropic":"bb22"}"#);
+        assert_eq!(s.version, 2);
+        assert_eq!(s.keys.len(), 2);
+        let openai = s.keys.iter().find(|k| k.provider == "openai").unwrap();
+        assert_eq!(openai.name, "OpenAI-Schlüssel 1");
+        assert_eq!(openai.key, "aa11"); // still obfuscated, untouched
+        assert_eq!(s.active.get("openai"), Some(&openai.id));
+        assert_eq!(s.keys.iter().find(|k| k.provider == "anthropic").unwrap().name, "Anthropic-Schlüssel 1");
+        // A v2 file is not mistaken for v1.
+        let v2 = serde_json::to_string(&s).unwrap();
+        assert_eq!(serde_json::from_str::<Secrets>(&v2).unwrap().version, 2);
+        assert!(migrate_v1("{}").keys.is_empty());
+    }
 }
 
 fn endpoint(provider: &str) -> Result<&'static str, String> {
@@ -170,30 +380,6 @@ pub async fn ai_test(app: AppHandle, provider: String, body: serde_json::Value) 
     }
 }
 
-/// Lists the provider's models (GET /v1/models) with the stored key.
-#[tauri::command]
-pub async fn ai_models(app: AppHandle, provider: String) -> Result<serde_json::Value, String> {
-    let url = match provider.as_str() {
-        "anthropic" => "https://api.anthropic.com/v1/models?limit=100",
-        "openai" => "https://api.openai.com/v1/models",
-        _ => return Err(format!("Unbekannter Anbieter: {provider}")),
-    };
-    let key = key(&app, &provider)?;
-    let client = reqwest::Client::new();
-    let req = client.get(url);
-    let req = match provider.as_str() {
-        "anthropic" => req.header("x-api-key", key).header("anthropic-version", "2023-06-01"),
-        _ => req.bearer_auth(key),
-    };
-    let res = req.send().await.map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        return Err(format!("{}", res.status()));
-    }
-    res.json().await.map_err(|e| e.to_string())
-}
-
-/// Speech to text with the stored OpenAI key (model gpt-transcribe, language auto-detected).
-/// `audio` is base64; `mime` e.g. "audio/webm" or "audio/mp4".
 #[tauri::command]
 pub async fn ai_transcribe(app: AppHandle, audio: String, mime: String) -> Result<String, String> {
     use base64::Engine;

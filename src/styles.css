@@ -1217,3 +1217,26 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .floating { z-index: 500; overflow-y: auto; box-sizing: border-box; }
 .floating.select-menu { position: fixed; top: auto; left: auto; right: auto; max-width: none; }
 .floating.select-menu { width: max-content; max-width: min(380px, calc(100vw - 16px)); } .floating.select-menu .printer-opt { gap: 16px; }
+/* KI-Anbieter: keys per provider */
+.provider-keys { display: flex; flex-direction: column; gap: 14px; padding: 4px 16px 4px; }
+.chat-scroll > .provider-keys { padding: 8px 4px; }
+.chat-scroll > .chat-setup-title { padding: 14px 4px 0; }
+.provider-section { display: flex; flex-direction: column; gap: 6px; }
+.provider-section > header { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.provider-ok { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--accent); }
+.key-row { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 4px 0 6px; border-radius: 8px; border: 1px solid var(--line-soft); }
+.key-row.on { background: var(--active-bg); box-shadow: var(--active-shadow); border-color: transparent; }
+.key-radio { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--text-3); display: grid; place-items: center; flex: none; }
+.key-row.on .key-radio { border-color: var(--accent); }
+.key-row.on .key-radio span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.key-name { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font-size: 13px; padding: 4px 2px; border-radius: 5px; }
+.key-name:focus { background: var(--bg); box-shadow: 0 0 0 1px var(--accent-line); }
+.key-mask { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text-3); }
+.key-confirm { display: flex; gap: 4px; }
+.key-confirm button { font-size: 12px; padding: 3px 7px; border-radius: 6px; color: var(--text-2); }
+.key-confirm button.danger { color: #f0a08f; background: rgba(240, 120, 100, 0.12); }
+.key-add { display: flex; flex-direction: column; gap: 8px; }
+.key-add-actions { display: flex; align-items: center; gap: 8px; }
+.key-add-actions .chat-link { margin-left: auto; }
+.key-add-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); padding: 4px 6px; border-radius: 6px; }
+.key-add-btn:hover { color: var(--text); background: var(--panel-2); }

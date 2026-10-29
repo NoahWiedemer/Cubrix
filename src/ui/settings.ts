@@ -42,16 +42,19 @@ export interface AiSettings {
 export const useAiSettings = create<AiSettings>()(
   persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium" }), {
     name: "albedo.ai",
-    version: 3,
-    // Older settings could hold an empty OpenAI model id.
-    migrate: (s) => {
+    version: 4,
+    // v3: GPT-6.1 Terra became the OpenAI default. v4: only the current lineup is offered,
+    // so ids outside it (older or list-extended models) fall back to the defaults.
+    migrate: (s, version) => {
       const old = s as Partial<AiSettings>;
+      const ANTHROPIC = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+      const OPENAI = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"];
+      const openai = version < 3 && old.model?.openai === "gpt-6.1-sol" ? "gpt-6.1-terra" : old.model?.openai;
       return {
         provider: old.provider ?? "anthropic",
-        // v3: GPT-6.1 Terra became the OpenAI default (replacing the previous default Sol).
         model: {
-          anthropic: old.model?.anthropic || "claude-sonnet-5-5",
-          openai: !old.model?.openai || old.model.openai === "gpt-6.1-sol" ? "gpt-6.1-terra" : old.model.openai,
+          anthropic: ANTHROPIC.includes(old.model?.anthropic ?? "") ? old.model!.anthropic : "claude-sonnet-5-5",
+          openai: OPENAI.includes(openai ?? "") ? openai! : "gpt-6.1-terra",
         },
         effort: old.effort ?? "medium",
       };

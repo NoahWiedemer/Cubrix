@@ -18,6 +18,8 @@ export type Block =
 
 export interface Message {
   role: "user" | "assistant";
+  /** Model that wrote an assistant message (thinking blocks only go back to that model). */
+  model?: string;
   content: Block[];
 }
 
@@ -59,10 +61,13 @@ export function sseParser(onEvent: (data: Record<string, unknown>) => void) {
 
 // ── Anthropic ────────────────────────────────────────────────────────────────
 
-function anthropicMessages(messages: Message[]) {
-  return messages.filter((m) => m.content.some((b) => b.type !== "openai_item")).map((m) => ({
+function anthropicMessages(messages: Message[], model: string) {
+  // Thinking signatures are only valid for the model that produced them.
+  const keep = (m: Message, b: Block) =>
+    b.type !== "openai_item" && !((b.type === "thinking" || b.type === "redacted_thinking") && m.model !== undefined && m.model !== model);
+  return messages.filter((m) => m.content.some((b) => keep(m, b))).map((m) => ({
     role: m.role,
-    content: m.content.filter((b) => b.type !== "openai_item").map((b) => {
+    content: m.content.filter((b) => keep(m, b)).map((b) => {
       if (b.type !== "tool_result") return b;
       const content: unknown[] = [{ type: "text", text: b.content }];
       if (b.image) content.unshift({ type: "image", source: { type: "base64", media_type: "image/png", data: b.image } });
@@ -127,7 +132,7 @@ async function anthropicTurn(
       max_tokens: 16000,
       system,
       tools,
-      messages: anthropicMessages(messages),
+      messages: anthropicMessages(messages, model),
       stream: true,
       // Thinking is adaptive by default on current models; depth is set via effort.
       ...(effort ? { output_config: { effort } } : {}),
