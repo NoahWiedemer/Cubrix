@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
 import { checkForUpdates, useUpdater } from "./updater";
 import * as THREE from "three";
 import { defineCommand, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
@@ -1178,6 +1179,44 @@ defineCommand({
     return {
       doc: updateFeature(doc, f.id, () => next),
       label: f.type === "extrude" && f.revolve ? `${name}: Achsabstand ${offset.toLocaleString("de-DE")} mm` : `${name} drehen`,
+    };
+  },
+});
+
+defineCommand({
+  id: "sketch.setShape",
+  kind: "document",
+  label: "Form-Maße ändern",
+  description:
+    "Ändert die Maße EINER Form in einer Skizze bzw. einem Profil (index = Position in der Formenliste, ab 0). Felder je nach Form: width/depth (Rechteck, Ellipse, Linienzug; Langloch: width = Länge, depth = Breite), diameter (Kreis, Vieleck), radius (Eckradius), sides (Ecken), angle (Ellipse, Langloch), x/y (Mittelpunkt). Größen ändern sich um die Mitte.",
+  icon: "measure",
+  params: {
+    id: { type: "id", optional: true, description: "Skizzen-/Profil-ID (Standard: Auswahl)" },
+    index: { type: "number", min: 0, description: "Index der Form" },
+    width: { type: "number", unit: "mm", optional: true, description: "Breite (Langloch: Länge)" },
+    depth: { type: "number", unit: "mm", optional: true, description: "Tiefe (Langloch: Breite)" },
+    diameter: { type: "number", unit: "mm", optional: true, description: "Durchmesser" },
+    radius: { type: "number", unit: "mm", optional: true, description: "Eckradius" },
+    sides: { type: "number", optional: true, description: "Ecken" },
+    angle: { type: "number", unit: "°", optional: true, description: "Drehwinkel" },
+    x: { type: "number", unit: "mm", optional: true, description: "Mittelpunkt X" },
+    y: { type: "number", unit: "mm", optional: true, description: "Mittelpunkt Y" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 1 && ["sketch", "extrude"].includes(findFeature(ctx.doc, ctx.selection[0])?.type ?? ""),
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f || (f.type !== "sketch" && f.type !== "extrude")) throw new Error("Bitte eine Skizze oder ein Profil auswählen.");
+    const shapes = f.type === "sketch" ? f.shapes : f.profile;
+    const i = Math.round(p.index);
+    if (!shapes[i]) throw new Error(`Die Skizze hat keine Form Nr. ${i + 1}.`);
+    let shape = shapes[i];
+    const keys = (["width", "depth", "diameter", "radius", "sides", "angle", "x", "y"] as ShapeField[]).filter((k) => p[k] !== undefined);
+    for (const k of keys) shape = setShapeField(shape, k, p[k]);
+    if (JSON.stringify(shape) === JSON.stringify(shapes[i])) return null;
+    const next = shapes.map((s, j) => (j === i ? shape : s));
+    return {
+      doc: updateFeature(doc, f.id, (x) => (x.type === "sketch" ? { ...x, shapes: next } : { ...x, profile: next }) as Feature),
+      label: `${f.name}: ${SHAPE_LABELS[shape.kind]} ${i + 1} ändern`,
     };
   },
 });

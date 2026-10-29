@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlignCenter, AlignLeft, AlignRight, Bold, Link2, Link2Off } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, ChevronRight, Link2, Link2Off } from "lucide-react";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { maxEdgeSize, textOf } from "../core/commandDefs";
 import { profileBounds } from "../core/scale";
+import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
@@ -194,7 +195,7 @@ function Dimensions({ f }: { f: Feature }) {
   }
 
   if (f.type === "text") return null;
-  if (f.type === "sketch" || f.type === "extrude") return <ProfileSize f={f} />;
+  if (f.type === "sketch" || f.type === "extrude") return <><ProfileSize f={f} /><ShapeList f={f} /></>;
   if (f.type === "import") return <ImportSize f={f} />;
   const fields = PARAM_FIELDS[f.type];
   const params = f.params as Record<string, number>;
@@ -286,6 +287,50 @@ function ProfileSize({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
       <div className="field-caption">
         {revolve ? <><span>Breite</span><span>Höhe</span><span>Achsabstand</span></> : <><span>Breite</span><span>Tiefe</span><span>Höhe</span></>}
       </div>
+    </div>
+  );
+}
+
+/** Each shape of a sketch with its own dimensions (collapsed by default for more than four shapes). */
+function ShapeList({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
+  const shapes = f.type === "sketch" ? f.shapes : f.profile;
+  const [open, setOpen] = useState(shapes.length <= 4);
+  if (!shapes.length) return null;
+  const counts: Record<string, number> = {};
+  return (
+    <div className="group shape-list">
+      <button className="group-label as-toggle" onClick={() => setOpen(!open)}>
+        <span><Icon name="sketch" size={15} />Formen <span className="muted">{shapes.length}</span></span>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {open &&
+        shapes.map((s, i) => {
+          counts[s.kind] = (counts[s.kind] ?? 0) + 1;
+          const fields = shapeFields(s);
+          return (
+            <div key={i} className="shape-item">
+              <div className="shape-name">{SHAPE_LABELS[s.kind]} {counts[s.kind]}</div>
+              {[fields.filter((fs) => fs.key !== "x" && fs.key !== "y"), fields.filter((fs) => fs.key === "x" || fs.key === "y")].map((row, r) => (
+                <div key={r} className="field-grid">
+                  {row.map((fs) => (
+                    <div key={fs.key} className="field-cell">
+                      <NumberField
+                        label={fs.label}
+                        unit={fs.unit}
+                        value={fs.value}
+                        min={fs.min}
+                        step={fs.step ?? (fs.key === "sides" ? 1 : 0.5)}
+                        onCommit={(v) => void execute("sketch.setShape", { id: f.id, index: i, [fs.key]: v })}
+                      />
+                      {/* X/Y explain themselves (the centre of the shape). */}
+                      {r === 0 && <span className="field-cap">{fs.caption}</span>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })}
     </div>
   );
 }

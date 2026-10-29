@@ -1427,3 +1427,12 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 @keyframes upd-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .spinner.small { width: 12px; height: 12px; flex: none; }
 .update-toast.brief { align-items: center; padding: 8px 8px 8px 14px; }
+.group-label.as-toggle { width: 100%; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
+.group-label.as-toggle svg:last-child { color: var(--text-3); }
+.group-label .muted { color: var(--text-3); font-weight: 500; margin-left: 2px; }
+.shape-item { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+.shape-item + .shape-item { border-top: 1px solid var(--line-soft); margin-top: 6px; }
+.shape-name { font-size: 12.5px; color: var(--text-2); }
+.field-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 6px; }
+.field-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-cap { color: var(--text-3); font-size: 12px; text-align: center; }
