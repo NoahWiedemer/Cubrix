@@ -1,6 +1,7 @@
 // Agentic loop: the model sees every registered command as a tool, plus a few
 // meta tools (model JSON, screenshot, scripts). All changes go through the
 // command registry with source "ai", grouped per response in the history.
+import { logError } from "../core/errorLog";
 import { execute, getCommand, listCommands, toToolDefinition } from "../core/commands";
 import { getDoc, useApp } from "../core/store";
 import { geometryKey, isSolid } from "../core/document";
@@ -14,7 +15,7 @@ import { runTurn, type Block, type Message, type Provider, type ToolSpec, type T
 export const toolName = (id: string) => id.replace(/\./g, "__");
 export const commandId = (name: string) => name.replace(/__/g, ".");
 
-const HIDDEN = new Set(["file.new", "file.open", "history.redoAlt", "selection.clear"]);
+const HIDDEN = new Set(["file.new", "file.open", "history.redoAlt", "selection.clear", "app.settings"]);
 
 export function buildTools(): ToolSpec[] {
   const commands = listCommands()
@@ -130,9 +131,57 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
     }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
+    logError("ai", `Werkzeug ${block.name}: ${error}`, { tool: block.name, input: block.input });
     events.onStep({ label: commandId(block.name), ok: false, error });
     return result({ ok: false, error }, { isError: true });
   }
+}
+
+/** User turns kept in the model context (the visible chat keeps everything). */
+export const CONTEXT_TURNS = 20;
+
+const isPrompt = (m: Message) => m.role === "user" && m.content.some((b) => b.type === "text");
+
+/**
+ * Makes a history safe to send:
+ * - keeps only the last `turns` user prompts (cut at a prompt, so tool pairs stay whole);
+ * - every tool_use gets a tool_result in the following user message (a stopped run
+ *   leaves calls without results, which both APIs reject with HTTP 400);
+ * - tool_results without a matching call and empty text blocks are dropped;
+ * - empty messages are removed.
+ */
+export function prepareHistory(messages: Message[], turns = CONTEXT_TURNS): Message[] {
+  const prompts = messages.map((m, i) => (isPrompt(m) ? i : -1)).filter((i) => i >= 0);
+  const start = prompts.length > turns ? prompts[prompts.length - turns] : 0;
+  const src = messages.slice(start);
+  const out: Message[] = [];
+  for (let i = 0; i < src.length; i++) {
+    const m = src[i];
+    if (m.role === "assistant") {
+      const content = m.content.filter((b) => !(b.type === "text" && !b.text.trim()));
+      if (!content.length) continue;
+      out.push({ role: "assistant", content });
+      const calls = content.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use").map((b) => b.id);
+      if (!calls.length) continue;
+      // The answers must come right after the calls.
+      const next = src[i + 1];
+      const given = next?.role === "user" ? next.content.filter((b) => b.type === "tool_result" && calls.includes(b.tool_use_id)) : [];
+      const answered = new Set(given.map((b) => (b as Extract<Block, { type: "tool_result" }>).tool_use_id));
+      const missing: Block[] = calls
+        .filter((id) => !answered.has(id))
+        .map((id) => ({ type: "tool_result", tool_use_id: id, content: JSON.stringify({ ok: false, error: "Abgebrochen" }), isError: true }));
+      const rest = next?.role === "user" ? next.content.filter((b) => b.type !== "tool_result" && !(b.type === "text" && !b.text.trim())) : [];
+      out.push({ role: "user", content: [...given, ...missing, ...rest] });
+      if (next?.role === "user") i++;
+      continue;
+    }
+    // A user message not answering calls: orphaned results go.
+    const content = m.content.filter((b) => b.type !== "tool_result" && !(b.type === "text" && !b.text.trim()));
+    if (content.length) out.push({ role: "user", content });
+  }
+  // The context must not start with an assistant message.
+  while (out.length && out[0].role !== "user") out.shift();
+  return out;
 }
 
 export async function runAgent(opts: {
@@ -148,11 +197,11 @@ export async function runAgent(opts: {
   maxTurns?: number;
 }): Promise<Message[]> {
   const group = { id: Math.random().toString(36).slice(2), prompt: opts.prompt };
-  const messages: Message[] = [...opts.history, { role: "user", content: [{ type: "text", text: opts.prompt }] }];
+  const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }] }];
   const tools = buildTools();
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
     if (opts.signal.aborted) break;
-    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, messages, opts.events.onText, opts.signal);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, prepareHistory(messages), opts.events.onText, opts.signal);
     messages.push({ role: "assistant", content: res.blocks });
     const calls = res.blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");
     if (!calls.length || res.stop !== "tool_use") break;
@@ -163,5 +212,6 @@ export async function runAgent(opts: {
     }
     messages.push({ role: "user", content: results });
   }
-  return messages;
+  // Stopped mid-run: close any open tool calls so the saved history stays valid.
+  return prepareHistory(messages, Infinity);
 }

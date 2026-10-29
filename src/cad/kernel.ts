@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { geometryKey, type Feature } from "../core/document";
 import type { ExportFormat, MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 import { fontKey, isBundledFont } from "./fontKeys";
+import { logError } from "../core/errorLog";
 
 type Pending = { resolve: (r: WorkerResponse) => void };
 type Distribute<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -123,6 +124,7 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
       useKernel.setState((s) => ({ busy: s.busy - 1 }));
       if (!r.ok || r.kind !== "mesh") {
         cache.delete(key);
+        logError("kernel", r.ok ? "Unerwartete Antwort" : r.error, { feature: f.type, name: f.name });
         throw new KernelError(r.ok ? "Unerwartete Antwort" : r.error, !r.ok && !!r.edgeTreatment);
       }
       const entry = toThree(r.mesh);

@@ -3,6 +3,7 @@
 // the AI chat / MCP server all go through `execute()`.
 import type { ModelDocument } from "./document";
 import { getDoc, useApp, type CommandSource } from "./store";
+import { logError } from "./errorLog";
 import type { IconName } from "../ui/icons";
 
 export type ParamSpec =
@@ -131,6 +132,7 @@ export async function execute(
     });
     return true;
   } catch (e) {
+    logError("command", e instanceof Error ? e.message : String(e), { command: id, source: opts.source ?? "user", params });
     if (opts.throwErrors) throw e;
     app.toast("error", e instanceof Error ? e.message : String(e));
     return false;

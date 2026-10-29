@@ -1,4 +1,5 @@
 mod ai;
+mod errorlog;
 mod fonts;
 
 use tauri::{Emitter, Manager};
@@ -114,6 +115,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ai::AiState::default())
         .invoke_handler(tauri::generate_handler![
+            errorlog::log_error,
+            errorlog::errors_read,
+            errorlog::errors_clear,
+            errorlog::errors_dir,
             fonts::fonts_list,
             fonts::font_bytes,
             log_status,

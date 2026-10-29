@@ -125,6 +125,13 @@ pub async fn ai_stream(
         if !res.status().is_success() {
             let status = res.status();
             let text = res.text().await.unwrap_or_default();
+            let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("?");
+            let mut trimmed = text.clone();
+            trimmed.truncate(2000);
+            let _ = crate::errorlog::append(
+                &app,
+                serde_json::json!({ "source": "ai", "message": format!("HTTP {status}"), "details": { "provider": provider, "model": model, "request": "stream", "body": trimmed } }),
+            );
             return Err(format!("{status}: {text}"));
         }
         let mut stream = res.bytes_stream();

@@ -30,6 +30,7 @@ import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
 import { viewportPick } from "../ui/viewportPick";
+import { volumeCorners, volumeEdges } from "../ui/buildVolume";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -205,17 +206,15 @@ function DepthRange() {
  * frame line ever sits in front of the model.
  */
 function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; strong: boolean }) {
+  // Rebuilt whenever any dimension changes (the old geometries are disposed).
   const edges = useMemo(() => {
-    const x = w / 2, z = d / 2;
-    const corners: [number, number][] = [[-x, -z], [x, -z], [x, z], [-x, z]];
-    const list: { a: THREE.Vector3; b: THREE.Vector3; corners: number[] }[] = [];
-    corners.forEach(([cx, cz], i) => {
-      const [nx, nz] = corners[(i + 1) % 4];
-      list.push({ a: new THREE.Vector3(cx, 0, cz), b: new THREE.Vector3(cx, h, cz), corners: [i] }); // vertical
-      list.push({ a: new THREE.Vector3(cx, h, cz), b: new THREE.Vector3(nx, h, nz), corners: [i, (i + 1) % 4] }); // top
-    });
-    return { corners, list };
+    const list = volumeEdges(w, d, h).map((e) => ({
+      ...e,
+      geometry: new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...e.a), new THREE.Vector3(...e.b)]),
+    }));
+    return { corners: volumeCorners(w, d), list };
   }, [w, d, h]);
+  useEffect(() => () => edges.list.forEach((e) => e.geometry.dispose()), [edges]);
   const mats = useRef<THREE.LineBasicMaterial[]>([]);
   useFrame(({ camera }, dt) => {
     let nearest = 0;
@@ -239,8 +238,7 @@ function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; str
   return (
     <group>
       {edges.list.map((e, i) => (
-        <lineSegments key={i} raycast={() => null}>
-          <bufferGeometry onUpdate={(g) => g.setFromPoints([e.a, e.b])} />
+        <lineSegments key={i} geometry={e.geometry} raycast={() => null}>
           <lineBasicMaterial ref={(m) => { if (m) mats.current[i] = m; }} color={strong ? "#56646d" : "#3a454c"} transparent opacity={0.35} />
         </lineSegments>
       ))}

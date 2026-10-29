@@ -5,6 +5,9 @@ import "@fontsource-variable/inter";
 import "./styles.css";
 import "./core/commandDefs";
 import { App } from "./App";
+import { installErrorHooks } from "./core/errorLog";
+
+installErrorHooks();
 import { initKernel, useKernel } from "./cad/kernel";
 import { isTauri } from "./core/platform";
 import { isMac, listCommands, toToolDefinition, execute } from "./core/commands";

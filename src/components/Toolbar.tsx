@@ -5,12 +5,22 @@ import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
 import { useSketch } from "../ui/sketch";
 import { useTextTool } from "../ui/textTool";
+import { openValuePopover } from "./ValuePopover";
+
+/** Commands that ask for one value first (same inline popover as the context menu). */
+const VALUE_COMMANDS: Record<string, string> = { "object.fillet": "radius", "object.chamfer": "radius" };
 
 function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; icon?: IconName; label?: string; tip?: string; active?: boolean }) {
   const cmd = getCommand(id)!;
   const tip = tipText ?? cmd.description.split(".")[0];
+  const run = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const param = VALUE_COMMANDS[id];
+    if (!param) return void execute(id);
+    const r = e.currentTarget.getBoundingClientRect();
+    openValuePopover({ command: id, param, at: { x: r.left + r.width / 2, y: r.top }, placement: "above" });
+  };
   return (
-    <button className={`tool ${active ? "active" : ""}`} onClick={() => execute(id)} data-tip={tip} data-kbd={cmd.shortcut} data-tip-pos="top">
+    <button className={`tool ${active ? "active" : ""}`} onClick={run} data-tip={tip} data-kbd={cmd.shortcut} data-tip-pos="top">
       <Icon name={icon ?? cmd.icon} size={18} />
       {label ?? cmd.label}
     </button>

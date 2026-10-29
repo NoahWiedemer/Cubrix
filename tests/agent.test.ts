@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import "../src/core/commandDefs";
-import { runAgent } from "../src/ai/agent";
-import type { Transport } from "../src/ai/providers";
+import { prepareHistory, runAgent } from "../src/ai/agent";
+import type { Message, Transport } from "../src/ai/providers";
 import { getDoc, useApp } from "../src/core/store";
 
 const sse = (events: unknown[]) => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
@@ -193,5 +193,46 @@ describe("KI und Auswahl", () => {
     const { execute } = await import("../src/core/commands");
     await execute("primitive.cylinder", {}, { source: "ai" });
     expect(useApp.getState().selection).toEqual([first]);
+  });
+});
+
+describe("Verlauf für die API (keine verwaisten Tool-Aufrufe)", () => {
+  const prompt = (text: string): Message => ({ role: "user", content: [{ type: "text", text }] });
+  const call = (id: string): Message => ({ role: "assistant", content: [{ type: "tool_use", id, name: "get_model", input: {} }] });
+  const answer = (id: string): Message => ({ role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "{}" }] });
+
+  it("schließt Aufrufe ohne Ergebnis (gestoppter Lauf) und entfernt verwaiste Ergebnisse", () => {
+    const h = prepareHistory([prompt("a"), call("x"), prompt("b"), answer("zzz"), prompt("c")]);
+    // x gets a synthetic error result right after the call; the orphan result for zzz is gone.
+    expect(h[2].content[0]).toMatchObject({ type: "tool_result", tool_use_id: "x", isError: true });
+    expect(JSON.stringify(h)).not.toContain("zzz");
+    for (let i = 0; i < h.length; i++) {
+      const ids = h[i].content.filter((b) => b.type === "tool_use").map((b: any) => b.id);
+      if (ids.length) expect(h[i + 1].content.filter((b) => b.type === "tool_result").map((b: any) => b.tool_use_id)).toEqual(ids);
+    }
+  });
+
+  it("behält nur die letzten 20 Nutzer-Runden, an Rundengrenzen geschnitten", () => {
+    const long: Message[] = [];
+    for (let i = 0; i < 30; i++) long.push(prompt(`p${i}`), call(`c${i}`), answer(`c${i}`), { role: "assistant", content: [{ type: "text", text: "ok" }] });
+    const h = prepareHistory(long);
+    expect(h.filter((m) => m.role === "user" && m.content.some((b) => b.type === "text")).length).toBe(20);
+    expect(h[0]).toEqual(prompt("p10"));
+  });
+
+  it("baut Anthropic-Aufrufe beim Wechsel zu OpenAI als function_call nach", async () => {
+    const bodies: any[] = [];
+    const t: Transport = {
+      async stream(_p, body, onChunk) {
+        bodies.push(body);
+        onChunk(sse([{ type: "response.completed", response: { output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] } }]));
+      },
+    };
+    await runAgent({ provider: "openai", model: "m", transport: t, history: [prompt("a"), call("x"), answer("x")], prompt: "b", signal: new AbortController().signal, events: { onText() {}, onStep() {} } });
+    const input = bodies[0].input as any[];
+    const fc = input.findIndex((i) => i.type === "function_call" && i.call_id === "x");
+    const out = input.findIndex((i) => i.type === "function_call_output" && i.call_id === "x");
+    expect(fc).toBeGreaterThanOrEqual(0);
+    expect(out).toBeGreaterThan(fc);
   });
 });

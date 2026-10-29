@@ -12,6 +12,7 @@ import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
 import { VoiceButton } from "./VoiceButton";
 import { friendlyError, type FriendlyError } from "../ai/errors";
+import { logError } from "../core/errorLog";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
 import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, extraModels, modelInfo, type Effort, type ModelInfo } from "../ai/models";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
@@ -297,7 +298,10 @@ export function ChatPanel() {
       useChat.setState({ api });
     } catch (e) {
       if (controller?.signal.aborted) update((x) => ({ ...x, text: x.text || "Gestoppt." }));
-      else update((x) => ({ ...x, error: friendlyError(e), prompt }));
+      else {
+        logError("ai", e instanceof Error ? e.message : String(e), { provider, model: info.id, request: "agent" });
+        update((x) => ({ ...x, error: friendlyError(e), prompt }));
+      }
     } finally {
       useChat.setState({ running: false });
       controller = null;

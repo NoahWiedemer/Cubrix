@@ -18,6 +18,8 @@ interface Request {
   kind?: "number" | "text";
   /** Initial value (else the last used one). */
   initial?: string;
+  /** "above": `at` is the top centre of a button; the popover sits centred above it. */
+  placement?: "at" | "above";
 }
 
 export const useValuePopover = create<{ req: Request | null }>(() => ({ req: null }));
@@ -100,12 +102,13 @@ function Popover({ req }: { req: Request }) {
     requestAnimationFrame(() => input.current?.select());
   };
 
-  const x = Math.min(req.at.x, window.innerWidth - 250);
-  const y = Math.min(req.at.y, window.innerHeight - 140);
+  const above = req.placement === "above";
+  const x = above ? req.at.x : Math.min(req.at.x, window.innerWidth - 250);
+  const y = above ? req.at.y - 8 : Math.min(req.at.y, window.innerHeight - 140);
   const unit = spec && "unit" in spec ? spec.unit : undefined;
 
   return (
-    <div ref={box} className="value-pop" style={{ left: x, top: y }}>
+    <div ref={box} className={`value-pop ${above ? "above" : ""}`} style={{ left: x, top: y }}>
       <div className="value-pop-label">
         <Icon name={cmd.icon} size={15} />
         {cmd.label}

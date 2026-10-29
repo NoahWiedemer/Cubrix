@@ -60,7 +60,7 @@ export function sseParser(onEvent: (data: Record<string, unknown>) => void) {
 // ── Anthropic ────────────────────────────────────────────────────────────────
 
 function anthropicMessages(messages: Message[]) {
-  return messages.map((m) => ({
+  return messages.filter((m) => m.content.some((b) => b.type !== "openai_item")).map((m) => ({
     role: m.role,
     content: m.content.filter((b) => b.type !== "openai_item").map((b) => {
       if (b.type !== "tool_result") return b;
@@ -104,10 +104,17 @@ async function anthropicTurn(
     } else if (type === "content_block_stop") {
       const i = e.index as number;
       const b = blocks[i];
-      if (b?.type === "tool_use") b.input = json[i] ? JSON.parse(json[i]) : {};
+      if (b?.type === "tool_use") {
+        try {
+          b.input = json[i] ? JSON.parse(json[i]) : {};
+        } catch {
+          delete blocks[i]; // cut off by the token limit; never send a half call
+        }
+      }
     } else if (type === "message_delta") {
       const d = e.delta as { stop_reason?: string };
       if (d.stop_reason === "tool_use") stop = "tool_use";
+      if (d.stop_reason === "max_tokens") stop = "end";
       if (d.stop_reason === "refusal") throw new Error("Das Modell hat diese Anfrage abgelehnt.");
     } else if (type === "error") {
       throw new Error(((e.error as { message?: string }) ?? {}).message ?? "Fehler des KI-Anbieters");
@@ -128,7 +135,10 @@ async function anthropicTurn(
     parse,
     signal,
   );
-  return { blocks: blocks.filter(Boolean), stop };
+  const kept = blocks.filter(Boolean);
+  // Calls cut off by the token limit are not run (and not sent back).
+  if ((stop as TurnResult["stop"]) === "tool_use" && !kept.some((b) => b.type === "tool_use")) stop = "end";
+  return { blocks: kept, stop };
 }
 
 // ── OpenAI (Responses API) ───────────────────────────────────────────────────
@@ -138,10 +148,13 @@ function openaiInput(messages: Message[]) {
   const input: unknown[] = [];
   for (const m of messages) {
     if (m.role === "assistant") {
+      const native = m.content.some((x) => x.type === "openai_item");
       for (const b of m.content) {
         if (b.type === "openai_item") input.push(b.item);
-        else if (b.type === "text" && !m.content.some((x) => x.type === "openai_item"))
-          input.push({ role: "assistant", content: b.text });
+        else if (native) continue;
+        // History from the other provider (after switching): rebuild the items.
+        else if (b.type === "text") input.push({ role: "assistant", content: b.text });
+        else if (b.type === "tool_use") input.push({ type: "function_call", call_id: b.id, name: b.name, arguments: JSON.stringify(b.input) });
       }
       continue;
     }
@@ -202,12 +215,13 @@ async function openaiTurn(
       if (text) blocks.push({ type: "text", text });
     } else if (item.type === "function_call") {
       calls++;
-      blocks.push({
-        type: "tool_use",
-        id: item.call_id as string,
-        name: item.name as string,
-        input: item.arguments ? JSON.parse(item.arguments as string) : {},
-      });
+      let input: Record<string, unknown> = {};
+      try {
+        input = item.arguments ? JSON.parse(item.arguments as string) : {};
+      } catch {
+        input = { _invalid: String(item.arguments).slice(0, 200) };
+      }
+      blocks.push({ type: "tool_use", id: item.call_id as string, name: item.name as string, input });
     }
   }
   return { blocks, stop: calls ? "tool_use" : "end" };

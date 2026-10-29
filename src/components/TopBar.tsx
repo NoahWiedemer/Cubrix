@@ -58,6 +58,8 @@ export function TopBar() {
               <CommandItem id="export.3mf" onDone={() => fileMenu.setOpen(false)} />
               <CommandItem id="export.obj" onDone={() => fileMenu.setOpen(false)} />
               <CommandItem id="export.step" onDone={() => fileMenu.setOpen(false)} />
+              <MenuSeparator />
+              <CommandItem id="app.settings" onDone={() => fileMenu.setOpen(false)} />
             </Menu>
           )}
         </div>

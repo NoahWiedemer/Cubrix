@@ -37,6 +37,7 @@ import { useLayout } from "../ui/layout";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
+import { useSettingsDialog } from "../components/SettingsDialog";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
@@ -1173,6 +1174,19 @@ defineCommand({
   params: { show: { type: "boolean", optional: true, description: "Ein/aus (Standard: umschalten)" } },
   perform(p) {
     useSettings.setState((s) => ({ showGrid: p.show ?? !s.showGrid }));
+  },
+});
+
+defineCommand({
+  id: "app.settings",
+  kind: "action",
+  label: "Einstellungen …",
+  description: "Öffnet die Einstellungen (u. a. das Fehlerprotokoll).",
+  icon: "settings",
+  shortcut: "mod+,",
+  params: {},
+  perform() {
+    useSettingsDialog.setState({ open: true });
   },
 });
 
