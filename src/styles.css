@@ -1009,3 +1009,26 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .segmented.block > button { flex: 1 1 0; min-width: 0; justify-content: center; text-align: center; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; padding-right: 4px; }
 .inspector-head .segmented { cursor: default; }
 .inspector-head .segmented.sm > button { font-size: 12.5px; letter-spacing: -0.005em; }
+/* Equal-width segments (grid) for full-width bars */
+.segmented.block { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; padding: 3px; }
+.inspector-head .segmented.sm > button { padding: 5px 2px; font-size: 12.5px; }
+/* Calmer inputs: a few % off the card colour, subtle border */
+.field { background: #1d2226; border-color: #2c3338; }
+.field:hover { border-color: #39424a; }
+.field:focus-within { background: #1a1f22; }
+/* Properties header: plain icon + name */
+.props-title .badge { width: auto; height: auto; background: none; color: var(--text-2); }
+.props-title .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.props-title .name .muted { color: var(--text-3); font-weight: 400; }
+.toolbar-sep { width: 1px; align-self: stretch; margin: 6px 4px; background: var(--line); }
+.segmented-pill.equal { left: 3px; width: calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n)); transition: transform 200ms cubic-bezier(0.3, 0.7, 0.2, 1); }
+.inspector-head { padding: 10px 10px 8px; container-type: inline-size; }
+.inspector-head .segmented.sm > button { font-size: 12.5px; padding: 5px 1px; }
+@container (max-width: 250px) { .inspector-head .segmented.sm > button { font-size: 11px; letter-spacing: -0.01em; padding: 5px 0; } }
+/* Right sidebar: controls match the 34 px inputs */
+.dock-col.right .segmented.sm:not(.inspector-tabs) > button { height: 34px; font-size: 13.5px; }
+.dock-col.right .inspector-tabs.segmented.sm > button { height: 32px; }
+.dock-col.right .toggle { min-height: 34px; font-size: 13.5px; }
+.toggle .kbd-row { margin-left: 8px; vertical-align: 1px; }
+.field-label { margin-top: 6px; font-size: 13px; color: var(--text-3); }
+.slider-row b { white-space: nowrap; min-width: 56px; text-align: right; }

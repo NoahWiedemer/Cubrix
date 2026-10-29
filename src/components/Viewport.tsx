@@ -27,7 +27,7 @@ import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewContr
 import { usePreview } from "../ui/preview";
 import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
-import { QUALITY, useSettings } from "../ui/settings";
+import { useSettings } from "../ui/settings";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -249,12 +249,13 @@ function Bed({ volume }: { volume: Vec3 }) {
   const [w, d, h] = volume;
   const showVolume = useSettings((s) => s.showVolume);
   const volumeStrong = useSettings((s) => s.volumeStrong);
-  const gridSize = useSettings((s) => s.gridSize);
+  const showGrid = useSettings((s) => s.showGrid);
+  const snap = useApp((s) => s.snap);
   const gridFade = useSettings((s) => s.gridFade);
   const outline = useMemo(() => [[-w / 2, 0.02, -d / 2], [w / 2, 0.02, -d / 2], [w / 2, 0.02, d / 2], [-w / 2, 0.02, d / 2], [-w / 2, 0.02, -d / 2]] as [number, number, number][], [w, d]);
   return (
     <group>
-      <GroundGrid coarse={gridSize === "coarse"} fade={gridFade} />
+      {showGrid && <GroundGrid fade={gridFade} step={snap} />}
       {showVolume && (
         <>
           <Line points={outline} color={volumeStrong ? "#6f808a" : "#46535b"} lineWidth={1.2} />
@@ -326,7 +327,6 @@ export function Viewport() {
   const kernel = useKernel();
   const background = usePreview((s) => s.background);
   const shadowKey = useApp((s) => s.currentId) + useMeshes((s) => Object.keys(s.entries).length);
-  const quality = QUALITY[useSettings((s) => s.quality)];
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
 
@@ -338,7 +338,7 @@ export function Viewport() {
     >
       <Canvas
         shadows
-        dpr={[1, quality.dpr]}
+        dpr={[1, 2]}
         camera={{ position: [150, 135, 205], fov: 35, near: 0.5, far: 5000 }}
         gl={{ antialias: true, preserveDrawingBuffer: false }}
         onCreated={(state) => {
@@ -357,9 +357,9 @@ export function Viewport() {
         {workspace !== "preview" && <Bed volume={doc.printer.volume} />}
         <PreviewEffects />
         <ViewportCapture />
-        {quality.shadows > 0 && (
+        {(
           // Rendered once per document state, not every frame (keeps orbiting cheap).
-          <ContactShadows key={shadowKey} frames={1} position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
+          <ContactShadows key={shadowKey} frames={1} position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={1024} color="#000000" />
         )}
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>

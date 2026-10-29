@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { create } from "zustand";
 import * as THREE from "three";
-import { execute } from "../core/commands";
+import { execute, shortcutKeys } from "../core/commands";
+import { Kbd } from "../ui/Tooltip";
+import { SNAPS } from "./StatusBar";
 import { useApp, useDoc } from "../core/store";
 import { geometryKey, isSolid, type Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { PRINTERS } from "../core/printAnalysis";
-import { QUALITY_LABELS, useSettings } from "../ui/settings";
+import { useSettings } from "../ui/settings";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { Icon } from "../ui/icons";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -79,10 +81,10 @@ function Printer() {
   );
 }
 
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange(v: boolean): void }) {
+function Toggle({ label, kbd, value, onChange }: { label: string; kbd?: string; value: boolean; onChange(v: boolean): void }) {
   return (
     <button className="toggle" role="switch" aria-checked={value} onClick={() => onChange(!value)}>
-      <span>{label}</span>
+      <span>{label}{kbd && <Kbd keys={shortcutKeys(kbd)} />}</span>
       <span className={`switch ${value ? "on" : ""}`}><i /></span>
     </button>
   );
@@ -90,11 +92,14 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 
 function View() {
   const s = useSettings();
+  const snap = useApp((st) => st.snap);
   return (
     <div className="inspector-section">
       <div className="group-label"><span><Icon name="grid" size={15} />Raster</span></div>
-      <SegmentedControl size="sm" className="block" value={s.gridSize} onChange={(gridSize) => useSettings.setState({ gridSize })}
-        options={[{ value: "fine", label: "Fein" }, { value: "coarse", label: "Grob" }]} />
+      <Toggle label="Raster anzeigen" kbd="g" value={s.showGrid} onChange={(showGrid) => useSettings.setState({ showGrid })} />
+      <div className="field-label">Einrasten (Rasterweite)</div>
+      <SegmentedControl size="sm" className="block" value={String(snap)} onChange={(v) => execute("view.snap", { mm: Number(v) })}
+        options={SNAPS.map((mm) => ({ value: String(mm), label: mm === 0 ? "Aus" : mm.toLocaleString("de-DE") }))} />
       <label className="slider-row">
         <span>Ausblenden ab</span>
         <input type="range" min={150} max={1500} step={50} value={s.gridFade} onChange={(e) => useSettings.setState({ gridFade: Number(e.target.value) })} />
@@ -106,11 +111,7 @@ function View() {
       <div className="group-label" style={{ marginTop: 16 }}><span><Icon name="perspective" size={15} />Kamera</span></div>
       <SegmentedControl size="sm" className="block" value={s.projection} onChange={(mode) => execute("view.projection", { mode })}
         options={[{ value: "perspective", label: "Perspektive" }, { value: "orthographic", label: "Orthografisch" }]} />
-      <Toggle label="Kamera-Trägheit" value={s.inertia === "light"} onChange={(v) => useSettings.setState({ inertia: v ? "light" : "off" })} />
 
-      <div className="group-label" style={{ marginTop: 16 }}><span><Icon name="sparkle" size={15} />Darstellungsqualität</span></div>
-      <SegmentedControl size="sm" className="block" value={s.quality} onChange={(quality) => useSettings.setState({ quality })}
-        options={(["high", "balanced", "fast"] as const).map((q) => ({ value: q, label: QUALITY_LABELS[q] }))} />
     </div>
   );
 }

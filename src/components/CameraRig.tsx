@@ -13,7 +13,6 @@ type Controls = { target: THREE.Vector3; update(): void; object: THREE.Camera };
 
 export function CameraRig() {
   const projection = useSettings((s) => s.projection);
-  const inertia = useSettings((s) => s.inertia);
   const inPreview = useApp((s) => s.workspace === "preview");
   const turntableOn = usePreview((s) => s.turntable);
   const turntable = inPreview && turntableOn;
@@ -109,7 +108,7 @@ export function CameraRig() {
       makeDefault
       enableRotate={workspace !== "sketch"}
       // Direct camera by default; "Leicht" adds a short glide.
-      enableDamping={inertia === "light"}
+      enableDamping={false}
       dampingFactor={0.3}
       zoomToCursor
       rotateSpeed={0.9}

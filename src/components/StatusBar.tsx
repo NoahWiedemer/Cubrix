@@ -4,7 +4,7 @@ import { useApp } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
-const SNAPS = [0, 0.1, 0.5, 1, 5, 10];
+export const SNAPS = [0, 0.1, 0.5, 1, 5, 10];
 const snapLabel = (s: number) => (s === 0 ? "Aus" : `${s.toLocaleString("de-DE")} mm`);
 
 export function StatusBar() {

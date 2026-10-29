@@ -1,5 +1,6 @@
-// Infinite ground grid with derivative-based ("pristine") anti-aliased lines,
-// level-of-detail blending by screen density (1/5/10/50 mm), a distance fade
+// Infinite ground grid with derivative-based ("pristine") anti-aliased lines. The fine
+// spacing follows the snap increment and steps up (x5, x10, ...) once lines would be
+// closer than ~4 px; a level gets brighter the wider it is on screen. Distance fade
 // relative to the camera–target distance and a grazing-angle fade. No moiré,
 // no visible fade edge, blends into the background.
 import { useMemo } from "react";
@@ -19,30 +20,47 @@ const fragment = /* glsl */ `
   uniform vec3 uTarget;
   uniform float uCamDist;
   uniform float uFade;      // extra distance (mm) from settings
-  uniform float uCoarse;    // 0 = fine, 1 = coarse
   uniform vec3 uMinor;
   uniform vec3 uMajor;
   varying vec3 vWorld;
 
-  // Anti-aliased grid lines of a given cell size; fades out as cells get too dense on screen.
-  float level(vec2 p, float cell, float widthPx) {
+  uniform float uStep;      // fine spacing in mm (= snap increment)
+
+  // Anti-aliased line coverage for a given cell size (pixel-width lines, no moiré).
+  float coverage(vec2 p, float cell) {
     vec2 uv = p / cell;
     vec2 d = max(fwidth(uv), vec2(1e-5));
     vec2 g = abs(fract(uv - 0.5) - 0.5) / d;
-    float line = 1.0 - min(min(g.x, g.y) - (widthPx * 0.5 - 0.5), 1.0);
-    float density = max(d.x, d.y);          // cells per pixel
-    float lod = 1.0 - smoothstep(0.22, 0.45, density); // gone below ~2–4 px per cell
-    return clamp(line, 0.0, 1.0) * lod;
+    return clamp(1.0 - min(g.x, g.y), 0.0, 1.0);
+  }
+
+  // One grid level. Its strength depends only on its on-screen spacing: invisible below
+  // ~4 px, faint "fine" at ~6 px, full "major" from ~60 px. So the 10x lines are always
+  // brighter than the fine ones and a level smoothly takes over as you zoom out.
+  float level(vec2 p, float cell, float wpp, out float strength) {
+    float px = cell / wpp;
+    float show = smoothstep(4.0, 6.5, px);
+    strength = clamp(log(px / 6.0) / log(10.0), 0.0, 1.0);
+    return coverage(p, cell) * show;
   }
 
   void main() {
     vec2 p = vWorld.xz;
-    float a1 = uCoarse > 0.5 ? 0.0 : level(p, 1.0, 1.0) * 0.30;
-    float a5 = uCoarse > 0.5 ? 0.0 : level(p, 5.0, 1.0) * 0.55;
-    float a10 = level(p, 10.0, 1.15) * 0.85;
-    float a50 = level(p, 50.0, 1.3);
-    float minor = max(a1, a5);
-    float major = max(a10, a50);
+    float wpp = max(length(vec2(dFdx(p.x), dFdy(p.x))), length(vec2(dFdx(p.y), dFdy(p.y))));
+    float step0 = max(uStep, 0.1);
+    // First decade whose lines are at least ~4 px apart.
+    float n0 = max(0.0, floor(log(4.0 * wpp / step0) / log(10.0)));
+    float alpha = 0.0, strength = 0.0;
+    for (int i = 0; i < 3; i++) {
+      float base = step0 * pow(10.0, n0 + float(i));
+      for (int j = 0; j < 2; j++) {
+        float cell = base * (j == 0 ? 1.0 : 5.0);
+        float st;
+        float c = level(p, cell, wpp, st);
+        float a = c * mix(0.16, 0.55, st);
+        if (a > alpha) { alpha = a; strength = st; }
+      }
+    }
 
     // Distance fade: full within ~1.5x the camera distance, gone by ~4x (+ setting).
     float d = length(vWorld.xz - uTarget.xz);
@@ -54,15 +72,15 @@ const fragment = /* glsl */ `
     float angleFade = smoothstep(0.05, 0.3, abs(viewDir.y));
 
     float fade = distFade * angleFade;
-    float alpha = max(minor, major) * fade;
+    alpha *= fade;
     if (alpha < 0.003) discard;
-    vec3 col = mix(uMinor, uMajor, step(minor, major));
+    vec3 col = mix(uMinor, uMajor, strength);
     gl_FragColor = vec4(col, alpha);
     #include <colorspace_fragment>
   }
 `;
 
-export function GroundGrid({ coarse, fade }: { coarse: boolean; fade: number }) {
+export function GroundGrid({ fade, step }: { fade: number; step: number }) {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -72,9 +90,9 @@ export function GroundGrid({ coarse, fade }: { coarse: boolean; fade: number }) 
           uTarget: { value: new THREE.Vector3() },
           uCamDist: { value: 200 },
           uFade: { value: 600 },
-          uCoarse: { value: 0 },
-          uMinor: { value: new THREE.Color("#3b454c") },
-          uMajor: { value: new THREE.Color("#58666f") },
+          uStep: { value: 1 },
+          uMinor: { value: new THREE.Color("#3e4950") },
+          uMajor: { value: new THREE.Color("#56646d") },
         },
         transparent: true,
         depthWrite: false,
@@ -90,7 +108,7 @@ export function GroundGrid({ coarse, fade }: { coarse: boolean; fade: number }) 
       ? 400 / (camera as THREE.OrthographicCamera).zoom
       : camera.position.distanceTo(target);
     u.uFade.value = fade;
-    u.uCoarse.value = coarse ? 1 : 0;
+    u.uStep.value = step > 0 ? step : 1;
   });
 
   return (

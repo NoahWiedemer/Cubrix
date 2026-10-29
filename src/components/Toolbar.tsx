@@ -5,9 +5,9 @@ import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
 import { useSketch } from "../ui/sketch";
 
-function CommandTool({ id, icon, label, active }: { id: string; icon?: IconName; label?: string; active?: boolean }) {
+function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; icon?: IconName; label?: string; tip?: string; active?: boolean }) {
   const cmd = getCommand(id)!;
-  const tip = cmd.description.split(".")[0];
+  const tip = tipText ?? cmd.description.split(".")[0];
   return (
     <button className={`tool ${active ? "active" : ""}`} onClick={() => execute(id)} data-tip={tip} data-kbd={cmd.shortcut} data-tip-pos="top">
       <Icon name={icon ?? cmd.icon} size={18} />
@@ -57,6 +57,14 @@ export function Toolbar() {
             <CommandTool id="boolean.union" />
             <CommandTool id="boolean.subtract" />
             <CommandTool id="boolean.intersect" />
+          </>
+        )}
+        {mode !== "create" && (
+          <>
+            <span className="toolbar-sep" />
+            <CommandTool id="object.duplicate" />
+            <CommandTool id="object.dropToBed" label="Ablegen" tip="Auf das Druckbett ablegen" />
+            <CommandTool id="object.delete" />
           </>
         )}
       </div>

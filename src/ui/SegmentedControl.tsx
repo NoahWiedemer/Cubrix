@@ -26,6 +26,9 @@ export function SegmentedControl<T extends string>({
   tipPos?: "top" | "bottom";
 }) {
   const wrap = useRef<HTMLDivElement>(null);
+  // Full-width bars have equal segments: the pill is positioned by index in pure CSS.
+  const equal = className.split(" ").includes("block");
+  const index = options.findIndex((o) => o.value === value);
   const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
   const first = useRef(true);
 
@@ -50,8 +53,9 @@ export function SegmentedControl<T extends string>({
   }, [pill]);
 
   return (
-    <div ref={wrap} className={`segmented ${size} ${className}`} role="tablist">
-      {pill && (
+    <div ref={wrap} className={`segmented ${size} ${className}`} role="tablist" style={{ ["--n" as string]: options.length }}>
+      {equal && index >= 0 && <span className="segmented-pill equal" style={{ transform: `translateX(calc(${index} * (100% + 2px)))` }} />}
+      {!equal && pill && (
         <span
           className={`segmented-pill ${first.current ? "no-anim" : ""}`}
           style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}

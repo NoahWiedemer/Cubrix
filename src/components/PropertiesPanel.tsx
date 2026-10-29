@@ -230,10 +230,7 @@ function SingleObject({ f }: { f: Feature }) {
     <>
       <div className="props-title">
         <span className="badge"><Icon name={featureIcon(f)} size={16} /></span>
-        <div style={{ minWidth: 0 }}>
-          <div className="name">{f.name}</div>
-          <div className="type">{featureTypeLabel(f)}{f.visible ? "" : " · ausgeblendet"}</div>
-        </div>
+        <div className="name" title={featureTypeLabel(f)}>{f.name}{f.visible ? "" : <span className="muted"> · ausgeblendet</span>}</div>
       </div>
       <Dimensions f={f} />
       <TransformFields f={f} kind="position" />
@@ -248,12 +245,6 @@ function SingleObject({ f }: { f: Feature }) {
           <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
         </div>
       )}
-      <div className="props-actions">
-        <button className="btn-ghost" onClick={() => execute("object.duplicate")}><Icon name="duplicate" size={14} />Duplizieren</button>
-        <button className="btn-ghost" onClick={() => execute("object.dropToBed")}><Icon name="dropToBed" size={14} />Aufs Bett</button>
-        {f.type === "boolean" && <button className="btn-ghost" onClick={() => execute("boolean.split")}><Icon name="boolean" size={14} />Auflösen</button>}
-        <button className="btn-ghost danger" onClick={() => execute("object.delete")}><Icon name="delete" size={14} />Löschen</button>
-      </div>
     </>
   );
 }
@@ -275,18 +266,15 @@ export function PropertiesPanel() {
                 <div className="type">{selected.map((f) => f.name).join(", ")}</div>
               </div>
             </div>
+            {selected.length === 2 && (
             <div className="props-actions">
-              {selected.length === 2 && (
                 <>
                   <button className="btn-ghost" onClick={() => execute("boolean.union")}><Icon name="union" size={14} />Vereinen</button>
                   <button className="btn-ghost" onClick={() => execute("boolean.subtract")}><Icon name="subtract" size={14} />Abziehen</button>
                   <button className="btn-ghost" onClick={() => execute("boolean.intersect")}><Icon name="intersect" size={14} />Schnittmenge</button>
                 </>
-              )}
-              <button className="btn-ghost" onClick={() => execute("object.duplicate")}><Icon name="duplicate" size={14} />Duplizieren</button>
-              <button className="btn-ghost" onClick={() => execute("object.dropToBed")}><Icon name="dropToBed" size={14} />Aufs Bett</button>
-              <button className="btn-ghost danger" onClick={() => execute("object.delete")}><Icon name="delete" size={14} />Löschen</button>
             </div>
+            )}
             {selected.length === 2 && (
               <div className="props-empty">Beim Abziehen wird <b>{selected[1].name}</b> aus <b>{selected[0].name}</b> herausgeschnitten.</div>
             )}

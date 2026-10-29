@@ -2,37 +2,31 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Quality = "high" | "balanced" | "fast";
-
-export const QUALITY_LABELS: Record<Quality, string> = { high: "Hoch", balanced: "Ausgewogen", fast: "Schnell" };
-
-/** Max device pixel ratio and shadow resolution per quality level. */
-export const QUALITY: Record<Quality, { dpr: number; shadows: number }> = {
-  high: { dpr: 2, shadows: 1024 },
-  balanced: { dpr: 1.5, shadows: 512 },
-  fast: { dpr: 1, shadows: 0 },
-};
-
 export type Projection = "perspective" | "orthographic";
 
-export type Inertia = "off" | "light";
-
 interface ViewSettings {
-  quality: Quality;
   projection: Projection;
-  inertia: Inertia;
   /** Build-volume frame (off by default: only the floor grid). */
   showVolume: boolean;
   volumeStrong: boolean;
-  gridSize: "fine" | "coarse";
+  showGrid: boolean;
   /** Distance (mm) over which the infinite grid fades out. */
   gridFade: number;
 }
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ quality: "high", projection: "perspective", inertia: "off", showVolume: false, volumeStrong: false, gridSize: "fine", gridFade: 600 }),
-    { name: "albedo.settings" },
+    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridFade: 600 }),
+    {
+      name: "albedo.settings",
+      version: 2,
+      // v1: camera inertia removed (damping always off). v2: quality and grid size removed
+      // (always high quality; grid spacing follows the snap increment).
+      migrate: (stored) => {
+        const { inertia: _i, quality: _q, gridSize: _g, ...rest } = (stored ?? {}) as ViewSettings & Record<string, unknown>;
+        return { ...rest, showGrid: rest.showGrid ?? true } as ViewSettings;
+      },
+    },
   ),
 );
 

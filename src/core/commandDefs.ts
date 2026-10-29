@@ -916,6 +916,19 @@ defineCommand({
   },
 });
 
+defineCommand({
+  id: "view.grid",
+  kind: "action",
+  label: "Raster anzeigen",
+  description: "Blendet das Bodenraster ein oder aus.",
+  icon: "grid",
+  shortcut: "g",
+  params: { show: { type: "boolean", optional: true, description: "Ein/aus (Standard: umschalten)" } },
+  perform(p) {
+    useSettings.setState((s) => ({ showGrid: p.show ?? !s.showGrid }));
+  },
+});
+
 // ── Files ────────────────────────────────────────────────────────────────────
 
 const PROJECT_FILTER = { name: "Albedo-Projekt", extensions: ["albedo"] };
