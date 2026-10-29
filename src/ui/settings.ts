@@ -15,8 +15,10 @@ export const QUALITY: Record<Quality, { dpr: number; shadows: number }> = {
 
 export type Projection = "perspective" | "orthographic";
 
-export const useSettings = create<{ quality: Quality; projection: Projection }>()(
-  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection }), { name: "albedo.settings" }),
+export type Inertia = "off" | "light";
+
+export const useSettings = create<{ quality: Quality; projection: Projection; inertia: Inertia }>()(
+  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection, inertia: "off" as Inertia }), { name: "albedo.settings" }),
 );
 
 export interface AiSettings {

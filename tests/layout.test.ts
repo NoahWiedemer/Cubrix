@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PANELS, column, movePanel, normalize } from "../src/ui/layoutModel";
+import { DEFAULT_PANELS, column, movePanel, normalize, resizeColumn } from "../src/ui/layoutModel";
 
 const base = () => structuredClone(DEFAULT_PANELS);
 
@@ -38,6 +38,22 @@ describe("Dock-Layout", () => {
     const { panels, width } = normalize(stored);
     expect(column(panels, "right")).toEqual(["props", "chat", "tree"]);
     expect(panels.history).toMatchObject({ side: "left", weight: 1 });
-    expect(width).toEqual({ left: 200, right: 340 });
+    expect(width).toEqual({ left: 240, right: 340 });
+  });
+});
+
+describe("Spaltenbreite ziehen", () => {
+  it("linke Spalte: nach rechts ziehen macht sie breiter", () => {
+    expect(resizeColumn("left", 260, 40, 1440)).toBe(300);
+    expect(resizeColumn("left", 260, -40, 1440)).toBe(240);
+  });
+  it("rechte Spalte: nach links ziehen macht sie breiter", () => {
+    expect(resizeColumn("right", 340, -60, 1440)).toBe(400);
+    expect(resizeColumn("right", 340, 60, 1440)).toBe(280);
+  });
+  it("begrenzt auf 240 px bis 45 % des Fensters", () => {
+    expect(resizeColumn("right", 340, -2000, 1440)).toBe(648);
+    expect(resizeColumn("left", 260, -2000, 1440)).toBe(240);
+    expect(resizeColumn("right", 340, -2000, 400)).toBe(240);
   });
 });

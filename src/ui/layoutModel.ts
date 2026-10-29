@@ -22,8 +22,21 @@ export const DEFAULT_PANELS: Panels = {
   chat: { side: "right", order: 1, collapsed: false, open: true, weight: 1 },
 };
 export const DEFAULT_WIDTH: Record<Side, number> = { left: 260, right: 340 };
-export const MIN_WIDTH = 200;
-export const MAX_WIDTH = 520;
+export const MIN_WIDTH = 240;
+/** Max column width as a share of the window. */
+export const MAX_SHARE = 0.45;
+
+export function clampColumnWidth(w: number, windowWidth: number): number {
+  return Math.round(Math.max(MIN_WIDTH, Math.min(Math.max(MIN_WIDTH, windowWidth * MAX_SHARE), w)));
+}
+
+/**
+ * Width after dragging a column's inner edge by `dx` pixels (positive = right).
+ * Left column: dragging right widens it. Right column: dragging left widens it.
+ */
+export function resizeColumn(side: Side, startWidth: number, dx: number, windowWidth: number): number {
+  return clampColumnWidth(startWidth + (side === "left" ? dx : -dx), windowWidth);
+}
 
 /** Panels of one side in display order. */
 export function column(panels: Panels, side: Side): PanelId[] {
@@ -49,7 +62,7 @@ export function movePanel(panels: Panels, id: PanelId, side: Side, index: number
 }
 
 const clampWidth = (w: unknown, fallback: number) =>
-  typeof w === "number" && Number.isFinite(w) ? Math.round(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, w))) : fallback;
+  typeof w === "number" && Number.isFinite(w) ? Math.round(Math.max(MIN_WIDTH, Math.min(900, w))) : fallback;
 
 /** Repairs anything loaded from storage: unknown/missing panels, bad numbers, duplicate orders. */
 export function normalize(raw: unknown): { panels: Panels; width: Record<Side, number> } {

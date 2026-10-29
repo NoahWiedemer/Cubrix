@@ -1,8 +1,19 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ArrowLeftToLine, ArrowRightToLine, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
+import { clampColumnWidth, resizeColumn } from "../ui/layoutModel";
+
+function useWindowWidth() {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return w;
+}
 import { ObjectTree } from "./ObjectTree";
 import { HistoryPanel } from "./HistoryPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -123,7 +134,7 @@ function WidthHandle({ side }: { side: Side }) {
         const start = e.clientX;
         const w0 = useLayout.getState().width[side];
         document.body.classList.add("col-resizing");
-        const move = (ev: PointerEvent) => useLayout.getState().setWidth(side, w0 + (side === "left" ? 1 : -1) * (ev.clientX - start));
+        const move = (ev: PointerEvent) => useLayout.getState().setWidth(side, resizeColumn(side, w0, ev.clientX - start, window.innerWidth));
         const up = () => {
           document.body.classList.remove("col-resizing");
           window.removeEventListener("pointermove", move);
@@ -139,6 +150,7 @@ function WidthHandle({ side }: { side: Side }) {
 export function DockColumn({ side }: { side: Side }) {
   const panels = useLayout((s) => s.panels);
   const width = useLayout((s) => s.width[side]);
+  const winWidth = useWindowWidth();
   const dragging = useLayout((s) => s.dragging);
   const ids = (Object.keys(panels) as PanelId[])
     .filter((id) => id !== "props" && panels[id].side === side && panels[id].open)
@@ -157,7 +169,7 @@ export function DockColumn({ side }: { side: Side }) {
   return (
     <div
       className={`dock-col ${side} ${empty ? "empty" : ""} ${empty && dragging ? "drop-target" : ""}`}
-      style={{ width: empty ? (dragging ? 64 : 0) : width }}
+      style={{ width: empty ? (dragging ? 64 : 0) : clampColumnWidth(width, winWidth) }}
       onDragOver={(e) => empty && dragging && e.preventDefault()}
       onDrop={(e) => {
         if (!empty || !dragging) return;

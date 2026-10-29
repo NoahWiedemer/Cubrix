@@ -30,6 +30,7 @@ export function TopBar() {
   const panels = useLayout((s) => s.panels);
   const projection = useSettings((s) => s.projection);
   const quality = useSettings((s) => s.quality);
+  const inertia = useSettings((s) => s.inertia);
 
   const commitName = (value: string) => {
     setEditing(false);
@@ -120,6 +121,7 @@ export function TopBar() {
               <MenuItem icon="perspective" label="Perspektive" shortcut="o" checked={projection === "perspective"} onClick={() => execute("view.projection", { mode: "perspective" })} />
               <MenuItem icon="projection" label="Orthografisch" shortcut="o" checked={projection === "orthographic"} onClick={() => execute("view.projection", { mode: "orthographic" })} />
               <MenuItem icon="iso" label="Isometrisch" shortcut="i" onClick={() => { execute("view.iso"); viewMenu.setOpen(false); }} />
+              <MenuItem icon="orient" label="Kamera-Trägheit" checked={inertia === "light"} onClick={() => useSettings.setState({ inertia: inertia === "light" ? "off" : "light" })} />
               <MenuSeparator />
               <MenuTitle>Darstellungsqualität</MenuTitle>
               {(["high", "balanced", "fast"] as const).map((q) => (

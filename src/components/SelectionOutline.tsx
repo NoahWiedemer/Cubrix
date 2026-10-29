@@ -37,8 +37,8 @@ const fragment = /* glsl */ `
     float zSel = 1.0;
     float zHov = 1.0;
     float seen = 0.0;
-    for (int x = -6; x <= 6; x++) {
-      for (int y = -6; y <= 6; y++) {
+    for (int x = -R; x <= R; x++) {
+      for (int y = -R; y <= R; y++) {
         vec2 o = vec2(float(x), float(y));
         float d = length(o);
         if (d > radius + 1.0) continue;
@@ -81,6 +81,35 @@ const vertex = /* glsl */ `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 `;
+
+const box = new THREE.Box3();
+const corner = new THREE.Vector3();
+
+/** Screen rectangle (CSS px, bottom-left origin) covering the given meshes, padded for the ring. */
+function screenRect(meshes: THREE.Mesh[], camera: THREE.Camera, gl: THREE.WebGLRenderer) {
+  if (!meshes.length) return null;
+  const size = gl.getSize(new THREE.Vector2());
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const m of meshes) {
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    box.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
+    for (let i = 0; i < 8; i++) {
+      corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(camera);
+      // Behind the camera: fall back to the full screen.
+      if (corner.z > 1) return null;
+      minX = Math.min(minX, corner.x);
+      maxX = Math.max(maxX, corner.x);
+      minY = Math.min(minY, corner.y);
+      maxY = Math.max(maxY, corner.y);
+    }
+  }
+  const pad = 8;
+  const x = Math.max(0, Math.floor(((minX + 1) / 2) * size.x) - pad);
+  const y = Math.max(0, Math.floor(((minY + 1) / 2) * size.y) - pad);
+  const w = Math.min(size.x, Math.ceil(((maxX + 1) / 2) * size.x) + pad) - x;
+  const h = Math.min(size.y, Math.ceil(((maxY + 1) / 2) * size.y) + pad) - y;
+  return w > 0 && h > 0 ? { x, y, w, h } : null;
+}
 
 /**
  * Takes over rendering: draws the scene, then a crisp screen-space outline
@@ -133,6 +162,7 @@ export function SelectionOutline() {
       },
       vertexShader: vertex,
       fragmentShader: fragment,
+      defines: { R: 4 },
       transparent: true,
       depthTest: false,
       depthWrite: false,
@@ -150,6 +180,9 @@ export function SelectionOutline() {
     xrayTarget.setSize(w, h);
     overlay.material.uniforms.texel.value.set(1 / w, 1 / h);
     overlay.material.uniforms.radius.value = 1.75 * dpr;
+    // Loop bound = ring radius + 1 px (compile-time constant).
+    overlay.material.defines.R = Math.ceil(1.75 * dpr) + 1;
+    overlay.material.needsUpdate = true;
   }, [size, dpr, target, xrayTarget, overlay]);
 
   useEffect(() => () => {
@@ -195,8 +228,19 @@ export function SelectionOutline() {
     camera.layers.mask = prevMask;
     for (const [mesh, material] of restore) mesh.material = material;
 
+    // Only shade the screen area around the selection/hover (plus the ring).
+    const rect = screenRect(
+      Object.entries(meshes).filter(([id]) => selection.includes(id) || id === hoveredId).map(([, m]) => m),
+      camera,
+      gl,
+    );
     gl.autoClear = false;
+    if (rect) {
+      gl.setScissorTest(true);
+      gl.setScissor(rect.x, rect.y, rect.w, rect.h);
+    }
     gl.render(overlay.scene, overlay.camera);
+    gl.setScissorTest(false);
     gl.autoClear = true;
   }, 1);
 

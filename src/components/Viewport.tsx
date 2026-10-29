@@ -337,6 +337,7 @@ export function Viewport() {
   const workspace = useApp((s) => s.workspace);
   const kernel = useKernel();
   const background = usePreview((s) => s.background);
+  const shadowKey = useApp((s) => s.currentId) + useMeshes((s) => Object.keys(s.entries).length);
   const quality = QUALITY[useSettings((s) => s.quality)];
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
@@ -367,7 +368,8 @@ export function Viewport() {
         <PreviewEffects />
         <ViewportCapture />
         {quality.shadows > 0 && (
-          <ContactShadows position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
+          // Rendered once per document state, not every frame (keeps orbiting cheap).
+          <ContactShadows key={shadowKey} frames={1} position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
         )}
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>

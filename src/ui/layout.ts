@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { IconName } from "./icons";
-import { DEFAULT_PANELS, DEFAULT_WIDTH, MAX_WIDTH, MIN_WIDTH, movePanel, normalize, type PanelId, type PanelState, type Panels, type Side } from "./layoutModel";
+import { DEFAULT_PANELS, DEFAULT_WIDTH, clampColumnWidth, movePanel, normalize, type PanelId, type PanelState, type Panels, type Side } from "./layoutModel";
 
 export type { PanelId, PanelState, Side };
 
@@ -28,7 +28,7 @@ export const useLayout = create<LayoutState>()(
       dragging: null,
       setPanel: (id, patch) => set((s) => ({ panels: { ...s.panels, [id]: { ...s.panels[id], ...patch } } })),
       move: (id, side, index) => set((s) => ({ panels: movePanel(s.panels, id, side, index) })),
-      setWidth: (side, w) => set((s) => ({ width: { ...s.width, [side]: Math.round(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, w))) } })),
+      setWidth: (side, w) => set((s) => ({ width: { ...s.width, [side]: clampColumnWidth(w, window.innerWidth) } })),
       reset: () => set({ panels: structuredClone(DEFAULT_PANELS), width: { ...DEFAULT_WIDTH } }),
     }),
     {

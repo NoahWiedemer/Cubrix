@@ -39,8 +39,9 @@ input { font: inherit; color: inherit; }
 input::selection { background: rgba(110, 231, 197, 0.38); color: #fff; }
 
 /* ── Layout ───────────────────────────────────────────── */
-.app { display: grid; grid-template-rows: 56px 1fr 30px; height: 100vh; }
-.main { display: flex; padding: 0 8px; min-height: 0; }
+/* minmax(0, 1fr): the column must never grow to the canvas' stale pixel width. */
+.app { display: grid; grid-template-rows: 56px minmax(0, 1fr) 30px; grid-template-columns: minmax(0, 1fr); height: 100vh; overflow: hidden; }
+.main { display: flex; padding: 0 8px; min-height: 0; min-width: 0; overflow: hidden; }
 .main > .rail { flex: none; width: 52px; margin-right: 8px; }
 .main > .viewport { flex: 1; min-width: 0; }
 .panel {
