@@ -24,8 +24,21 @@ export const useSettings = create<{ quality: Quality; projection: Projection; in
 export interface AiSettings {
   provider: "anthropic" | "openai";
   model: { anthropic: string; openai: string };
+  effort: "low" | "medium" | "high";
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "" } }), { name: "albedo.ai" }),
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-sol" }, effort: "medium" }), {
+    name: "albedo.ai",
+    version: 2,
+    // Older settings could hold an empty OpenAI model id.
+    migrate: (s) => {
+      const old = s as Partial<AiSettings>;
+      return {
+        provider: old.provider ?? "anthropic",
+        model: { anthropic: old.model?.anthropic || "claude-sonnet-5-5", openai: old.model?.openai || "gpt-6.1-sol" },
+        effort: old.effort ?? "medium",
+      };
+    },
+  }),
 );

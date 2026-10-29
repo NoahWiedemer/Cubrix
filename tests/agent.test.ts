@@ -92,3 +92,49 @@ describe("KI-Agent (gemockter Anbieter)", () => {
     expect(getDoc().features.some((f) => f.type === "cylinder" && f.params.diameter === 12)).toBe(true);
   });
 });
+
+describe("Denktiefe und Thinking-Blöcke", () => {
+  it("sendet output_config.effort an Anthropic und gibt Thinking-Blöcke unverändert zurück", async () => {
+    const bodies: any[] = [];
+    const t: Transport = {
+      async stream(_p, body, onChunk) {
+        bodies.push(body);
+        if (bodies.length === 1)
+          onChunk(
+            sse([
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig-123" } },
+              { type: "content_block_stop", index: 0 },
+              { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "t9", name: "get_model" } },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" } },
+            ]),
+          );
+        else onChunk(sse([{ type: "message_delta", delta: { stop_reason: "end_turn" } }]));
+      },
+    };
+    await runAgent({
+      provider: "anthropic", model: "claude-opus-5-5", effort: "high", transport: t, history: [], prompt: "x",
+      signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} },
+    });
+    expect(bodies[0].output_config).toEqual({ effort: "high" });
+    expect(bodies[0].thinking).toBeUndefined();
+    const assistant = bodies[1].messages.find((m: any) => m.role === "assistant");
+    expect(assistant.content[0]).toEqual({ type: "thinking", thinking: "", signature: "sig-123" });
+  });
+
+  it("sendet reasoning_effort an OpenAI und lässt es ohne Unterstützung weg", async () => {
+    const bodies: any[] = [];
+    const t: Transport = {
+      async stream(_p, body, onChunk) {
+        bodies.push(body);
+        onChunk(sse([{ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] }]));
+      },
+    };
+    const base = { provider: "openai" as const, model: "gpt-6.1-sol", transport: t, history: [], prompt: "x", signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} } };
+    await runAgent({ ...base, effort: "low" });
+    await runAgent({ ...base, effort: null });
+    expect(bodies[0].reasoning_effort).toBe("low");
+    expect("reasoning_effort" in bodies[1]).toBe(false);
+  });
+});

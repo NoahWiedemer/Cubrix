@@ -120,3 +120,25 @@ pub async fn ai_test(provider: String, body: serde_json::Value) -> Result<(), St
         Err(format!("{status}: {}", res.text().await.unwrap_or_default()))
     }
 }
+
+/// Lists the provider's models (GET /v1/models) with the stored key.
+#[tauri::command]
+pub async fn ai_models(provider: String) -> Result<serde_json::Value, String> {
+    let url = match provider.as_str() {
+        "anthropic" => "https://api.anthropic.com/v1/models?limit=100",
+        "openai" => "https://api.openai.com/v1/models",
+        _ => return Err(format!("Unbekannter Anbieter: {provider}")),
+    };
+    let key = key(&provider)?;
+    let client = reqwest::Client::new();
+    let req = client.get(url);
+    let req = match provider.as_str() {
+        "anthropic" => req.header("x-api-key", key).header("anthropic-version", "2023-06-01"),
+        _ => req.bearer_auth(key),
+    };
+    let res = req.send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("{}", res.status()));
+    }
+    res.json().await.map_err(|e| e.to_string())
+}

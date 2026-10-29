@@ -55,7 +55,8 @@ pub fn run() {
             ai::ai_has_key,
             ai::ai_stream,
             ai::ai_cancel,
-            ai::ai_test
+            ai::ai_test,
+            ai::ai_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running Albedo");

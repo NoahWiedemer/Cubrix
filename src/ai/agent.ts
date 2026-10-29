@@ -7,6 +7,7 @@ import { geometryKey, isSolid } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
+import type { Effort } from "./models";
 import { runTurn, type Block, type Message, type Provider, type ToolSpec, type Transport } from "./providers";
 
 /** Command ids contain dots, tool names may not. */
@@ -135,6 +136,8 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
 export async function runAgent(opts: {
   provider: Provider;
   model: string;
+  /** Reasoning depth, or null when the model has no such setting. */
+  effort?: Effort | null;
   transport: Transport;
   history: Message[];
   prompt: string;
@@ -147,7 +150,7 @@ export async function runAgent(opts: {
   const tools = buildTools();
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
     if (opts.signal.aborted) break;
-    const res = await runTurn(opts.provider, opts.transport, opts.model, systemPrompt(), tools, messages, opts.events.onText, opts.signal);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(), tools, messages, opts.events.onText, opts.signal);
     messages.push({ role: "assistant", content: res.blocks });
     const calls = res.blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");
     if (!calls.length || res.stop !== "tool_use") break;

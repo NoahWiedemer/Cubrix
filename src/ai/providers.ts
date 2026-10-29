@@ -1,3 +1,5 @@
+import type { Effort } from "./models";
+
 // Provider adapters (Anthropic Messages API, OpenAI Chat Completions) over a
 // pluggable transport. The real transport goes through the Rust backend, which
 // holds the API key; tests use a mock.
@@ -6,6 +8,9 @@ export type Provider = "anthropic" | "openai";
 
 export type Block =
   | { type: "text"; text: string }
+  // Anthropic thinking blocks must be sent back unchanged on later turns.
+  | { type: "thinking"; thinking: string; signature: string }
+  | { type: "redacted_thinking"; data: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string; image?: string; isError?: boolean };
 
@@ -29,14 +34,6 @@ export interface TurnResult {
   blocks: Block[];
   stop: "tool_use" | "end";
 }
-
-export const MODELS: Record<Provider, string[]> = {
-  anthropic: ["claude-sonnet-5-5", "claude-opus-5-5"],
-  // OpenAI model ids change often; the user enters the id they have access to.
-  openai: [],
-};
-
-export const DEFAULT_MODEL: Record<Provider, string> = { anthropic: "claude-sonnet-5-5", openai: "" };
 
 /** Splits SSE text into JSON payloads of `data:` lines (handles chunk boundaries). */
 export function sseParser(onEvent: (data: Record<string, unknown>) => void) {
@@ -73,7 +70,7 @@ function anthropicMessages(messages: Message[]) {
 }
 
 async function anthropicTurn(
-  t: Transport, model: string, system: string, tools: ToolSpec[], messages: Message[], onText: (d: string) => void, signal: AbortSignal,
+  t: Transport, model: string, effort: Effort | null, system: string, tools: ToolSpec[], messages: Message[], onText: (d: string) => void, signal: AbortSignal,
 ): Promise<TurnResult> {
   const blocks: Block[] = [];
   const json: Record<number, string> = {};
@@ -86,11 +83,19 @@ async function anthropicTurn(
       if (b.type === "tool_use") {
         blocks[i] = { type: "tool_use", id: b.id!, name: b.name!, input: {} };
         json[i] = "";
+      } else if (b.type === "thinking") {
+        const t = b as { thinking?: string; signature?: string };
+        blocks[i] = { type: "thinking", thinking: t.thinking ?? "", signature: t.signature ?? "" };
+      } else if (b.type === "redacted_thinking") {
+        blocks[i] = { type: "redacted_thinking", data: (b as { data?: string }).data ?? "" };
       } else blocks[i] = { type: "text", text: b.text ?? "" };
     } else if (type === "content_block_delta") {
       const i = e.index as number;
-      const d = e.delta as { type: string; text?: string; partial_json?: string };
-      if (d.type === "text_delta" && blocks[i]?.type === "text") {
+      const d = e.delta as { type: string; text?: string; partial_json?: string; thinking?: string; signature?: string };
+      const cur = blocks[i];
+      if (d.type === "thinking_delta" && cur?.type === "thinking") cur.thinking += d.thinking ?? "";
+      else if (d.type === "signature_delta" && cur?.type === "thinking") cur.signature += d.signature ?? "";
+      else if (d.type === "text_delta" && blocks[i]?.type === "text") {
         (blocks[i] as { text: string }).text += d.text ?? "";
         onText(d.text ?? "");
       } else if (d.type === "input_json_delta") json[i] += d.partial_json ?? "";
@@ -101,13 +106,23 @@ async function anthropicTurn(
     } else if (type === "message_delta") {
       const d = e.delta as { stop_reason?: string };
       if (d.stop_reason === "tool_use") stop = "tool_use";
+      if (d.stop_reason === "refusal") throw new Error("Das Modell hat diese Anfrage abgelehnt.");
     } else if (type === "error") {
       throw new Error(((e.error as { message?: string }) ?? {}).message ?? "Fehler des KI-Anbieters");
     }
   });
   await t.stream(
     "anthropic",
-    { model, max_tokens: 4096, system, tools, messages: anthropicMessages(messages), stream: true },
+    {
+      model,
+      max_tokens: 16000,
+      system,
+      tools,
+      messages: anthropicMessages(messages),
+      stream: true,
+      // Thinking is adaptive by default on current models; depth is set via effort.
+      ...(effort ? { output_config: { effort } } : {}),
+    },
     parse,
     signal,
   );
@@ -151,7 +166,7 @@ function openaiMessages(system: string, messages: Message[]) {
 }
 
 async function openaiTurn(
-  t: Transport, model: string, system: string, tools: ToolSpec[], messages: Message[], onText: (d: string) => void, signal: AbortSignal,
+  t: Transport, model: string, effort: Effort | null, system: string, tools: ToolSpec[], messages: Message[], onText: (d: string) => void, signal: AbortSignal,
 ): Promise<TurnResult> {
   let text = "";
   const calls: { id: string; name: string; args: string }[] = [];
@@ -177,6 +192,7 @@ async function openaiTurn(
     {
       model,
       stream: true,
+      ...(effort ? { reasoning_effort: effort } : {}),
       messages: openaiMessages(system, messages),
       tools: tools.map((x) => ({ type: "function", function: { name: x.name, description: x.description, parameters: x.input_schema } })),
     },
@@ -191,10 +207,10 @@ async function openaiTurn(
 }
 
 export function runTurn(
-  provider: Provider, t: Transport, model: string, system: string, tools: ToolSpec[], messages: Message[],
+  provider: Provider, t: Transport, model: string, effort: Effort | null, system: string, tools: ToolSpec[], messages: Message[],
   onText: (d: string) => void, signal: AbortSignal,
 ): Promise<TurnResult> {
-  return (provider === "anthropic" ? anthropicTurn : openaiTurn)(t, model, system, tools, messages, onText, signal);
+  return (provider === "anthropic" ? anthropicTurn : openaiTurn)(t, model, effort, system, tools, messages, onText, signal);
 }
 
 // ── Tauri transport ──────────────────────────────────────────────────────────
