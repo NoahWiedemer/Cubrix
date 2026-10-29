@@ -37,6 +37,7 @@ import { useLayout } from "../ui/layout";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
+import { useLibrary } from "../components/Library";
 import { useSettingsDialog } from "../components/SettingsDialog";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
@@ -1028,6 +1029,40 @@ defineCommand({
   params: {},
   perform() {
     useGizmo.setState((s) => ({ mode: s.mode === "scale" ? "move" : "scale" }));
+  },
+});
+
+/** Back to plain selecting/moving: ends text, scale and library modes (and leaves 2D). */
+export function selectTool() {
+  useTextTool.setState({ active: false });
+  useLibrary.setState({ open: false });
+  useGizmo.setState({ mode: "move" });
+  if (useApp.getState().workspace !== "model") useApp.setState({ workspace: "model" });
+}
+
+defineCommand({
+  id: "tool.select",
+  kind: "action",
+  label: "Auswählen",
+  description: "Auswählen und verschieben (beendet Text-, Skalier- und Bibliotheksmodus).",
+  icon: "select",
+  shortcut: "v",
+  params: {},
+  isEnabled: () => useApp.getState().workspace !== "sketch",
+  perform: selectTool,
+});
+
+defineCommand({
+  id: "library.toggle",
+  kind: "action",
+  label: "Formen-Bibliothek",
+  description: "Öffnet die Formen-Bibliothek mit allen Grundkörpern.",
+  icon: "shapes",
+  shortcut: "l",
+  params: {},
+  isEnabled: () => useApp.getState().workspace !== "sketch",
+  perform() {
+    useLibrary.setState((s) => ({ open: !s.open }));
   },
 });
 

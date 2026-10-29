@@ -38,7 +38,7 @@ const CATEGORIES: { id: string; label: string; shapes: Shape[] }[] = [
   },
   {
     id: "plates",
-    label: "Platten & Rohre",
+    label: "Platten",
     shapes: [
       { type: "plate", label: "Platte", icon: "plate", hint: "abgerundete Ecken" },
       { type: "tube", label: "Rohr", icon: "tube", hint: "Hülse, Distanz" },
@@ -46,7 +46,7 @@ const CATEGORIES: { id: string; label: string; shapes: Shape[] }[] = [
   },
   {
     id: "hardware",
-    label: "Verbindungen",
+    label: "Schrauben",
     shapes: [
       { type: "counterbore", label: "Schraubloch", icon: "screw", hint: "M3 mit Senkung, zum Abziehen" },
       { type: "nut", label: "Mutterfalle", icon: "nut", hint: "M3 Sechskant, zum Abziehen" },

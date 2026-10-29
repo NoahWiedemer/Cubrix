@@ -219,8 +219,9 @@ export function installShortcuts(): () => void {
     const t = e.target as HTMLElement;
     if (t.closest("input, textarea, [contenteditable=true]")) return;
     const combo = eventShortcut(e);
+    // The first enabled command with this key wins (e.g. "l": Linie in 2D, Bibliothek in 3D).
     for (const cmd of registry.values()) {
-      if (cmd.shortcut === combo) {
+      if (cmd.shortcut === combo && (cmd.isEnabled?.(context("user")) ?? true)) {
         e.preventDefault();
         void execute(cmd.id);
         return;

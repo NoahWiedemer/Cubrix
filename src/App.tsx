@@ -11,6 +11,7 @@ import { TooltipLayer } from "./ui/Tooltip";
 import { ValuePopover } from "./components/ValuePopover";
 import { ContextMenu } from "./components/ContextMenu";
 import { HelpCenter } from "./help/HelpCenter";
+import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
 
 /**
@@ -64,6 +65,7 @@ export function App() {
       <TooltipLayer />
       <ContextMenu />
       <ValuePopover />
+      <Library />
       <HelpCenter />
       <SettingsDialog />
     </div>

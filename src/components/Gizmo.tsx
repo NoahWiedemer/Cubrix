@@ -114,6 +114,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
   const [label, setLabel] = useState<{ text: string; at: Vec3 } | null>(null);
   const drag = useRef<Drag | null>(null);
   const scaleFactor = useRef<Vec3 | null>(null);
+  const cornerRef = useRef<THREE.Group>(null);
   const lastPreview = useRef(0);
 
   const box = worldBox(f, entries, transform);
@@ -141,6 +142,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       unit = (2 * Math.tan(deg(c.fov) / 2) * wp.distanceTo(c.position)) / size.height;
     }
     g.scale.setScalar(unit);
+    if (cornerRef.current && box) cornerRef.current.position.copy(box.max).sub(anchor).divideScalar(unit);
   });
 
   const ray = (ev: PointerEvent) => {
@@ -170,7 +172,12 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     e.stopPropagation();
     const g = group.current!;
     const parent = g.parent!;
-    const axisLocal = kind === "scale" && index === 3 ? new THREE.Vector3(1, 1, 1).normalize() : AXES[kind === "plane" ? PLANES[index][2] : index].axis;
+    const axisLocal =
+      kind === "scale" && index === 4 && box
+        ? box.max.clone().sub(anchor).normalize()
+        : kind === "scale" && index === 3
+          ? new THREE.Vector3(1, 1, 1).normalize()
+          : AXES[kind === "plane" ? PLANES[index][2] : index].axis;
     const axisWorld = axisLocal.clone().transformDirection(parent.matrixWorld);
     const centerWorld = g.getWorldPosition(new THREE.Vector3());
     const r = ray(e.nativeEvent);
@@ -193,7 +200,11 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
         const snap = useApp.getState().snap;
         const size = d.size!;
         let k: number;
-        if (d.index === 3) {
+        if (d.index === 4) {
+          // Corner handle: proportional, the opposite top corner follows the pointer.
+          const diag = Math.hypot(...size);
+          k = (diag + delta) / diag;
+        } else if (d.index === 3) {
           // Centre handle: proportional, driven along the screen-facing diagonal.
           const diag = Math.hypot(...size);
           k = (diag + delta * 2) / diag;
@@ -206,10 +217,11 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           k = L / L0;
         }
         k = Math.max(0.02, k);
-        const uniform = d.index === 3 || ev.shiftKey || scalesUniformly(f);
+        const uniform = d.index >= 3 || ev.shiftKey || scalesUniformly(f);
         const factor: Vec3 = uniform ? [k, k, k] : (size.map((_, i) => (i === d.index ? k : 1)) as Vec3);
         scaleFactor.current = factor;
-        setLabel({ text: size.map((v, i) => fmt(v * factor[i])).join(" × ") + " mm", at: d.center.toArray() as Vec3 });
+        const dims = size.map((v, i) => fmt(v * factor[i])).join(" × ") + " mm";
+        setLabel({ text: uniform ? `${Math.round(k * 100)} % · ${dims}` : dims, at: d.center.toArray() as Vec3 });
         // Live preview, throttled: every update rebuilds the solid in the kernel.
         const now = performance.now();
         if (now - lastPreview.current > 70) {
@@ -342,9 +354,23 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           ))}
         {mode === "scale" && (
           <mesh renderOrder={21} raycast={priorityRaycast} onPointerDown={begin("scale", 3)} {...hoverProps(3)}>
-            <boxGeometry args={[active(3) ? 13 : 11, active(3) ? 13 : 11, active(3) ? 13 : 11]} />
-            <meshBasicMaterial color={active(3) ? "#e7ebee" : "#b8c1c8"} depthTest={false} transparent opacity={anyActive && !active(3) ? 0.45 : 0.95} toneMapped={false} />
+            <boxGeometry args={[active(3) ? 17 : 14, active(3) ? 17 : 14, active(3) ? 17 : 14]} />
+            <meshBasicMaterial color={active(3) ? "#ffffff" : "#d9dfe3"} depthTest={false} transparent opacity={anyActive && !active(3) ? 0.45 : 1} toneMapped={false} />
           </mesh>
+        )}
+        {mode === "scale" && box && (
+          // Opposite top corner of the bounding box: drag to scale proportionally.
+          <group ref={cornerRef}>
+            <mesh renderOrder={21} raycast={priorityRaycast} onPointerDown={begin("scale", 4)} {...hoverProps(4)}>
+              <boxGeometry args={[active(4) ? 13 : 10, active(4) ? 13 : 10, active(4) ? 13 : 10]} />
+              <meshBasicMaterial color={active(4) ? "#ffffff" : "#d9dfe3"} depthTest={false} transparent opacity={anyActive && !active(4) ? 0.45 : 1} toneMapped={false} />
+            </mesh>
+          </group>
+        )}
+        {mode === "scale" && (hover === 3 || hover === 4) && !drag.current && (
+          <Html position={[0, 0, 0]} zIndexRange={[30, 0]} style={{ pointerEvents: "none", transform: "translate(14px, -30px)" }}>
+            <div className="dim-label">Proportional skalieren</div>
+          </Html>
         )}
         {mode === "rotate" &&
           AXES.map(({ axis, color, hover: hc }, i) => {

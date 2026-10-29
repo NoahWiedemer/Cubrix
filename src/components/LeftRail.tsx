@@ -1,10 +1,8 @@
 import { execute } from "../core/commands";
+import { selectTool } from "../core/commandDefs";
 import { useApp } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
-import { usePopover } from "../ui/usePopover";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
-import { Menu, MenuTitle } from "../ui/Menu";
-import { CommandItem } from "../ui/CommandItem";
 import { useHelp } from "../help/HelpCenter";
 import { useLibrary } from "./Library";
 import { useTextTool } from "../ui/textTool";
@@ -49,48 +47,22 @@ function RailButton({ icon, tip, kbd, active, onClick }: { icon: IconName; tip: 
   );
 }
 
-/** Left tool rail; only tools that exist are shown. */
+/** Left tool rail: tools only (actions on the selection live in the action bar). */
 export function LeftRail() {
   const workspace = useApp((s) => s.workspace);
   const library = useLibrary((s) => s.open);
   const textTool = useTextTool((s) => s.active);
   const gizmoMode = useGizmo((s) => s.mode);
-  const boolPop = usePopover();
-  const edgePop = usePopover();
-  useApp((s) => s.selection);
+  const selecting = workspace === "model" && !library && !textTool && gizmoMode === "move";
 
   return (
     <aside className="panel rail">
-      <RailButton icon="select" tip="Auswählen" active={workspace === "model" && !library} onClick={() => { useLibrary.setState({ open: false }); void execute("workspace.model"); }} />
-      <RailButton icon="shapes" tip="Formen-Bibliothek" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      <RailButton icon="select" tip="Auswählen" kbd="v" active={selecting} onClick={selectTool} />
+      <span data-library-toggle>
+        <RailButton icon="shapes" tip="Formen-Bibliothek" kbd="l" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      </span>
       <RailButton icon="scale" tip="Skalieren" kbd="s" active={gizmoMode === "scale"} onClick={() => execute("tool.scale")} />
       <RailButton icon="text" tip="Text" kbd="t" active={textTool} onClick={() => execute("tool.text")} />
-      <div className="rail-sep" />
-      <RailButton icon="sketch" tip="Skizze (2D)" kbd="2" active={workspace === "sketch"} onClick={() => execute("workspace.sketch")} />
-      <div ref={boolPop.ref} style={{ position: "relative" }}>
-        <RailButton icon="boolean" tip="Boolean" active={boolPop.open} onClick={() => boolPop.setOpen(!boolPop.open)} />
-        {boolPop.open && (
-          <Menu style={{ left: 46, top: 0 }}>
-            <MenuTitle>Zwei Körper kombinieren</MenuTitle>
-            <CommandItem id="boolean.union" onDone={() => boolPop.setOpen(false)} />
-            <CommandItem id="boolean.subtract" onDone={() => boolPop.setOpen(false)} />
-            <CommandItem id="boolean.intersect" onDone={() => boolPop.setOpen(false)} />
-            <CommandItem id="boolean.split" onDone={() => boolPop.setOpen(false)} />
-          </Menu>
-        )}
-      </div>
-      <div ref={edgePop.ref} style={{ position: "relative" }}>
-        <RailButton icon="fillet" tip="Abrunden / Fasen" active={edgePop.open} onClick={() => edgePop.setOpen(!edgePop.open)} />
-        {edgePop.open && (
-          <Menu style={{ left: 46, top: 0 }}>
-            <MenuTitle>Kanten des ausgewählten Körpers</MenuTitle>
-            <CommandItem id="object.fillet" onDone={() => edgePop.setOpen(false)} />
-            <CommandItem id="object.chamfer" onDone={() => edgePop.setOpen(false)} />
-          </Menu>
-        )}
-      </div>
-      <div className="rail-sep" />
-      <RailButton icon="ai" tip="KI-Assistent" kbd="mod+k" onClick={() => execute("ai.focus")} />
 
       <div className="rail-bottom">
         <ClosedPanels />

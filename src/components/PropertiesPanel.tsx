@@ -28,6 +28,8 @@ interface NumberFieldProps {
   onCommit(v: number): void;
   /** Called continuously while scrubbing the label; commit follows on release. */
   onPreview?(v: number): void;
+  /** Typing "150%" calls this with 1.5 (size fields: scale the whole object). */
+  onPercent?(factor: number): void;
 }
 
 /** Tiny corner glyphs as scrub handles for the Kanten fields. */
@@ -38,7 +40,7 @@ const ChamferGlyph = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 11V6l4-4h5" /></svg>
 );
 
-function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, onCommit, onPreview }: NumberFieldProps) {
+function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, onCommit, onPreview, onPercent }: NumberFieldProps) {
   const [text, setText] = useState(show(value));
   const focused = useRef(false);
   useEffect(() => {
@@ -121,6 +123,13 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           focused.current = false;
+          const pct = /^\s*([\d.,]+)\s*%\s*$/.exec(text);
+          if (pct && onPercent) {
+            const k = Number(pct[1].replace(",", ".")) / 100;
+            setText(show(value));
+            if (k > 0 && k !== 1) onPercent(k);
+            return;
+          }
           commit(parse(text));
         }}
         onKeyDown={(e) => {
@@ -198,19 +207,21 @@ function Dimensions({ f }: { f: Feature }) {
       <div className="group-label">
         <span><Icon name="measure" size={15} />Maße</span>
         {fields.length > 1 && (
-          <button className={`lock ${locked ? "on" : ""}`} onClick={() => setLocked(!locked)} title={locked ? "Proportionen gesperrt" : "Proportionen sperren"}>
-            {locked ? <Link2 size={14} /> : <Link2Off size={14} />}
+          <button className={`lock ${locked ? "on" : ""}`} onClick={() => setLocked(!locked)} data-tip={locked ? "Proportional: an (Maße ändern sich gemeinsam)" : "Proportional: aus"} data-tip-pos="bottom-end">
+            {locked ? <Link2 size={14} /> : <Link2Off size={14} />}<span>Proportional</span>
           </button>
         )}
       </div>
       <div className={`field-row ${cols(fields.length)}`}>
         {fields.map(({ key, label }) => (
-          <NumberField key={key} label={label[0]} value={params[key]} min={key === "topDiameter" ? 0 : 0.1} onCommit={(v) => set(key, v)} />
+          <NumberField key={key} label={label[0]} value={params[key]} min={key === "topDiameter" ? 0 : 0.1} onCommit={(v) => set(key, v)}
+            onPercent={(k) => void execute("object.scale", { id: f.id, factor: [k, k, k] })} />
         ))}
       </div>
       <div className={`field-caption ${cols(fields.length)}`} style={fields.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
         {fields.map(({ key, label }) => <span key={key}>{label}</span>)}
       </div>
+      <p className="subtle-hint">Tipp: „150%“ in ein Feld tippen skaliert das ganze Objekt.</p>
     </div>
   );
 }
@@ -231,6 +242,7 @@ function ProfileSize({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
             value={Math.round(v * 100) / 100}
             min={i === 2 ? 0 : 0.1}
             onCommit={(n) => void execute("shape.setSize", { id: f.id, [keys[i]]: n })}
+            onPercent={(k) => void execute("object.scale", { id: f.id, factor: [k, k, k] })}
           />
         ))}
       </div>
