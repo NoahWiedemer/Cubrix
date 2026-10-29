@@ -152,14 +152,13 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
 
 // ── Dimensions ───────────────────────────────────────────────────────────────
 
-/** One compact label per axis at the middle of a bounding-box edge; shown only on hover or while dragging. */
+/** One compact label per axis at the middle of a bounding-box edge; shown only while dragging a handle. */
 function Dimensions({ f }: { f: Feature }) {
   const entries = useMeshes((s) => s.entries);
   const t = useTransform(f);
-  const hovered = useApp((s) => s.hoveredId === f.id || s.preview?.id === f.id);
   const dragging = useGizmo((s) => s.dragging);
   const b = worldBox(f, entries, t);
-  if (!b || !(hovered || dragging)) return null;
+  if (!b || !dragging) return null;
   const { min, max } = b;
   const labels: [Vec3, string][] = [
     [[(min.x + max.x) / 2, min.y, min.z], `${fmt(max.x - min.x)}`],

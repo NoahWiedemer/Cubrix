@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { ChevronDown, ChevronRight, MoreHorizontal } from "lucide-react";
+import { ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { execute } from "../core/commands";
 import { isTauri } from "../core/platform";
 import { useAiSettings } from "../ui/settings";
@@ -322,8 +322,8 @@ export function ChatPanel() {
       <div className="chat-bar">
         <ModelMenu />
         <div ref={more.ref} style={{ position: "relative" }}>
-          <button className="icon-btn small" onClick={() => more.setOpen(!more.open)} data-tip="Mehr" data-tip-pos="bottom-end">
-            <MoreHorizontal size={16} />
+          <button className="icon-btn small" onClick={() => more.setOpen(!more.open)} data-tip="Einstellungen" data-tip-pos="bottom-end">
+            <Settings size={16} strokeWidth={1.75} />
           </button>
           {more.open && (
             <Menu style={{ top: 34, right: 0 }}>

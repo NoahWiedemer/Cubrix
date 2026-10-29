@@ -7,12 +7,13 @@ import { Html } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useGizmo } from "../ui/gizmo";
 import { AXIS_COLORS, AXIS_HOVER, mix } from "../ui/axisColors";
-import { execute } from "../core/commands";
+import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp } from "../core/store";
 import type { Feature, Transform, Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
+import { ROUND_TYPES } from "../core/scale";
 
 export { useGizmo };
 
@@ -35,7 +36,10 @@ function quatOf(t: Transform) {
 }
 
 interface Drag {
-  kind: "move" | "rotate" | "plane";
+  kind: "move" | "rotate" | "plane" | "scale";
+  /** Scale: extents at drag start (CAD X/Y/Z) and whether X/Y grow on both sides. */
+  size?: Vec3;
+  symmetric?: boolean;
   index: number;
   start: Transform;
   center: THREE.Vector3; // CAD frame
@@ -64,9 +68,11 @@ function useEasedScale(target: number) {
   return ref;
 }
 
-function Arrow({ axis, color, hover, on, dim, onDown, hoverProps }: {
+function Arrow({ axis, color, hover, on, dim, onDown, hoverProps, cube = false }: {
   axis: THREE.Vector3; color: string; hover: string; on: boolean; dim: boolean;
   onDown: (e: ThreeEvent<PointerEvent>) => void; hoverProps: Record<string, unknown>;
+  /** Scale handle: a cube tip instead of the cone. */
+  cube?: boolean;
 }) {
   const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis), [axis]);
   const tip = useEasedScale(on ? 1.15 : 1);
@@ -84,7 +90,7 @@ function Arrow({ axis, color, hover, on, dim, onDown, hoverProps }: {
       <group position={[0, ARROW + 6, 0]}>
         <group ref={tip}>
           <mesh renderOrder={20}>
-            <coneGeometry args={[3.2, 18, 24]} />
+            {cube ? <boxGeometry args={[9, 9, 9]} /> : <coneGeometry args={[3.2, 18, 24]} />}
             <meshBasicMaterial color={c} depthTest={false} transparent opacity={opacity} toneMapped={false} />
           </mesh>
         </group>
@@ -107,11 +113,19 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
   const [hover, setHover] = useState<number | null>(null);
   const [label, setLabel] = useState<{ text: string; at: Vec3 } | null>(null);
   const drag = useRef<Drag | null>(null);
+  const scaleFactor = useRef<Vec3 | null>(null);
+  const lastPreview = useRef(0);
 
   const box = worldBox(f, entries, transform);
   const center = useMemo(() => (box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(...transform.position)), [box, transform]);
 
-  const anchor = useMemo(() => (box ? gizmoAnchor(box, f.type, mode) : center), [box, f.type, mode, center]);
+  // While the kernel rebuilds a preview there is briefly no box: keep the last anchor.
+  const lastAnchor = useRef<THREE.Vector3 | null>(null);
+  const anchor = useMemo(() => {
+    const a = box ? gizmoAnchor(box, f.type, mode) : (lastAnchor.current ?? center);
+    lastAnchor.current = a;
+    return a;
+  }, [box, f.type, mode, center]);
 
   // Keep a constant on-screen size: one local unit = one CSS pixel.
   useFrame(() => {
@@ -156,13 +170,15 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     e.stopPropagation();
     const g = group.current!;
     const parent = g.parent!;
-    const axisWorld = AXES[kind === "plane" ? PLANES[index][2] : index].axis.clone().transformDirection(parent.matrixWorld);
+    const axisLocal = kind === "scale" && index === 3 ? new THREE.Vector3(1, 1, 1).normalize() : AXES[kind === "plane" ? PLANES[index][2] : index].axis;
+    const axisWorld = axisLocal.clone().transformDirection(parent.matrixWorld);
     const centerWorld = g.getWorldPosition(new THREE.Vector3());
     const r = ray(e.nativeEvent);
     const from =
-      kind === "move" ? onAxis(r, centerWorld, axisWorld) : kind === "plane" ? onPlane(r, centerWorld, axisWorld) : onPlane(r, centerWorld, axisWorld)?.sub(centerWorld);
+      kind === "move" || kind === "scale" ? onAxis(r, centerWorld, axisWorld) : kind === "plane" ? onPlane(r, centerWorld, axisWorld) : onPlane(r, centerWorld, axisWorld)?.sub(centerWorld);
     if (!from) return;
-    drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from };
+    const size = box ? (box.getSize(new THREE.Vector3()).toArray() as Vec3) : undefined;
+    drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from, size, symmetric: ROUND_TYPES.has(f.type) };
     if (controls) controls.enabled = false;
     useGizmo.setState({ dragging: true });
     gl.domElement.style.cursor = "grabbing";
@@ -172,6 +188,36 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       const r = ray(ev);
       const a = AXES[d.kind === "plane" ? PLANES[d.index][2] : d.index].axis;
       let next: Transform;
+      if (d.kind === "scale") {
+        const delta = onAxis(r, d.centerWorld, d.axisWorld).sub(d.from).dot(d.axisWorld);
+        const snap = useApp.getState().snap;
+        const size = d.size!;
+        let k: number;
+        if (d.index === 3) {
+          // Centre handle: proportional, driven along the screen-facing diagonal.
+          const diag = Math.hypot(...size);
+          k = (diag + delta * 2) / diag;
+        } else {
+          const L0 = size[d.index];
+          // Round bodies scale around their centre in X/Y, so both sides move.
+          const grow = d.symmetric && d.index < 2 ? delta * 2 : delta;
+          let L = Math.max(0.5, L0 + grow);
+          if (snap > 0) L = Math.max(snap, Math.round(L / snap) * snap);
+          k = L / L0;
+        }
+        k = Math.max(0.02, k);
+        const uniform = d.index === 3 || ev.shiftKey;
+        const factor: Vec3 = uniform ? [k, k, k] : (size.map((_, i) => (i === d.index ? k : 1)) as Vec3);
+        scaleFactor.current = factor;
+        setLabel({ text: size.map((v, i) => fmt(v * factor[i])).join(" × ") + " mm", at: d.center.toArray() as Vec3 });
+        // Live preview, throttled: every update rebuilds the solid in the kernel.
+        const now = performance.now();
+        if (now - lastPreview.current > 70) {
+          lastPreview.current = now;
+          previewCommand("object.scale", { id: f.id, factor });
+        }
+        return;
+      }
       if (d.kind === "plane") {
         const p = onPlane(r, d.centerWorld, d.axisWorld);
         if (!p) return;
@@ -228,6 +274,13 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       gl.domElement.style.cursor = "";
       if (controls) controls.enabled = true;
       useGizmo.setState({ dragging: false });
+      if (scaleFactor.current) {
+        const factor = scaleFactor.current;
+        scaleFactor.current = null;
+        clearPreview();
+        void execute("object.scale", { id: f.id, factor });
+        return;
+      }
       const p = useApp.getState().preview;
       if (!p) return;
       void execute("object.transform", { id: f.id, position: p.transform.position, rotation: p.transform.rotation }).then(
@@ -283,6 +336,16 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
               </group>
             );
           })}
+        {mode === "scale" &&
+          AXES.map(({ axis, color, hover: hc }, i) => (
+            <Arrow key={`s${i}`} cube axis={axis} color={color} hover={hc} on={active(i)} dim={anyActive && !active(i)} onDown={begin("scale", i)} hoverProps={hoverProps(i)} />
+          ))}
+        {mode === "scale" && (
+          <mesh renderOrder={21} raycast={priorityRaycast} onPointerDown={begin("scale", 3)} {...hoverProps(3)}>
+            <boxGeometry args={[active(3) ? 13 : 11, active(3) ? 13 : 11, active(3) ? 13 : 11]} />
+            <meshBasicMaterial color={active(3) ? "#e7ebee" : "#b8c1c8"} depthTest={false} transparent opacity={anyActive && !active(3) ? 0.45 : 0.95} toneMapped={false} />
+          </mesh>
+        )}
         {mode === "rotate" &&
           AXES.map(({ axis, color, hover: hc }, i) => {
             const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);

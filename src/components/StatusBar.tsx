@@ -18,7 +18,7 @@ export function StatusBar() {
           <Magnet size={12} /> Einrasten: <b>{snapLabel(snap)}</b>
         </button>
         {pop.open && (
-          <Menu style={{ bottom: 28, minWidth: 200 }}>
+          <Menu style={{ bottom: 28, right: 0, left: "auto", minWidth: 200 }}>
             <MenuTitle>Einrasten beim Verschieben</MenuTitle>
             {SNAPS.map((s) => (
               <MenuItem key={s} icon={s === 0 ? "snapOff" : "snap"} label={snapLabel(s)} checked={s === snap} onClick={() => { pop.setOpen(false); void execute("view.snap", { mm: s }); }} />

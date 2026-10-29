@@ -8,6 +8,7 @@ import { CommandItem } from "../ui/CommandItem";
 import { useHelp } from "../help/HelpCenter";
 import { useLibrary } from "./Library";
 import { useTextTool } from "../ui/textTool";
+import { useGizmo } from "../ui/gizmo";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -53,6 +54,7 @@ export function LeftRail() {
   const workspace = useApp((s) => s.workspace);
   const library = useLibrary((s) => s.open);
   const textTool = useTextTool((s) => s.active);
+  const gizmoMode = useGizmo((s) => s.mode);
   const boolPop = usePopover();
   const edgePop = usePopover();
   useApp((s) => s.selection);
@@ -61,6 +63,7 @@ export function LeftRail() {
     <aside className="panel rail">
       <RailButton icon="select" tip="Auswählen" active={workspace === "model" && !library} onClick={() => { useLibrary.setState({ open: false }); void execute("workspace.model"); }} />
       <RailButton icon="shapes" tip="Formen-Bibliothek" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      <RailButton icon="scale" tip="Skalieren" kbd="s" active={gizmoMode === "scale"} onClick={() => execute("tool.scale")} />
       <RailButton icon="text" tip="Text" kbd="t" active={textTool} onClick={() => execute("tool.text")} />
       <div className="rail-sep" />
       <RailButton icon="sketch" tip="Skizze (2D)" kbd="2" active={workspace === "sketch"} onClick={() => execute("workspace.sketch")} />

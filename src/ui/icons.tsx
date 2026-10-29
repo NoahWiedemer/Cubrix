@@ -91,6 +91,7 @@ export const ICONS = {
   text: Type,
   pattern: Grid2x2,
   move: Move3d,
+  scale: Scaling,
   rotate: Rotate3d,
   resize: Scaling,
   fillet: SquareDashed,

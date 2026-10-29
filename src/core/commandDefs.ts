@@ -35,6 +35,8 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
+import { scaleFeature } from "./scale";
+import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
@@ -890,8 +892,12 @@ defineCommand({
   shortcut: "escape",
   params: {},
   perform() {
+    // First Esc leaves scale/rotate mode, the next one clears the selection.
+    if (useGizmo.getState().mode !== "move") {
+      useGizmo.setState({ mode: "move" });
+      return;
+    }
     useApp.setState({ selection: [], primitivesOpen: false });
-    useGizmo.setState({ mode: "move" });
   },
 });
 
@@ -957,6 +963,57 @@ defineCommand({
   params: { nodeId: { type: "id", description: "ID des Verlaufseintrags" } },
   perform(p) {
     useApp.getState().jumpTo(p.nodeId);
+  },
+});
+
+defineCommand({
+  id: "object.scale",
+  kind: "document",
+  label: "Skalieren",
+  description:
+    "Skaliert ein Objekt (Faktor je Achse X/Y/Z oder einheitlich). Die Maße werden direkt geändert; die untere Ecke (runde Körper: Mitte unten) bleibt stehen.",
+  icon: "scale",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    factor: { type: "vec3", description: "Faktoren [X, Y, Z], z. B. [2, 2, 2] für doppelte Größe" },
+  },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f) throw new Error("Objekt nicht gefunden");
+    const s = (Array.isArray(p.factor) ? p.factor : [p.factor, p.factor, p.factor]).map(Number) as Vec3;
+    if (s.some((v) => !(v > 0.01 && v < 100))) throw new Error("Faktoren müssen zwischen 0,01 und 100 liegen.");
+    if (s.every((v) => v === 1)) return null;
+    const box = worldBox(f, useMeshes.getState().entries);
+    const anchor: Vec3 = box ? (gizmoAnchor(box, f.type, "scale").toArray() as Vec3) : [...f.transform.position];
+    const pct = s.every((v) => v === s[0]) ? `${Math.round(s[0] * 100)} %` : s.map((v) => `${Math.round(v * 100)}`).join(" × ") + " %";
+    return { doc: updateFeature(doc, f.id, () => scaleFeature(f, s, anchor)), label: `${f.name} skalieren (${pct})` };
+  },
+});
+
+defineCommand({
+  id: "tool.scale",
+  kind: "action",
+  label: "Skalieren",
+  description: "Schaltet das Gizmo auf Skalieren (Griffe je Achse, Mitte = proportional, Shift = proportional).",
+  icon: "scale",
+  shortcut: "s",
+  params: {},
+  perform() {
+    useGizmo.setState((s) => ({ mode: s.mode === "scale" ? "move" : "scale" }));
+  },
+});
+
+defineCommand({
+  id: "tool.move",
+  kind: "action",
+  label: "Verschieben",
+  description: "Schaltet das Gizmo zurück auf Verschieben.",
+  icon: "move",
+  shortcut: "w",
+  params: {},
+  perform() {
+    useGizmo.setState({ mode: "move" });
   },
 });
 

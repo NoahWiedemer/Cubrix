@@ -70,8 +70,9 @@ const fragment = /* glsl */ `
     float aSel = ring * ((seen > 0.5 && !frontOfRing) ? 1.0 : 0.45);
     float ghost = cover > 0.5 && c.r < 0.5 * cover ? 0.1 * cover : 0.0;
     bool behindHov = c.a < 0.5 || depthOf(c) > zHov + 1e-5;
-    float hr = max(radius * 0.5, 1.0);
-    float aHov = (insideHov(c) || cover > 0.5 || !behindHov) ? 0.0 : clamp(hr - dHov, 0.0, 1.0) * (1.0 - c.g) * 0.5;
+    // Hover: a bit thinner than the selection and ~65 % of its strength.
+    float hr = max(radius * 0.8, 1.2);
+    float aHov = (insideHov(c) || cover > 0.5 || !behindHov) ? 0.0 : clamp(hr - dHov, 0.0, 1.0) * (1.0 - c.g) * 0.65;
     float a = max(aSel, ghost);
     gl_FragColor = a > 0.002 ? vec4(selColor, a) : vec4(hovColor, aHov);
   }

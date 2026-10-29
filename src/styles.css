@@ -1156,3 +1156,9 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 @media (prefers-reduced-motion: reduce) { .side-slide, .side-slide-inner { transition: none; } }
 body.space-pan .viewport canvas { cursor: grab !important; }
 body.space-pan .viewport canvas:active { cursor: grabbing !important; }
+/* Action bar ~8 % more compact */
+.toolbar { padding: 4px; }
+.toolbar .tool { min-width: 56px; padding: 5px 7px 4px; gap: 2px; }
+.toolbar .tool svg { width: 17px; height: 17px; }
+.toolbar-set, .toolbar { gap: 1px; }
+.statusbar { justify-content: flex-end; }

@@ -26,6 +26,7 @@ export function Toolbar() {
   const selection = useApp((s) => s.selection).filter((id) => doc.features.some((f) => f.id === id));
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0]) : undefined;
   const rotate = useGizmo((s) => s.mode === "rotate");
+  const scale = useGizmo((s) => s.mode === "scale");
   const textTool = useTextTool((s) => s.active);
   const mode = selection.length === 0 ? "create" : selection.length === 1 ? "single" : selection.length === 2 ? "pair" : "many";
 
@@ -46,6 +47,7 @@ export function Toolbar() {
         {mode === "single" && single?.type !== "sketch" && (
           <>
             <CommandTool id="tool.rotate" active={rotate} />
+            <CommandTool id="tool.scale" active={scale} />
             {single && single.type !== "sphere" && single.type !== "torus" && (
               <>
                 <CommandTool id="object.fillet" />
