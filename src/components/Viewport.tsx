@@ -23,8 +23,6 @@ import { Toolbar } from "./Toolbar";
 import { PropertiesOverlay } from "./PropertiesPanel";
 import { PRIMITIVES } from "./LeftRail";
 import { Icon } from "../ui/icons";
-import { usePrintCheck } from "../core/printCheck";
-import { TriangleAlert } from "lucide-react";
 
 const ACCENT = "#6ee7c5";
 const deg = THREE.MathUtils.degToRad;
@@ -218,7 +216,6 @@ export function Viewport() {
   const selection = useApp((s) => s.selection);
   const workspace = useApp((s) => s.workspace);
   const kernel = useKernel();
-  const check = usePrintCheck();
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
 
@@ -275,15 +272,7 @@ export function Viewport() {
             </>
           )}
         </div>
-      ) : (
-        check.state === "warn" && (
-          <div className="vp-badge warn" title={check.issues.join(", ")}>
-            <TriangleAlert size={14} />
-            {check.issues[0]}
-            {check.issues.length > 1 && <span className="more">+{check.issues.length - 1}</span>}
-          </div>
-        )
-      )}
+      ) : null}
 
       {doc.features.length === 0 && kernel.status === "ready" && workspace === "model" && (
         <div className="empty-state">

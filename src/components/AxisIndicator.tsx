@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import * as THREE from "three";
 import { Line, useGizmoContext } from "@react-three/drei";
+import { AXIS_COLORS } from "../ui/axisColors";
 
 // CAD axes expressed in the internal Y-up scene frame.
 const AXES = [
-  { label: "X", color: "#ef6b73", dir: new THREE.Vector3(1, 0, 0) },
-  { label: "Y", color: "#7fd67a", dir: new THREE.Vector3(0, 0, -1) },
-  { label: "Z", color: "#6aa8ff", dir: new THREE.Vector3(0, 1, 0) },
+  { label: "X", color: AXIS_COLORS[0], dir: new THREE.Vector3(1, 0, 0) },
+  { label: "Y", color: AXIS_COLORS[1], dir: new THREE.Vector3(0, 0, -1) },
+  { label: "Z", color: AXIS_COLORS[2], dir: new THREE.Vector3(0, 1, 0) },
 ];
 
 const LENGTH = 34;

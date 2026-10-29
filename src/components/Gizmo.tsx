@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { Html } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useGizmo } from "../ui/gizmo";
+import { AXIS_COLORS, AXIS_HOVER, mix } from "../ui/axisColors";
 import { execute } from "../core/commands";
 import { useApp } from "../core/store";
 import type { Feature, Transform, Vec3 } from "../core/document";
@@ -13,12 +14,16 @@ import { worldBox } from "../core/bounds";
 
 export { useGizmo };
 
-const AXES = [
-  { axis: new THREE.Vector3(1, 0, 0), color: "#e5737a" },
-  { axis: new THREE.Vector3(0, 1, 0), color: "#8fd18b" },
-  { axis: new THREE.Vector3(0, 0, 1), color: "#6fa8f5" },
-];
-const HOVER = "#6ee7c5";
+const AXES = [0, 1, 2].map((i) => ({
+  axis: new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0),
+  color: AXIS_COLORS[i],
+  hover: AXIS_HOVER[i],
+  letter: "XYZ"[i],
+}));
+// Plane handles: [first axis, second axis, normal axis].
+const PLANES: [number, number, number][] = [[0, 1, 2], [0, 2, 1], [1, 2, 0]];
+const PLANE_OFFSET = 22; // px from the centre
+const PLANE_SIZE = 13; // px
 const ARROW = 88; // px
 const RING = 62; // px
 
@@ -30,13 +35,41 @@ function quatOf(t: Transform) {
 }
 
 interface Drag {
-  kind: "move" | "rotate";
+  kind: "move" | "rotate" | "plane";
   index: number;
   start: Transform;
   center: THREE.Vector3; // CAD frame
   axisWorld: THREE.Vector3;
   centerWorld: THREE.Vector3;
   from: THREE.Vector3; // world point or direction at drag start
+}
+
+const letterCache = new Map<string, THREE.Texture>();
+function letterTexture(letter: string, color: string) {
+  const key = letter + color;
+  let tex = letterCache.get(key);
+  if (!tex) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = color;
+    ctx.font = "650 40px 'Inter Variable', Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(letter, 32, 34);
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    letterCache.set(key, tex);
+  }
+  return tex;
+}
+
+function AxisLetter({ letter, color, y }: { letter: string; color: string; y: number }) {
+  return (
+    <sprite position={[0, y, 0]} scale={16} renderOrder={21} raycast={() => null}>
+      <spriteMaterial map={letterTexture(letter, color)} depthTest={false} transparent toneMapped={false} />
+    </sprite>
+  );
 }
 
 export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
@@ -94,10 +127,11 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     e.stopPropagation();
     const g = group.current!;
     const parent = g.parent!;
-    const axisWorld = AXES[index].axis.clone().transformDirection(parent.matrixWorld);
+    const axisWorld = AXES[kind === "plane" ? PLANES[index][2] : index].axis.clone().transformDirection(parent.matrixWorld);
     const centerWorld = g.getWorldPosition(new THREE.Vector3());
     const r = ray(e.nativeEvent);
-    const from = kind === "move" ? onAxis(r, centerWorld, axisWorld) : onPlane(r, centerWorld, axisWorld)?.sub(centerWorld);
+    const from =
+      kind === "move" ? onAxis(r, centerWorld, axisWorld) : kind === "plane" ? onPlane(r, centerWorld, axisWorld) : onPlane(r, centerWorld, axisWorld)?.sub(centerWorld);
     if (!from) return;
     drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from };
     if (controls) controls.enabled = false;
@@ -106,9 +140,27 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     const move = (ev: PointerEvent) => {
       const d = drag.current!;
       const r = ray(ev);
-      const a = AXES[d.index].axis;
+      const a = AXES[d.kind === "plane" ? PLANES[d.index][2] : d.index].axis;
       let next: Transform;
-      if (d.kind === "move") {
+      if (d.kind === "plane") {
+        const p = onPlane(r, d.centerWorld, d.axisWorld);
+        if (!p) return;
+        // World delta back into the CAD frame of the parent group.
+        const inv = group.current!.parent!.matrixWorld.clone().invert();
+        const local = p.clone().applyMatrix4(inv).sub(d.from.clone().applyMatrix4(inv));
+        const snap = useApp.getState().snap;
+        const pos = [...d.start.position] as Vec3;
+        for (const k of PLANES[d.index].slice(0, 2)) {
+          const target = d.start.position[k] + local.getComponent(k);
+          pos[k] = snap > 0 ? Math.round(target / snap) * snap : Math.round(target * 100) / 100;
+        }
+        next = { ...d.start, position: pos };
+        const [k1, k2] = PLANES[d.index];
+        setLabel({
+          text: `${"XYZ"[k1]} ${fmt(pos[k1] - d.start.position[k1])} · ${"XYZ"[k2]} ${fmt(pos[k2] - d.start.position[k2])} mm`,
+          at: d.center.toArray() as Vec3,
+        });
+      } else if (d.kind === "move") {
         const delta = onAxis(r, d.centerWorld, d.axisWorld).sub(d.from).dot(d.axisWorld);
         const snap = useApp.getState().snap;
         const pos = [...d.start.position] as Vec3;
@@ -167,25 +219,28 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     },
   });
 
-  const active = (i: number) => hover === i || drag.current?.index === i;
+  const active = (i: number) =>
+    hover === i || (!!drag.current && (drag.current.kind === "plane" ? drag.current.index + 10 : drag.current.index) === i);
 
   return (
     <>
       <group ref={group} position={center}>
         {mode === "move" &&
-          AXES.map(({ axis, color }, i) => {
+          AXES.map(({ axis, color, hover: hc, letter }, i) => {
             const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
-            const c = active(i) ? HOVER : color;
+            const on = active(i);
+            const c = on ? hc : color;
             return (
               <group key={i} quaternion={quat}>
                 <mesh position={[0, 14 + (ARROW - 14) / 2, 0]} renderOrder={20}>
-                  <cylinderGeometry args={[0.9, 0.9, ARROW - 14, 8]} />
+                  <cylinderGeometry args={[on ? 1.4 : 0.9, on ? 1.4 : 0.9, ARROW - 14, 8]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
                 <mesh position={[0, ARROW + 6, 0]} renderOrder={20}>
-                  <coneGeometry args={[4.5, 13, 20]} />
+                  <coneGeometry args={[on ? 5.5 : 4.5, 13, 20]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
+                <AxisLetter letter={letter} color={c} y={ARROW + 24} />
                 {/* Generous invisible hit target */}
                 <mesh position={[0, 14 + ARROW / 2, 0]} onPointerDown={begin("move", i)} {...hoverProps(i)}>
                   <cylinderGeometry args={[8, 8, ARROW + 8, 8]} />
@@ -194,14 +249,36 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
               </group>
             );
           })}
+        {mode === "move" &&
+          PLANES.map(([a, b], i) => {
+            const id = 10 + i;
+            const on = active(id);
+            const u = AXES[a].axis.clone().multiplyScalar(PLANE_OFFSET + PLANE_SIZE / 2);
+            const v = AXES[b].axis.clone().multiplyScalar(PLANE_OFFSET + PLANE_SIZE / 2);
+            const normal = AXES[PLANES[i][2]].axis;
+            const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+            const color = on ? mix(AXES[a].hover, AXES[b].hover) : mix(AXES[a].color, AXES[b].color);
+            return (
+              <group key={`p${i}`} position={u.add(v)} quaternion={quat}>
+                <mesh renderOrder={19} onPointerDown={begin("plane", i)} {...hoverProps(id)}>
+                  <planeGeometry args={[PLANE_SIZE, PLANE_SIZE]} />
+                  <meshBasicMaterial color={color} depthTest={false} transparent opacity={on ? 0.55 : 0.28} side={THREE.DoubleSide} toneMapped={false} />
+                </mesh>
+                <lineSegments renderOrder={20} raycast={() => null}>
+                  <edgesGeometry args={[new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE)]} />
+                  <lineBasicMaterial color={color} depthTest={false} transparent opacity={0.9} toneMapped={false} />
+                </lineSegments>
+              </group>
+            );
+          })}
         {mode === "rotate" &&
-          AXES.map(({ axis, color }, i) => {
+          AXES.map(({ axis, color, hover: hc }, i) => {
             const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
-            const c = active(i) ? HOVER : color;
+            const c = active(i) ? hc : color;
             return (
               <group key={i} quaternion={quat}>
                 <mesh renderOrder={20}>
-                  <torusGeometry args={[RING, 0.9, 6, 96]} />
+                  <torusGeometry args={[RING, active(i) ? 1.4 : 0.9, 6, 96]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
                 <mesh onPointerDown={begin("rotate", i)} {...hoverProps(i)}>
