@@ -6,7 +6,7 @@ import { useAiSettings } from "../ui/settings";
 import { Icon } from "../ui/icons";
 import { runAgent } from "../ai/agent";
 import { DEFAULT_MODEL, MODELS, tauriTransport, type Message, type Provider } from "../ai/providers";
-import logo from "../assets/brand/modelonio-mark.png";
+import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
 
 interface Step {
   label: string;

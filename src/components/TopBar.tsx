@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Undo2, Redo2, PanelsTopLeft } from "lucide-react";
-import logoBig from "../assets/brand/modelonio-mark.png";
+import logo1x from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
+import logo2x from "../assets/brand/modelonio-logo-ohne-hintergrund-512.png";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { QUALITY_LABELS, useSettings } from "../ui/settings";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
@@ -40,7 +41,7 @@ export function TopBar() {
       <div className="topbar-left" data-tauri-drag-region>
         <div ref={fileMenu.ref} style={{ position: "relative" }}>
           <button className="logo" onClick={() => fileMenu.setOpen(!fileMenu.open)} data-tip="Datei" data-tip-pos="bottom">
-            <img src={logoBig} alt="" />
+            <img src={logo1x} srcSet={`${logo1x} 1x, ${logo2x} 2x`} alt="" />
             Modelonio
             <ChevronDown size={13} color="var(--text-3)" />
           </button>
