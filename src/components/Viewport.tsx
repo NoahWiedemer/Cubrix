@@ -25,7 +25,7 @@ import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
 import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewControls";
 import { usePreview } from "../ui/preview";
-import { PrintPanel, usePrintView } from "./PrintPanel";
+import { usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
@@ -88,10 +88,9 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
 
   const t = useTransform(f);
   const selected = useApp((s) => s.selection.includes(f.id));
-  const inPrint = useApp((s) => s.workspace === "print");
   const presenting = useApp((s) => s.workspace === "preview");
   const overhangsOn = usePrintView((s) => s.overhangs);
-  const showOverhangs = inPrint && overhangsOn;
+  const showOverhangs = overhangsOn && !presenting;
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -393,7 +392,7 @@ export function Viewport() {
           )}
           {textTool && <TextPlacementPlane />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && single.type !== "sketch" && (workspace === "model" || workspace === "print") && (
+          {single && single.type !== "sketch" && workspace === "model" && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -425,7 +424,6 @@ export function Viewport() {
 
 
       {workspace === "model" && <Toolbar />}
-      {workspace === "print" && <PrintPanel />}
       {workspace === "preview" && <PreviewControls />}
       <ViewControls />
 

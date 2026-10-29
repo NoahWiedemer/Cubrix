@@ -10,6 +10,7 @@ import {
   isModelDocument,
   newId,
   uniqueName,
+  rememberPrinter,
   updateFeature,
   type BooleanFeature,
   type BooleanOp,
@@ -38,7 +39,7 @@ import { useTextTool } from "../ui/textTool";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
-import { PRINTERS, bestOrientation } from "./printAnalysis";
+import { MANUAL, PRINTERS, bestOrientation } from "./printAnalysis";
 import { worldBox } from "./bounds";
 import { baseName, isTauri, openTextFile, saveFile } from "./platform";
 import type { IconName } from "../ui/icons";
@@ -713,16 +714,18 @@ defineCommand({
   description: "Setzt das Druckerprofil (Bauraum) des Projekts.",
   icon: "printer",
   params: {
-    name: { type: "string", description: "Druckername aus der Liste oder „Eigener Drucker“" },
-    volume: { type: "vec3", unit: "mm", optional: true, description: "Bauraum B × T × H (für eigene Drucker)" },
+    name: { type: "string", description: "Druckername aus der Liste oder „Manuell“ (eigener Bauraum)" },
+    volume: { type: "vec3", unit: "mm", optional: true, description: "Bauraum B × T × H (für Manuell)" },
   },
   apply(doc, p) {
     const preset = PRINTERS.find((x) => x.name === p.name);
-    const volume = (p.volume ?? preset?.volume) as Vec3 | undefined;
-    if (!volume || volume.some((v) => !(v >= 20 && v <= 2000))) throw new Error("Bauraum muss zwischen 20 und 2000 mm liegen");
-    const name = preset ? preset.name : "Eigener Drucker";
+    const volume = (preset?.volume ?? p.volume ?? doc.printer.volume) as Vec3;
+    if (volume.some((v) => !(v >= 20 && v <= 2000))) throw new Error("Bauraum muss zwischen 20 und 2000 mm liegen");
+    const name = preset ? preset.name : MANUAL;
     if (name === doc.printer.name && volume.every((v, i) => v === doc.printer.volume[i])) return null;
-    return { doc: { ...doc, printer: { name, volume: [...volume] as Vec3 } }, label: `Drucker: ${name}` };
+    const printer = { name, volume: [...volume] as Vec3 };
+    rememberPrinter(printer);
+    return { doc: { ...doc, printer }, label: `Drucker: ${name}` };
   },
 });
 
@@ -974,21 +977,21 @@ defineCommand({
   id: "workspace.set",
   kind: "action",
   label: "Arbeitsbereich wechseln",
-  description: "Wechselt zwischen Modell, 2D, Druck vorbereiten und Vorschau.",
+  description: "Wechselt zwischen Modell, 2D und Vorschau.",
   icon: "layers",
-  params: { workspace: { type: "enum", options: ["model", "sketch", "print", "preview"], description: "Arbeitsbereich" } },
+  params: { workspace: { type: "enum", options: ["model", "sketch", "preview"], description: "Arbeitsbereich" } },
   perform(p) {
     useApp.setState({ workspace: p.workspace });
   },
 });
 
-(["model", "sketch", "print", "preview"] as const).forEach((w, i) =>
+(["model", "sketch", "preview"] as const).forEach((w, i) =>
   defineCommand({
     id: `workspace.${w}`,
     kind: "action",
-    label: ["Modell", "2D", "Druck vorbereiten", "Vorschau"][i],
-    description: `Wechselt in den Arbeitsbereich ${["Modell", "2D", "Druck vorbereiten", "Vorschau"][i]}.`,
-    icon: (["boxes", "sketch", "export", "visible"] as const)[i],
+    label: ["Modell", "2D", "Vorschau"][i],
+    description: `Wechselt in den Arbeitsbereich ${["Modell", "2D", "Vorschau"][i]}.`,
+    icon: (["boxes", "sketch", "visible"] as const)[i],
     shortcut: String(i + 1),
     params: {},
     perform() {

@@ -112,9 +112,29 @@ export interface ModelDocument {
 }
 
 export const DEFAULT_PRINTER: PrinterProfile = {
-  name: "Snapmaker Original",
-  volume: [125, 125, 125],
+  name: "Manuell",
+  volume: [220, 220, 250],
 };
+
+/** New projects start with the printer used last (remembered per machine). */
+function lastPrinter(): PrinterProfile {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem("albedo.lastPrinter") : null;
+    const p = raw ? (JSON.parse(raw) as PrinterProfile) : null;
+    if (p && typeof p.name === "string" && Array.isArray(p.volume) && p.volume.length === 3) return p;
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_PRINTER;
+}
+
+export function rememberPrinter(p: PrinterProfile) {
+  try {
+    localStorage.setItem("albedo.lastPrinter", JSON.stringify(p));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function createDocument(name = "Unbenanntes Projekt", { starter = true } = {}): ModelDocument {
   return {
@@ -122,7 +142,7 @@ export function createDocument(name = "Unbenanntes Projekt", { starter = true } 
     version: 1,
     name,
     units: "mm",
-    printer: { ...DEFAULT_PRINTER, volume: [...DEFAULT_PRINTER.volume] },
+    printer: (({ name, volume }) => ({ name, volume: [...volume] as Vec3 }))(lastPrinter()),
     features: starter ? [starterCube()] : [],
   };
 }

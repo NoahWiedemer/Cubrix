@@ -15,8 +15,7 @@ import { CommandItem } from "../ui/CommandItem";
 const TABS: { id: Workspace; label: string; key: string; icon: IconName }[] = [
   { id: "model", label: "Modell", key: "1", icon: "box" },
   { id: "sketch", label: "2D", key: "2", icon: "penTool" },
-  { id: "print", label: "Druck vorbereiten", key: "3", icon: "printer" },
-  { id: "preview", label: "Vorschau", key: "4", icon: "visible" },
+  { id: "preview", label: "Vorschau", key: "3", icon: "visible" },
 ];
 
 export function TopBar() {
@@ -57,6 +56,8 @@ export function TopBar() {
               <MenuSeparator />
               <CommandItem id="export.stl" onDone={() => fileMenu.setOpen(false)} />
               <CommandItem id="export.3mf" onDone={() => fileMenu.setOpen(false)} />
+              <CommandItem id="export.obj" onDone={() => fileMenu.setOpen(false)} />
+              <CommandItem id="export.step" onDone={() => fileMenu.setOpen(false)} />
             </Menu>
           )}
         </div>

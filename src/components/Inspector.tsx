@@ -9,7 +9,10 @@ import { useApp, useDoc } from "../core/store";
 import { geometryKey, isSolid, type Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
-import { PRINTERS } from "../core/printAnalysis";
+import { MANUAL, PRINTERS } from "../core/printAnalysis";
+import { usePopover } from "../ui/usePopover";
+import { MenuItem } from "../ui/Menu";
+import { PrintSummary } from "./PrintPanel";
 import { useSettings } from "../ui/settings";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { Icon } from "../ui/icons";
@@ -42,43 +45,72 @@ function SceneInfo() {
 
 function Printer() {
   const doc = useDoc();
-  const preset = PRINTERS.find((p) => p.name === doc.printer.name);
-  const [custom, setCustom] = useState<Vec3>(doc.printer.volume);
+  const manual = !PRINTERS.some((p) => p.name === doc.printer.name);
+  const pop = usePopover();
+  const [query, setQuery] = useState("");
+  const list = PRINTERS.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
+  const setVolume = (i: number, v: number) => {
+    const volume = [...doc.printer.volume] as Vec3;
+    volume[i] = v;
+    void execute("printer.set", { name: MANUAL, volume });
+  };
   return (
-    <div className="inspector-section">
-      <div className="group-label"><span><Icon name="printer" size={15} />Drucker</span></div>
-      <div className="printer-list">
-        {PRINTERS.map((p) => (
-          <button key={p.name} className={`printer-row ${p.name === doc.printer.name ? "on" : ""}`} onClick={() => execute("printer.set", { name: p.name })}>
-            <span>{p.name}</span>
-            <span className="printer-dim">{p.volume.join(" × ")}</span>
-          </button>
-        ))}
-        <button className={`printer-row ${!preset ? "on" : ""}`} onClick={() => execute("printer.set", { name: "Eigener Drucker", volume: custom })}>
-          <span>Eigener Drucker</span>
-          <span className="printer-dim">{custom.join(" × ")}</span>
+    <div className="inspector-section printer-tab">
+      <h4 className="tab-heading">Drucker</h4>
+      <div ref={pop.ref} style={{ position: "relative" }}>
+        <button className={`select-btn ${pop.open ? "open" : ""}`} onClick={() => { setQuery(""); pop.setOpen(!pop.open); }}>
+          <Icon name="printer" size={15} />
+          <span>{manual ? MANUAL : doc.printer.name}</span>
+          <ChevronDown size={14} />
         </button>
-      </div>
-      <div className="group-label" style={{ marginTop: 14 }}><span><Icon name="measure" size={15} />Bauraum (mm)</span></div>
-      <div className="field-row">
-        {custom.map((v, i) => (
-          <div className="field" key={i}>
-            <label>{"BTH"[i]}</label>
-            <input
-              value={v}
-              inputMode="numeric"
-              onChange={(e) => {
-                const next = [...custom] as Vec3;
-                next[i] = Number(e.target.value.replace(",", ".")) || 0;
-                setCustom(next);
-              }}
-              onBlur={() => execute("printer.set", { name: "Eigener Drucker", volume: custom })}
-              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            />
+        {pop.open && (
+          <div className="popover menu select-menu" role="menu">
+            <input className="select-search" autoFocus placeholder="Drucker suchen…" value={query} onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") pop.setOpen(false); }} />
+            {"manuell".includes(query.toLowerCase()) && (
+              <MenuItem icon="measure" label={MANUAL} checked={manual} onClick={() => { void execute("printer.set", { name: MANUAL, volume: doc.printer.volume }); pop.setOpen(false); }} />
+            )}
+            {list.map((p) => (
+              <MenuItem key={p.name} label={<span className="printer-opt"><span>{p.name}</span><span className="printer-dim">{p.volume.join(" × ")}</span></span>}
+                checked={p.name === doc.printer.name} onClick={() => { void execute("printer.set", { name: p.name }); pop.setOpen(false); }} />
+            ))}
           </div>
+        )}
+      </div>
+      <div className="field-row">
+        {doc.printer.volume.map((v, i) => (
+          <NumberInput key={`${doc.printer.name}-${i}`} label={"XYZ"[i]} value={v} readOnly={!manual} onCommit={(n) => setVolume(i, n)} />
         ))}
       </div>
+      <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
+      {!manual && <p className="hint">Werte ändern schaltet auf „Manuell“.</p>}
       <VolumeToggles />
+      <PrintSummary />
+    </div>
+  );
+}
+
+/** Small mm field; editing a preset's value switches the printer to "Manuell". */
+function NumberInput({ label, value, readOnly, onCommit }: { label: string; value: number; readOnly: boolean; onCommit(v: number): void }) {
+  const [text, setText] = useState(String(value));
+  return (
+    <div className={`field ${readOnly ? "preset" : ""}`}>
+      <label>{label}</label>
+      <input
+        value={text}
+        inputMode="numeric"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          const n = Number(text.replace(",", "."));
+          if (Number.isFinite(n) && n !== value) onCommit(n);
+          else setText(String(value));
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+      />
+      <span className="unit">mm</span>
     </div>
   );
 }

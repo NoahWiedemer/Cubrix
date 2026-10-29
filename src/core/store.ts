@@ -23,7 +23,7 @@ export interface HistoryNode {
   selection: string[];
 }
 
-export type Workspace = "model" | "sketch" | "print" | "preview";
+export type Workspace = "model" | "sketch" | "preview";
 
 export interface Toast {
   id: string;

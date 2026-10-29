@@ -4,14 +4,25 @@ import type { GeometryEntry } from "../cad/kernel";
 import type { PrinterProfile, Transform, Vec3 } from "./document";
 import { transformMatrix } from "./bounds";
 
+/** "Manuell": free build volume (the default for new projects). */
+export const MANUAL = "Manuell";
+
 export const PRINTERS: PrinterProfile[] = [
+  { name: "Bambu Lab A1 mini", volume: [180, 180, 180] },
+  { name: "Bambu Lab A1", volume: [256, 256, 256] },
+  { name: "Bambu Lab P1S / X1C", volume: [256, 256, 256] },
+  { name: "Bambu Lab H2D", volume: [325, 320, 325] },
+  { name: "Prusa MINI+", volume: [180, 180, 180] },
+  { name: "Prusa MK4S", volume: [250, 210, 220] },
+  { name: "Prusa CORE One", volume: [250, 220, 270] },
+  { name: "Creality Ender 3 V3", volume: [220, 220, 250] },
+  { name: "Creality K1", volume: [220, 220, 250] },
+  { name: "Creality K1 Max", volume: [300, 300, 300] },
+  { name: "Elegoo Neptune 4 Pro", volume: [225, 225, 265] },
+  { name: "Anycubic Kobra 3", volume: [250, 250, 260] },
   { name: "Snapmaker Original", volume: [125, 125, 125] },
   { name: "Snapmaker A150", volume: [160, 160, 145] },
   { name: "Snapmaker A250", volume: [230, 250, 235] },
-  { name: "Bambu Lab A1 mini", volume: [180, 180, 180] },
-  { name: "Bambu Lab A1 / P1S", volume: [256, 256, 256] },
-  { name: "Prusa MK4", volume: [250, 210, 220] },
-  { name: "Creality Ender 3", volume: [220, 220, 250] },
 ];
 
 /** Enclosed volume in mm³ (signed tetrahedron sum; transform-invariant). */

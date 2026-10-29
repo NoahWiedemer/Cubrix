@@ -3,18 +3,19 @@ import { useDoc } from "../core/store";
 import { geometryKey } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
-import { PRINTERS, meshVolume, overhangArea, rotationOf } from "../core/printAnalysis";
+import { meshVolume, overhangArea, rotationOf } from "../core/printAnalysis";
 import { usePrintCheck } from "../core/printCheck";
 import { Icon } from "../ui/icons";
 import { create } from "zustand";
 import * as THREE from "three";
 
-export const usePrintView = create<{ overhangs: boolean }>(() => ({ overhangs: true }));
+/** Overhang overlay (red > 45°) in the viewport, toggled from the Drucker tab. */
+export const usePrintView = create<{ overhangs: boolean }>(() => ({ overhangs: false }));
 
 const nf = (n: number, d = 1) => n.toLocaleString("de-DE", { maximumFractionDigits: d, minimumFractionDigits: d });
 
-/** Right-hand card in the "Druck vorbereiten" workspace. */
-export function PrintPanel() {
+/** Printability summary for the Drucker tab: size, volume, material, overhangs, hints. */
+export function PrintSummary() {
   const doc = useDoc();
   const entries = useMeshes((s) => s.entries);
   const overhangs = usePrintView((s) => s.overhangs);
@@ -36,71 +37,27 @@ export function PrintPanel() {
   const grams = (volume / 1000) * 1.24 * 0.45;
 
   return (
-    <aside className="props-overlay in print-panel" onPointerDown={(e) => e.stopPropagation()}>
-      <div className="props-title">
-        <span className="badge"><Icon name="printer" size={16} /></span>
-        <div style={{ minWidth: 0 }}>
-          <div className="name">Druck vorbereiten</div>
-          <div className="type">{visible.length} {visible.length === 1 ? "Objekt" : "Objekte"}</div>
-        </div>
-      </div>
-
-      <div className="group">
-        <div className="group-label"><span><Icon name="printer" size={15} />Drucker</span></div>
-        <select className="select" value={doc.printer.name} onChange={(e) => execute("printer.set", { name: e.target.value })}>
-          {PRINTERS.map((p) => (
-            <option key={p.name} value={p.name}>{p.name} · {p.volume.join(" × ")} mm</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="group">
-        <div className="group-label"><span><Icon name="measure" size={15} />Übersicht</span></div>
-        <div className="stats">
-          <span>Größe</span><b>{size.map((v) => nf(v)).join(" × ")} mm</b>
-          <span>Volumen</span><b>{nf(volume / 1000, 1)} cm³</b>
-          <span>Material</span><b>ca. {nf(grams, 0)} g PLA</b>
-          <span>Überhänge</span><b className={overhang > 1 ? "warn" : "ok"}>{overhang > 1 ? `${nf(overhang / 100, 1)} cm²` : "keine"}</b>
-        </div>
-      </div>
-
-      <div className="group">
-        <div className="group-label"><span><Icon name="orient" size={15} />Lage</span></div>
-        <div className="props-actions tight">
-          <button className="btn-ghost" onClick={() => execute("object.dropToBed", { ids: doc.features.map((f) => f.id) })}>
-            <Icon name="dropToBed" size={14} />Alles aufs Bett
-          </button>
-          <button className="btn-ghost" onClick={() => execute("print.orient")}>
-            <Icon name="orient" size={14} />Beste Drucklage
-          </button>
-        </div>
-        <label className="toggle-row">
-          <input type="checkbox" checked={overhangs} onChange={(e) => usePrintView.setState({ overhangs: e.target.checked })} />
-          <span>Überhänge über 45° rot zeigen</span>
-        </label>
-      </div>
-
+    <>
+      <h4 className="tab-heading">Druckbarkeit</h4>
       {check.issues.length > 0 && (
-        <div className="group">
-          <div className="group-label"><span><Icon name="warn" size={15} />Hinweise</span></div>
-          <ul className="issue-list">
-            {check.issues.map((i) => <li key={i}>{i}</li>)}
-          </ul>
-        </div>
+        <ul className="issue-list subtle">
+          {check.issues.map((i) => <li key={i}><Icon name="warn" size={13} />{i}</li>)}
+        </ul>
       )}
-
-      <div className="group">
-        <div className="group-label"><span><Icon name="export" size={15} />Exportieren</span></div>
-        <div className="export-grid">
-          {(["stl", "3mf", "obj", "step"] as const).map((f) => (
-            <button key={f} className={`btn-ghost ${f === "3mf" ? "primary-soft" : ""}`} onClick={() => execute(`export.${f}`)}>
-              <Icon name="export" size={14} />{f.toUpperCase()}
-            </button>
-          ))}
-        </div>
+      <div className="stats">
+        <span>Größe</span><b>{size.map((v) => nf(v)).join(" × ")} mm</b>
+        <span>Volumen</span><b>{nf(volume / 1000, 1)} cm³</b>
+        <span>Material</span><b>ca. {nf(grams, 0)} g PLA</b>
+        <span>Überhänge</span><b className={overhang > 1 ? "warn" : "ok"}>{overhang > 1 ? `${nf(overhang / 100, 1)} cm²` : "keine"}</b>
       </div>
-      <div style={{ height: 8 }} />
-    </aside>
+      <div className="props-actions tight">
+        <button className="btn-ghost" onClick={() => execute("print.orient")}>
+          <Icon name="orient" size={14} />Beste Drucklage
+        </button>
+        <button className={`btn-ghost ${overhangs ? "on" : ""}`} onClick={() => usePrintView.setState({ overhangs: !overhangs })} aria-pressed={overhangs}>
+          <Icon name="warn" size={14} />Überhänge zeigen
+        </button>
+      </div>
+    </>
   );
 }
-
