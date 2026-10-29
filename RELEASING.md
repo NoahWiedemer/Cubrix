@@ -53,17 +53,19 @@ neuerer Release als „latest“ veröffentlicht ist (kein Draft, kein Pre-Relea
    ```bash
    npm test && npm run build
    ```
-2. Version erhöhen, committen und taggen (hält `package.json`, `tauri.conf.json` und `Cargo.toml` synchron):
+2. `RELEASE_NOTES.md` aktualisieren (Neuerungen auf Deutsch, kurz; die Liste erscheint im
+   Release und im Update-Hinweis der App).
+3. Version erhöhen, committen und taggen (hält `package.json`, `tauri.conf.json` und `Cargo.toml` synchron):
    ```bash
    npm run release:patch   # 0.1.0 → 0.1.1
    npm run release:minor   # 0.1.0 → 0.2.0
    ```
-3. Hochladen – der Tag startet den Release-Build:
+4. Hochladen – der Tag startet den Release-Build:
    ```bash
    git push && git push origin vX.Y.Z
    ```
-4. Nach etwa 15–25 Minuten erscheint der Release unter
+5. Nach etwa 15–25 Minuten erscheint der Release unter
    https://github.com/NoahWiedemer/modelonio/releases
 
-Der Workflow lässt sich auch manuell unter **Actions → Release → Run workflow** starten.
+Der Workflow lässt sich auch manuell unter **Actions → Release → Run workflow** (Tag auswählen) starten, falls er nach dem Tag-Push nicht von selbst losläuft.
 Für das Anlegen des Releases genügt das Standard-Token (`permissions: contents: write` im Workflow).

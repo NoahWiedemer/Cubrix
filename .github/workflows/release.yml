@@ -41,6 +41,16 @@ jobs:
 
       - run: npm ci
 
+      # Release text (and the notes in latest.json) from RELEASE_NOTES.md.
+      - id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<CUBRIX_NOTES_EOF"
+            cat RELEASE_NOTES.md
+            echo "CUBRIX_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       # Builds are not code-signed, but updater artifacts are signed with the updater key
       # (Cubrix.app.tar.gz + .sig on macOS, the -setup.exe + .sig on Windows). tauri-action
       # merges both jobs into latest.json; the universal macOS build is listed under
@@ -56,12 +66,8 @@ jobs:
           updaterJsonPreferNsis: true
           tagName: v__VERSION__
           releaseName: Cubrix v__VERSION__
-          releaseBody: |
-            Cubrix v__VERSION__ – CAD für den 3D-Druck.
-
-            - macOS (Apple Silicon und Intel): `.dmg` herunterladen, öffnen, Cubrix in „Programme“ ziehen.
-              Die App ist noch nicht signiert: beim ersten Start Rechtsklick → „Öffnen“.
-            - Windows: `-setup.exe` (empfohlen) oder `.msi`. SmartScreen kann warnen („Trotzdem ausführen“).
+          # The first part of RELEASE_NOTES.md also shows in the in-app update notice.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           generateReleaseNotes: true

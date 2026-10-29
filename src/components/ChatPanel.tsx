@@ -294,7 +294,7 @@ export function ChatPanel() {
           </button>
           {more.open && (
             <Menu style={{ top: 34, right: 0 }}>
-              <MenuItem icon="file" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
+              <MenuItem icon="reset" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
               <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
             </Menu>
           )}
