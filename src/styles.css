@@ -1369,3 +1369,10 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .color-pop .swatches.recent { padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .color-pop .color-well { width: 32px; height: 32px; }
 .color-pop .field { height: 32px; }
+/* Chat text slightly subdued (≈87 %), headings/bold brighter (≈94 %) */
+.msg .msg-text { color: #dadde0; }
+.msg .md strong, .msg .md h1, .msg .md h2, .msg .md h3, .msg .md h4 { color: #eceef0; }
+.tree-row.operand { height: 28px; font-size: 12.5px; }
+.tree-role { display: grid; place-items: center; width: 16px; color: var(--text-3); flex: none; }
+.tree-role.subtract { color: #e5786b; } .tree-role.union { color: var(--accent); } .tree-role.intersect { color: #7fb6e0; }
+/* Chat text slightly subdued */

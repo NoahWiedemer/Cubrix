@@ -206,9 +206,15 @@ export function buildLocal(f: Feature): Shape3D {
   if (f.type === "boolean") {
     // Many tools: fuse them first, then one boolean against the target (much faster
     // than one cut per tool).
-    const [a, ...tools] = f.children.map((c) => buildPlaced(c));
-    const b = tools.reduce((acc, t) => acc.fuse(t));
-    shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
+    // Hidden tools are switched off (e.g. to try the part without a cut).
+    const [base, ...rest] = f.children;
+    const a = buildPlaced(base);
+    const tools = rest.filter((c) => c.visible).map((c) => buildPlaced(c));
+    if (!tools.length) shape = a;
+    else {
+      const b = tools.reduce((acc, t) => acc.fuse(t));
+      shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
+    }
   } else if (f.type === "extrude") {
     shape = buildExtrusion(f.profile, f.height, f.corner ?? 0);
   } else if (f.type === "text") {

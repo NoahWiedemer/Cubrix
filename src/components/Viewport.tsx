@@ -13,7 +13,7 @@ import { SelectionOutline, registerMesh, useMeshObjects } from "./SelectionOutli
 import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { type Feature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
+import { findFeature, parentsOf, type BooleanFeature, type Feature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
@@ -247,6 +247,57 @@ function Dimensions({ f }: { f: Feature }) {
   );
 }
 
+/**
+ * A selected operand inside a boolean: drawn as a translucent ghost in its parents'
+ * frames (cut tools reddish, unions mint, the base neutral) with its own gizmo. Edits go
+ * to the operand; the parent result is rebuilt.
+ */
+function OperandEditor({ f, parents }: { f: Feature; parents: BooleanFeature[] }) {
+  const parent = parents[parents.length - 1];
+  const index = parent.children.findIndex((c) => c.id === f.id);
+  const tint = index === 0 ? "#b9c2c8" : parent.op === "subtract" ? "#e5786b" : parent.op === "union" ? ACCENT : "#7fb6e0";
+  const wrap = (node: React.ReactNode, i = 0): React.ReactNode => {
+    if (i >= parents.length) return node;
+    const t = parents[i].transform;
+    return (
+      <group position={t.position} rotation={new THREE.Euler(deg(t.rotation[0]), deg(t.rotation[1]), deg(t.rotation[2]), "XYZ")}>
+        {wrap(node, i + 1)}
+      </group>
+    );
+  };
+  return wrap(
+    <>
+      <OperandGhost f={f} color={tint} />
+      <SelectedGizmo key={f.id} f={f} />
+    </>,
+  );
+}
+
+function OperandGhost({ f, color }: { f: Feature; color: string }) {
+  const [entry, setEntry] = useState<GeometryEntry | null>(null);
+  const key = geometryKey(f);
+  useEffect(() => {
+    let alive = true;
+    getGeometry(f).then((e) => alive && setEntry(e)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const t = useTransform(f);
+  if (!entry) return null;
+  return (
+    <group position={t.position} rotation={new THREE.Euler(deg(t.rotation[0]), deg(t.rotation[1]), deg(t.rotation[2]), "XYZ")}>
+      <mesh geometry={entry.geometry} renderOrder={8} raycast={() => null}>
+        <meshBasicMaterial color={color} transparent opacity={f.visible ? 0.22 : 0.08} depthWrite={false} toneMapped={false} />
+      </mesh>
+      <lineSegments geometry={entry.edges} renderOrder={9} raycast={() => null}>
+        <lineBasicMaterial color={color} transparent opacity={0.9} depthTest={false} toneMapped={false} />
+      </lineSegments>
+    </group>
+  );
+}
+
 function SelectedGizmo({ f }: { f: Feature }) {
   const t = useTransform(f);
   return <Gizmo f={f} transform={t} />;
@@ -418,7 +469,8 @@ export function Viewport() {
   const background = usePreview((s) => s.background);
   const shadowKey = useApp((s) => s.currentId) + useMeshes((s) => Object.keys(s.entries).length);
   const down = useRef<[number, number] | null>(null);
-  const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
+  const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
+  const singleParents = single ? parentsOf(doc, single.id) : [];
   const textTool = useTextTool((s) => s.active);
   const frame = useViewportFrame();
   const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
@@ -480,12 +532,13 @@ export function Viewport() {
           )}
           {textTool && <TextPlacementPlane />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && workspace === "model" && (
+          {single && workspace === "model" && singleParents.length === 0 && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
             </>
           )}
+          {single && workspace === "model" && singleParents.length > 0 && <OperandEditor f={single} parents={singleParents} />}
         </group>
         <DepthRange />
         <CameraRig />

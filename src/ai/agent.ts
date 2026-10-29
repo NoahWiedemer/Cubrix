@@ -5,7 +5,7 @@ import { logError } from "../core/errorLog";
 import { markModeling } from "./run";
 import { execute, getCommand, listCommands, toToolDefinition } from "../core/commands";
 import { getDoc, useApp } from "../core/store";
-import { geometryKey, isSolid } from "../core/document";
+import { geometryKey, isSolid, type Feature } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
@@ -67,14 +67,19 @@ export function sceneSummary(): string {
   const doc = getDoc();
   const entries = useMeshes.getState().entries;
   const r = (n: number) => Math.round(n * 10) / 10;
-  const lines = doc.features.map((f) => {
+  // Operands of booleans are listed indented (their pos is relative to the parent);
+  // commands accept their ids too (edit, extract, remove).
+  const lines: string[] = [];
+  const add = (f: Feature, depth: number) => {
     const b = isSolid(f) && entries[geometryKey(f)] ? worldBox(f, entries) : null;
     const size = b ? ` size=${r(b.max.x - b.min.x)}×${r(b.max.y - b.min.y)}×${r(b.max.z - b.min.z)}` : "";
     const rot = f.transform.rotation.some((v) => v) ? ` rot=[${f.transform.rotation.map(r).join(",")}]` : "";
     const hidden = f.visible ? "" : " (ausgeblendet)";
     const kind = f.type === "boolean" ? `boolean:${f.op}` : f.type;
-    return `${f.id} ${kind} "${f.name}" pos=[${f.transform.position.map(r).join(",")}]${size}${rot}${hidden}`;
-  });
+    lines.push(`${"  ".repeat(depth)}${depth ? "└ " : ""}${f.id} ${kind} "${f.name}" pos=[${f.transform.position.map(r).join(",")}]${size}${rot}${hidden}`);
+    if (f.type === "boolean" && depth < 3) f.children.forEach((c) => add(c, depth + 1));
+  };
+  doc.features.forEach((f) => add(f, 0));
   const sel = useApp.getState().selection;
   return `${lines.length ? lines.join("\n") : "(leer)"}${sel.length ? `\nAuswahl des Nutzers: ${sel.join(", ")}` : ""}`.slice(0, 6000);
 }

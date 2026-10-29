@@ -1,5 +1,6 @@
 import { execute, getCommand, isEnabled } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
+import { findFeature, parentsOf } from "../core/document";
 import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
@@ -38,8 +39,9 @@ function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; ic
  */
 export function Toolbar() {
   const doc = useDoc();
-  const selection = useApp((s) => s.selection).filter((id) => doc.features.some((f) => f.id === id));
-  const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0]) : undefined;
+  const selection = useApp((s) => s.selection).filter((id) => !!findFeature(doc, id));
+  const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
+  const operand = !!single && parentsOf(doc, single.id).length > 0;
   const rotate = useGizmo((s) => s.mode === "rotate");
   const scale = useGizmo((s) => s.mode === "scale");
   const textTool = useTextTool((s) => s.active);
@@ -81,12 +83,19 @@ export function Toolbar() {
             <CommandTool id="boolean.intersect" />
           </>
         )}
-        {mode !== "create" && (
+        {mode !== "create" && !operand && (
           <>
             <span className="toolbar-sep" />
             <CommandTool id="object.duplicate" />
             <CommandTool id="object.dropToBed" label="Ablegen" tip="Auf das Druckbett ablegen" />
             <CommandTool id="object.delete" />
+          </>
+        )}
+        {operand && (
+          <>
+            <span className="toolbar-sep" />
+            <CommandTool id="operand.extract" label="Lösen" tip="Aus dem Verbund lösen (wird eigenes Objekt)" />
+            <CommandTool id="operand.remove" label="Entfernen" tip="Aus dem Verbund entfernen" />
           </>
         )}
       </div>

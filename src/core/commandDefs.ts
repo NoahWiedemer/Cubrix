@@ -11,6 +11,7 @@ import {
   isModelDocument,
   newId,
   uniqueName,
+  parentsOf,
   rememberPrinter,
   updateFeature,
   type BooleanFeature,
@@ -792,8 +793,10 @@ defineCommand({
     const first = findFeature(doc, ids[0]);
     if (!first) return null;
     const visible: boolean = p.visible ?? !first.visible;
+    // Operands inside a boolean too: a hidden tool switches its cut/union off.
+    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => ({ ...f, visible })), doc);
     return {
-      doc: { ...doc, features: doc.features.map((f) => (ids.includes(f.id) ? { ...f, visible } : f)) },
+      doc: next,
       label: `${ids.length > 1 ? `${ids.length} Objekte` : first.name} ${visible ? "einblenden" : "ausblenden"}`,
     };
   },
@@ -1199,6 +1202,84 @@ function defineBoolean(op: BooleanOp, icon: IconName, label: string, description
 defineBoolean("union", "union", "Vereinen", "Verschmilzt zwei Objekte zu einem.");
 defineBoolean("subtract", "subtract", "Abziehen", "Zieht das zweite ausgewählte Objekt vom ersten ab (z. B. für Löcher).");
 defineBoolean("intersect", "intersect", "Schnittmenge", "Behält nur den Bereich, in dem sich beide Objekte überschneiden.");
+
+/** Removes an operand from its boolean; a boolean left with one operand turns back into it. */
+function withoutOperand(doc: ModelDocument, id: string): { doc: ModelDocument; operand: Feature; parent: BooleanFeature } {
+  const chain = parentsOf(doc, id);
+  const parent = chain[chain.length - 1];
+  if (!parent) throw new Error("Das ist kein Teil eines Verbunds.");
+  const operand = parent.children.find((c) => c.id === id)!;
+  const rest = parent.children.filter((c) => c.id !== id);
+  const replacement: Feature =
+    rest.length >= 2
+      ? { ...parent, children: rest as BooleanFeature["children"] }
+      : { ...rest[0], transform: { ...rest[0].transform, position: rest[0].transform.position.map((v, i) => v + parent.transform.position[i]) as Vec3 } };
+  // Replace the parent where it lives (top level or nested).
+  const grand = chain[chain.length - 2];
+  let next: ModelDocument;
+  if (!grand) next = { ...doc, features: doc.features.map((f) => (f.id === parent.id ? replacement : f)) };
+  else next = updateFeature(doc, grand.id, (g) => ({ ...(g as BooleanFeature), children: (g as BooleanFeature).children.map((c) => (c.id === parent.id ? replacement : c)) as BooleanFeature["children"] }));
+  return { doc: next, operand, parent };
+}
+
+/** World position of a nested operand's origin (parents assumed unrotated). */
+function worldOrigin(doc: ModelDocument, f: Feature): Vec3 {
+  return parentsOf(doc, f.id).reduce((p, b) => p.map((v, i) => v + b.transform.position[i]) as Vec3, [...f.transform.position] as Vec3);
+}
+
+defineCommand({
+  id: "operand.extract",
+  kind: "document",
+  label: "Aus Verbund lösen",
+  description: "Nimmt ein Teil (Operand) aus einem Verbund heraus und legt es als eigenes Objekt an derselben Stelle ab.",
+  icon: "boolean",
+  params: { id: { type: "id", optional: true, description: "Operand-ID (Standard: Auswahl)" } },
+  isEnabled: (ctx) => ctx.selection.length === 1 && parentsOf(ctx.doc, ctx.selection[0]).length > 0,
+  apply(doc, p, ctx) {
+    const id = p.id ?? ctx.selection[0];
+    const f = findFeature(doc, id);
+    if (!f) throw new Error("Objekt nicht gefunden");
+    const pos = worldOrigin(doc, f);
+    const r = withoutOperand(doc, id);
+    const out = { ...r.operand, visible: true, transform: { ...r.operand.transform, position: pos } };
+    return { doc: { ...r.doc, features: [...r.doc.features, out] }, selection: [out.id], label: `${f.name} aus ${r.parent.name} lösen` };
+  },
+});
+
+defineCommand({
+  id: "operand.remove",
+  kind: "document",
+  label: "Aus Verbund entfernen",
+  description: "Entfernt ein Teil (Operand) aus einem Verbund; das Ergebnis wird neu berechnet.",
+  icon: "delete",
+  params: { id: { type: "id", optional: true, description: "Operand-ID (Standard: Auswahl)" } },
+  isEnabled: (ctx) => ctx.selection.length === 1 && parentsOf(ctx.doc, ctx.selection[0]).length > 0,
+  apply(doc, p, ctx) {
+    const id = p.id ?? ctx.selection[0];
+    const r = withoutOperand(doc, id);
+    return { doc: r.doc, selection: [r.parent.id].filter((x) => findFeature(r.doc, x)), label: `${r.operand.name} entfernen` };
+  },
+});
+
+defineCommand({
+  id: "boolean.setOp",
+  kind: "document",
+  label: "Typ ändern",
+  description: "Ändert die Art eines Verbunds: union (vereinen), subtract (abziehen), intersect (Schnittmenge).",
+  icon: "boolean",
+  params: {
+    id: { type: "id", optional: true, description: "Verbund-ID oder ID eines seiner Teile (Standard: Auswahl)" },
+    op: { type: "enum", options: ["union", "subtract", "intersect"], description: "Neue Art" },
+  },
+  apply(doc, p, ctx) {
+    const id = p.id ?? ctx.selection[0];
+    const f = findFeature(doc, id);
+    const target = f?.type === "boolean" ? f : parentsOf(doc, id).pop();
+    if (!target) throw new Error("Kein Verbund ausgewählt.");
+    if (target.op === p.op) return null;
+    return { doc: updateFeature(doc, target.id, (x) => ({ ...(x as BooleanFeature), op: p.op })), label: `${target.name}: ${BOOLEAN_LABELS[p.op as BooleanOp]}` };
+  },
+});
 
 defineCommand({
   id: "boolean.split",

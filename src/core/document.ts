@@ -332,16 +332,51 @@ export function newId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** Finds a feature anywhere in the document, including operands inside booleans. */
 export function findFeature(doc: ModelDocument, id: string): Feature | undefined {
-  return doc.features.find((f) => f.id === id);
+  const walk = (list: Feature[]): Feature | undefined => {
+    for (const f of list) {
+      if (f.id === id) return f;
+      if (f.type === "boolean") {
+        const hit = walk(f.children);
+        if (hit) return hit;
+      }
+    }
+    return undefined;
+  };
+  return walk(doc.features);
 }
 
+/** Chain of boolean parents (outermost first) of a nested operand; [] for top-level features. */
+export function parentsOf(doc: ModelDocument, id: string): BooleanFeature[] {
+  const walk = (list: Feature[], chain: BooleanFeature[]): BooleanFeature[] | null => {
+    for (const f of list) {
+      if (f.id === id) return chain;
+      if (f.type === "boolean") {
+        const hit = walk(f.children, [...chain, f]);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  return walk(doc.features, []) ?? [];
+}
+
+/** Updates a feature anywhere (operands inside booleans too); the parents are rebuilt. */
 export function updateFeature(
   doc: ModelDocument,
   id: string,
   fn: (f: Feature) => Feature,
 ): ModelDocument {
-  return { ...doc, features: doc.features.map((f) => (f.id === id ? fn(f) : f)) };
+  const walk = (f: Feature): Feature => {
+    if (f.id === id) return fn(f);
+    if (f.type === "boolean") {
+      const children = f.children.map(walk) as BooleanFeature["children"];
+      return children.some((c, i) => c !== f.children[i]) ? { ...f, children } : f;
+    }
+    return f;
+  };
+  return { ...doc, features: doc.features.map(walk) };
 }
 
 /** Picks "Quader 3" style names that don't collide with existing ones. */
@@ -369,7 +404,7 @@ export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
     const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, t: top ? undefined : x.transform };
     if (x.type === "boolean")
-      return { ...base, op: x.op, c: x.children.map((c) => strip(c, false)) };
+      return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "sketch") return { ...base, s: x.shapes };
     if (x.type === "extrude") return { ...base, pr: x.profile, h: x.height };
     return { ...base, p: x.params };

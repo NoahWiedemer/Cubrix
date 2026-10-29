@@ -2,7 +2,8 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
-import { getCommand, isEnabled } from "../core/commands";
+import { execute, getCommand, isEnabled } from "../core/commands";
+import { findFeature, parentsOf } from "../core/document";
 import { openValuePopover } from "./ValuePopover";
 import { openRotatePopover } from "./RotatePopover";
 import { openColorPopover } from "./ColorRow";
@@ -28,6 +29,11 @@ export function ContextMenu() {
   }, [at]);
   if (!at) return null;
   const done = () => useContextMenu.setState({ at: null });
+  const st = useApp.getState();
+  const doc = st.nodes[st.currentId].doc;
+  const sel = st.selection.length === 1 ? st.selection[0] : null;
+  const isOperand = !!sel && parentsOf(doc, sel).length > 0;
+  const isBoolean = !!sel && findFeature(doc, sel)?.type === "boolean";
   const x = Math.min(at.x, window.innerWidth - 260);
   const y = Math.min(at.y, window.innerHeight - 320);
   return (
@@ -72,8 +78,19 @@ export function ContextMenu() {
             openColorPopover({ ids, current: first?.color, at });
           }}
         />
+        {isOperand && (
+          <>
+            <MenuSeparator />
+            <CommandItem id="operand.extract" onDone={done} />
+            <CommandItem id="operand.remove" onDone={done} />
+            <MenuItem icon="union" label="Verbund: Vereinen" onClick={() => { done(); void execute("boolean.setOp", { op: "union" }); }} />
+            <MenuItem icon="subtract" label="Verbund: Abziehen" onClick={() => { done(); void execute("boolean.setOp", { op: "subtract" }); }} />
+            <MenuItem icon="intersect" label="Verbund: Schnittmenge" onClick={() => { done(); void execute("boolean.setOp", { op: "intersect" }); }} />
+          </>
+        )}
+        {isBoolean && <CommandItem id="boolean.split" onDone={done} />}
         <MenuSeparator />
-        <CommandItem id="object.delete" onDone={done} />
+        {!isOperand && <CommandItem id="object.delete" onDone={done} />}
       </Menu>
     </div>
   );

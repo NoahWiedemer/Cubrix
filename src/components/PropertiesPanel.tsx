@@ -6,7 +6,7 @@ import { profileBounds } from "../core/scale";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
+import { featureTypeLabel, findFeature, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes, useMissingFonts } from "../cad/kernel";
 import { FontPicker } from "./FontPicker";
 import { ColorRow } from "./ColorRow";
@@ -398,7 +398,7 @@ function SingleObject({ f }: { f: Feature }) {
 export function PropertiesPanel() {
   const doc = useDoc();
   const selection = useApp((s) => s.selection);
-  const selected = selection.map((id) => doc.features.find((f) => f.id === id)).filter(Boolean) as Feature[];
+  const selected = selection.map((id) => findFeature(doc, id)).filter(Boolean) as Feature[];
 
   return (
     <div className="scroll props-body">
