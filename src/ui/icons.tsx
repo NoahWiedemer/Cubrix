@@ -44,6 +44,10 @@ import {
   CircleSlash,
   CircleHelp,
   Move,
+  Box as BoxIso,
+  Rows3,
+  Gauge,
+  Cone as ConePersp,
   History,
   type LucideIcon,
 } from "lucide-react";
@@ -94,6 +98,10 @@ export const ICONS = {
   snapOff: CircleSlash,
   help: CircleHelp,
   position: Move,
+  projection: Rows3,
+  sparkle: Gauge,
+  perspective: ConePersp,
+  iso: BoxIso,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { ChevronDown, Undo2, Redo2, PanelsTopLeft } from "lucide-react";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
+import { QUALITY_LABELS, useSettings } from "../ui/settings";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
-import { execute, formatShortcut } from "../core/commands";
+import { execute } from "../core/commands";
 import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { CommandItem } from "../ui/CommandItem";
 
-const TABS: { id: Workspace; label: string }[] = [
-  { id: "model", label: "Modell" },
-  { id: "sketch", label: "2D" },
-  { id: "print", label: "Druck vorbereiten" },
-  { id: "preview", label: "Vorschau" },
+const TABS: { id: Workspace; label: string; key: string }[] = [
+  { id: "model", label: "Modell", key: "1" },
+  { id: "sketch", label: "2D", key: "2" },
+  { id: "print", label: "Druck vorbereiten", key: "3" },
+  { id: "preview", label: "Vorschau", key: "4" },
 ];
 
 export function TopBar() {
@@ -25,6 +26,8 @@ export function TopBar() {
   const exportMenu = usePopover();
   const viewMenu = usePopover();
   const panels = useLayout((s) => s.panels);
+  const projection = useSettings((s) => s.projection);
+  const quality = useSettings((s) => s.quality);
 
   const commitName = (value: string) => {
     setEditing(false);
@@ -78,7 +81,9 @@ export function TopBar() {
           <button
             key={t.id}
             className={`tab ${workspace === t.id ? "active" : ""}`}
-            onClick={() => useApp.setState({ workspace: t.id })}
+            onClick={() => execute("workspace.set", { workspace: t.id })}
+            data-tip={`Arbeitsbereich ${t.label}`}
+            data-kbd={t.key}
           >
             {t.label}
           </button>
@@ -86,10 +91,10 @@ export function TopBar() {
       </nav>
 
       <div className="topbar-right" data-tauri-drag-region>
-        <button className="icon-btn" disabled={!canUndo} onClick={() => execute("history.undo")} data-tip={`Rückgängig  ${formatShortcut("mod+z")}`} data-tip-pos="bottom">
+        <button className="icon-btn" disabled={!canUndo} onClick={() => execute("history.undo")} data-tip="Rückgängig" data-kbd="mod+z" data-tip-pos="bottom">
           <Undo2 size={16} strokeWidth={1.75} />
         </button>
-        <button className="icon-btn" disabled={!canRedo} onClick={() => execute("history.redo")} data-tip={`Wiederholen  ${formatShortcut("shift+mod+z")}`} data-tip-pos="bottom">
+        <button className="icon-btn" disabled={!canRedo} onClick={() => execute("history.redo")} data-tip="Wiederholen" data-kbd="shift+mod+z" data-tip-pos="bottom">
           <Redo2 size={16} strokeWidth={1.75} />
         </button>
         <div ref={viewMenu.ref} style={{ position: "relative" }}>
@@ -107,6 +112,16 @@ export function TopBar() {
                   checked={panels[id].open}
                   onClick={() => useLayout.getState().setPanel(id, panels[id].open ? { open: false } : { open: true, collapsed: false })}
                 />
+              ))}
+              <MenuSeparator />
+              <MenuTitle>Kamera</MenuTitle>
+              <MenuItem icon="perspective" label="Perspektive" shortcut="o" checked={projection === "perspective"} onClick={() => execute("view.projection", { mode: "perspective" })} />
+              <MenuItem icon="projection" label="Orthografisch" shortcut="o" checked={projection === "orthographic"} onClick={() => execute("view.projection", { mode: "orthographic" })} />
+              <MenuItem icon="iso" label="Isometrisch" shortcut="i" onClick={() => { execute("view.iso"); viewMenu.setOpen(false); }} />
+              <MenuSeparator />
+              <MenuTitle>Darstellungsqualität</MenuTitle>
+              {(["high", "balanced", "fast"] as const).map((q) => (
+                <MenuItem key={q} icon="sparkle" label={QUALITY_LABELS[q]} checked={quality === q} onClick={() => useSettings.setState({ quality: q })} />
               ))}
               <MenuSeparator />
               <MenuItem icon="reset" label="Layout zurücksetzen" onClick={() => { useLayout.getState().reset(); viewMenu.setOpen(false); }} />

@@ -21,6 +21,8 @@ import {
 } from "./document";
 import { useApp } from "./store";
 import { useGizmo } from "../ui/gizmo";
+import { useSettings } from "../ui/settings";
+import { useViewRequest } from "../ui/view";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import { worldBox } from "./bounds";
 import { baseName, isTauri, openTextFile, saveFile } from "./platform";
@@ -595,6 +597,61 @@ defineCommand({
   params: {},
   perform() {
     useGizmo.setState((s) => ({ mode: s.mode === "rotate" ? "move" : "rotate" }));
+  },
+});
+
+defineCommand({
+  id: "workspace.set",
+  kind: "action",
+  label: "Arbeitsbereich wechseln",
+  description: "Wechselt zwischen Modell, 2D, Druck vorbereiten und Vorschau.",
+  icon: "layers",
+  params: { workspace: { type: "enum", options: ["model", "sketch", "print", "preview"], description: "Arbeitsbereich" } },
+  perform(p) {
+    useApp.setState({ workspace: p.workspace });
+  },
+});
+
+(["model", "sketch", "print", "preview"] as const).forEach((w, i) =>
+  defineCommand({
+    id: `workspace.${w}`,
+    kind: "action",
+    label: ["Modell", "2D", "Druck vorbereiten", "Vorschau"][i],
+    description: `Wechselt in den Arbeitsbereich ${["Modell", "2D", "Druck vorbereiten", "Vorschau"][i]}.`,
+    icon: (["boxes", "sketch", "export", "visible"] as const)[i],
+    shortcut: String(i + 1),
+    params: {},
+    perform() {
+      useApp.setState({ workspace: w });
+    },
+  }),
+);
+
+defineCommand({
+  id: "view.projection",
+  kind: "action",
+  label: "Perspektive / Orthografisch",
+  description: "Schaltet die Kamera zwischen perspektivischer und orthografischer (paralleler) Projektion um.",
+  icon: "projection",
+  shortcut: "o",
+  params: { mode: { type: "enum", options: ["perspective", "orthographic"], optional: true, description: "Ohne Angabe umschalten" } },
+  perform(p) {
+    useSettings.setState((s) => ({
+      projection: p.mode ?? (s.projection === "perspective" ? "orthographic" : "perspective"),
+    }));
+  },
+});
+
+defineCommand({
+  id: "view.iso",
+  kind: "action",
+  label: "Isometrisch",
+  description: "Dreht die Kamera in die klassische isometrische Ansicht (von vorne rechts oben).",
+  icon: "iso",
+  shortcut: "i",
+  params: {},
+  perform() {
+    useViewRequest.setState({ request: { kind: "iso", at: Date.now() } });
   },
 });
 

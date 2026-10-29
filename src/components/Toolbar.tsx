@@ -1,4 +1,4 @@
-import { execute, formatShortcut, getCommand } from "../core/commands";
+import { execute, getCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
@@ -6,9 +6,9 @@ import { useGizmo } from "../ui/gizmo";
 
 function CommandTool({ id, icon, label, active }: { id: string; icon?: IconName; label?: string; active?: boolean }) {
   const cmd = getCommand(id)!;
-  const tip = cmd.description.split(".")[0] + (cmd.shortcut ? `  ${formatShortcut(cmd.shortcut)}` : "");
+  const tip = cmd.description.split(".")[0];
   return (
-    <button className={`tool ${active ? "active" : ""}`} onClick={() => execute(id)} data-tip={tip} data-tip-pos="top">
+    <button className={`tool ${active ? "active" : ""}`} onClick={() => execute(id)} data-tip={tip} data-kbd={cmd.shortcut} data-tip-pos="top">
       <Icon name={icon ?? cmd.icon} size={18} />
       {label ?? cmd.label}
     </button>

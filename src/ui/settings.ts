@@ -13,4 +13,8 @@ export const QUALITY: Record<Quality, { dpr: number; shadows: number }> = {
   fast: { dpr: 1, shadows: 0 },
 };
 
-export const useSettings = create<{ quality: Quality }>()(persist(() => ({ quality: "high" as Quality }), { name: "modelonio.settings" }));
+export type Projection = "perspective" | "orthographic";
+
+export const useSettings = create<{ quality: Quality; projection: Projection }>()(
+  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection }), { name: "modelonio.settings" }),
+);

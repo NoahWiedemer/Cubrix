@@ -160,6 +160,14 @@ export function toToolDefinition(cmd: Command) {
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+/** Keycap labels for a shortcut, e.g. "shift+mod+z" → ["⇧", "⌘", "Z"] (Mac) or ["Umschalt", "Strg", "Z"]. */
+export function shortcutKeys(s: string): string[] {
+  const names: Record<string, string> = isMac
+    ? { mod: "⌘", shift: "⇧", alt: "⌥", delete: "⌫", escape: "esc" }
+    : { mod: "Strg", shift: "Umschalt", alt: "Alt", delete: "Entf", escape: "Esc" };
+  return s.split("+").map((k) => names[k] ?? k.toUpperCase());
+}
+
 export function formatShortcut(s: string): string {
   return s
     .split("+")

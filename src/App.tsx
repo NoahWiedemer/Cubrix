@@ -7,6 +7,7 @@ import { DockColumn } from "./components/Dock";
 import { Viewport } from "./components/Viewport";
 import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
+import { TooltipLayer } from "./ui/Tooltip";
 
 export function App() {
   useEffect(() => installShortcuts(), []);
@@ -28,6 +29,7 @@ export function App() {
       </div>
       <StatusBar />
       <Toasts />
+      <TooltipLayer />
     </div>
   );
 }

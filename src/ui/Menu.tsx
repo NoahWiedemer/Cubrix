@@ -2,6 +2,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Icon, type IconName } from "./icons";
+import { Kbd } from "./Tooltip";
+import { shortcutKeys } from "../core/commands";
 
 export function Menu({ children, style, className = "" }: { children: ReactNode; style?: CSSProperties; className?: string }) {
   return (
@@ -32,7 +34,7 @@ export function MenuItem({
     <button className="menu-item" role="menuitem" disabled={disabled} title={title} onClick={onClick}>
       <span className="menu-icon">{icon && <Icon name={icon} size={16} />}</span>
       <span className="menu-label">{label}</span>
-      {shortcut && <span className="hint">{shortcut}</span>}
+      {shortcut && <Kbd keys={shortcutKeys(shortcut)} />}
       <span className="menu-check">{checked && <Check size={14} strokeWidth={2.25} />}</span>
     </button>
   );

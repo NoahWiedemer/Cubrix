@@ -8,7 +8,6 @@ import {
   GizmoHelper,
   Grid,
   Html,
-  OrbitControls,
 } from "@react-three/drei";
 import { SelectionOutline, registerMesh } from "./SelectionOutline";
 import { AxisIndicator } from "./AxisIndicator";
@@ -19,6 +18,7 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { CameraRig } from "./CameraRig";
 import { QUALITY, useSettings } from "../ui/settings";
 import { PropertiesOverlay } from "./PropertiesPanel";
 import { PRIMITIVES } from "./LeftRail";
@@ -136,6 +136,7 @@ function SelectedGizmo({ f }: { f: Feature }) {
 /** Keeps near/far tight around the scene for good depth precision at any zoom. */
 function DepthRange() {
   useFrame(({ camera, controls }) => {
+    if ((camera as THREE.OrthographicCamera).isOrthographicCamera) return;
     const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target ?? new THREE.Vector3();
     const dist = camera.position.distanceTo(target);
     const near = Math.max(0.05, dist / 200);
@@ -198,7 +199,7 @@ function Lights() {
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = env;
     // three ≥ r163: scene.environment uses scene.environmentIntensity, not material.envMapIntensity.
-    scene.environmentIntensity = 0.12;
+    scene.environmentIntensity = 0.16;
     return () => {
       scene.environment = null;
       env.dispose();
@@ -207,14 +208,45 @@ function Lights() {
   }, [gl, scene]);
   return (
     <>
-      <hemisphereLight args={["#e8eef2", "#101315", 0.15]} />
+      <hemisphereLight args={["#e8eef2", "#101315", 0.35]} />
       {/* key: upper front-left */}
-      <directionalLight position={[-140, 220, 160]} intensity={1.2} />
+      <directionalLight position={[-140, 220, 160]} intensity={1.45} />
       {/* cool fill */}
       <directionalLight position={[200, 70, 80]} intensity={0.22} color="#d6e4ff" />
       {/* rim */}
       <directionalLight position={[-40, 120, -220]} intensity={0.45} color="#f2fffb" />
     </>
+  );
+}
+
+/** Small projection toggle next to the axis indicator. */
+function ViewControls() {
+  const projection = useSettings((s) => s.projection);
+  return (
+    <div className="view-controls">
+      <button
+        className={projection === "perspective" ? "on" : ""}
+        onClick={() => execute("view.projection", { mode: "perspective" })}
+        data-tip="Perspektive"
+        data-kbd="o"
+        data-tip-pos="top"
+      >
+        <Icon name="perspective" size={15} />
+      </button>
+      <button
+        className={projection === "orthographic" ? "on" : ""}
+        onClick={() => execute("view.projection", { mode: "orthographic" })}
+        data-tip="Orthografisch"
+        data-kbd="o"
+        data-tip-pos="top"
+      >
+        <Icon name="projection" size={15} />
+      </button>
+      <span className="vc-sep" />
+      <button onClick={() => execute("view.iso")} data-tip="Isometrische Ansicht" data-kbd="i" data-tip-pos="top">
+        <Icon name="iso" size={15} />
+      </button>
+    </div>
   );
 }
 
@@ -268,7 +300,7 @@ export function Viewport() {
           )}
         </group>
         <DepthRange />
-        <OrbitControls makeDefault enableDamping dampingFactor={0.12} target={[0, 12, 0]} minDistance={20} maxDistance={1500} />
+        <CameraRig />
         <SelectionOutline />
         <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
           <AxisIndicator />
@@ -309,6 +341,7 @@ export function Viewport() {
 
       {workspace === "model" && <Toolbar />}
       {workspace === "model" && <PropertiesOverlay />}
+      <ViewControls />
 
       {workspace !== "model" && (
         <div className="soon">
