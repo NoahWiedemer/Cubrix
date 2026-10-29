@@ -39,6 +39,7 @@ import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
 import { parseProject, serializeProject } from "./projectFile";
 import { useChat } from "../ai/chatStore";
+import { addRecent, clearAutosave, removeRecent } from "./autosave";
 import { cameraState } from "../ui/cameraState";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
 import { SHAPE_DEFAULTS, type ExtraType, type ShapeDef } from "./shapeDefs";
@@ -1865,6 +1866,28 @@ defineCommand({
   },
 });
 
+defineCommand({
+  id: "file.openRecent",
+  kind: "action",
+  label: "Zuletzt geöffnet",
+  description: "Öffnet eine zuletzt verwendete Projektdatei.",
+  icon: "open",
+  params: { path: { type: "string", description: "Dateipfad" } },
+  async perform(p) {
+    if (!(await confirmDiscard())) return;
+    const { readTextFile } = await import("@tauri-apps/plugin-fs");
+    let text: string;
+    try {
+      text = await readTextFile(p.path);
+    } catch {
+      removeRecent(p.path);
+      throw new Error(`${baseName(p.path)} wurde nicht gefunden.`);
+    }
+    loadProjectText(text, p.path, `${baseName(p.path)} geöffnet`);
+    addRecent(p.path);
+  },
+});
+
 // ── Import ───────────────────────────────────────────────────────────────────
 
 /** Adds imported parts (STL/STEP data) as import features standing on a free spot of the bed. */
@@ -1943,21 +1966,43 @@ async function confirmDiscard(): Promise<boolean> {
 
 const fileSafe = (name: string) => name.replace(/[\\/:*?"<>|]/g, "_");
 
-async function saveProject(forceDialog: boolean) {
+/** The whole project as file text: document + history (branches, AI groups) + chat + camera + selection; no layout, no keys. */
+export function currentProjectText(): string {
   const s = useApp.getState();
-  const doc = s.nodes[s.currentId].doc;
   const chat = useChat.getState();
-  // Document + history (branches, AI groups) + chat + camera + selection; no layout, no keys.
-  const text = serializeProject({
-    document: doc,
+  return serializeProject({
+    document: s.nodes[s.currentId].doc,
     history: { rootId: s.rootId, currentId: s.currentId, nodes: s.nodes },
     chat: { entries: chat.entries.map(({ error: _e, prompt: _p, ...e }) => e), api: chat.api },
     camera: cameraState.get?.(),
     selection: s.selection,
   });
+}
+
+/** Loads project file text (any version); `path` = where it lives (null for recovered work). */
+export function loadProjectText(text: string, path: string | null, label: string) {
+  const { file: project, migratedFrom } = parseProject(text);
+  const app = useApp.getState();
+  app.reset(project.document, label, path);
+  if (project.history) {
+    const h = project.history;
+    useApp.setState({ nodes: h.nodes, rootId: h.rootId, currentId: h.currentId, savedNodeId: path ? h.currentId : null });
+  } else if (!path) useApp.setState({ savedNodeId: null });
+  useApp.setState({ selection: project.selection.filter((id) => !!findFeature(project.document, id)) });
+  useChat.setState({ entries: project.chat.entries, api: project.chat.api, running: false });
+  if (project.camera) setTimeout(() => cameraState.set?.(project.camera!), 50);
+  if (migratedFrom < 2) app.toast("info", "Ältere Projektdatei geöffnet – beim Speichern wird sie ins neue Format übernommen.");
+}
+
+async function saveProject(forceDialog: boolean) {
+  const s = useApp.getState();
+  const doc = s.nodes[s.currentId].doc;
+  const text = currentProjectText();
   const path = await saveFile(`${fileSafe(doc.name)}.cubrix`, PROJECT_FILTER, text, forceDialog ? null : s.filePath);
   if (!path) return;
   useApp.setState({ savedNodeId: s.currentId, filePath: isTauri ? path : null });
+  if (isTauri) addRecent(path);
+  void clearAutosave();
   s.toast("success", `Gespeichert: ${baseName(path)}`);
 }
 
@@ -1987,17 +2032,8 @@ defineCommand({
     if (!(await confirmDiscard())) return;
     const file = await openTextFile(OPEN_FILTER);
     if (!file) return;
-    const { file: project, migratedFrom } = parseProject(file.text);
-    const app = useApp.getState();
-    app.reset(project.document, `${baseName(file.path)} geöffnet`, isTauri ? file.path : null);
-    if (project.history) {
-      const h = project.history;
-      useApp.setState({ nodes: h.nodes, rootId: h.rootId, currentId: h.currentId, savedNodeId: h.currentId });
-    }
-    useApp.setState({ selection: project.selection.filter((id) => !!findFeature(project.document, id)) });
-    useChat.setState({ entries: project.chat.entries, api: project.chat.api, running: false });
-    if (project.camera) setTimeout(() => cameraState.set?.(project.camera!), 50);
-    if (migratedFrom < 2) app.toast("info", "Ältere Projektdatei geöffnet – beim Speichern wird sie ins neue Format übernommen.");
+    loadProjectText(file.text, isTauri ? file.path : null, `${baseName(file.path)} geöffnet`);
+    if (isTauri) addRecent(file.path);
   },
 });
 

@@ -17,6 +17,7 @@ import { useViewportFrame } from "./ui/viewportFrame";
 import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ProviderDialog } from "./components/ProviderKeys";
+import { RecoveryBanner } from "./components/RecoveryBanner";
 
 /**
  * Sidebars slide out (width → 0, slight offset, fade) when entering Vorschau and back in
@@ -97,6 +98,7 @@ export function App() {
       <HelpCenter />
       <SettingsDialog />
       <ProviderDialog />
+      <RecoveryBanner />
     </div>
   );
 }

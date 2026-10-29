@@ -1,4 +1,5 @@
 mod ai;
+mod autosave;
 mod errorlog;
 mod fonts;
 
@@ -123,6 +124,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            autosave::autosave_write,
+            autosave::autosave_read,
+            autosave::autosave_clear,
             errorlog::log_error,
             errorlog::errors_read,
             errorlog::errors_clear,

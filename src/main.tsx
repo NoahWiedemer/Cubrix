@@ -8,6 +8,11 @@ import { App } from "./App";
 import { installErrorHooks } from "./core/errorLog";
 
 installErrorHooks();
+// Autosave every 30 s and offer to restore unsaved work from the last session.
+void Promise.all([import("./core/autosave"), import("./core/commandDefs")]).then(([a, c]) => {
+  a.startAutosave(c.currentProjectText);
+  void a.checkRecovery();
+});
 // Font list warmed in the background so the text font dropdown opens instantly.
 void import("./components/FontPicker").then((m) => setTimeout(m.preloadSystemFonts, 2500));
 

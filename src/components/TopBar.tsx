@@ -8,6 +8,7 @@ import { SegmentedControl } from "../ui/SegmentedControl";
 import { useSettings } from "../ui/settings";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 import { execute } from "../core/commands";
+import { useRecent } from "../core/autosave";
 import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { CommandItem } from "../ui/CommandItem";
@@ -26,6 +27,7 @@ export function TopBar() {
   const hasVisible = doc.features.some((f) => f.visible);
   const [editing, setEditing] = useState(false);
   const fileMenu = usePopover();
+  const recent = useRecent((s) => s.paths);
   const exportMenu = usePopover();
   const viewMenu = usePopover();
   const panels = useLayout((s) => s.panels);
@@ -53,6 +55,15 @@ export function TopBar() {
               {["file.new", "file.open", "file.import", "file.save", "file.saveAs"].map((id) => (
                 <CommandItem key={id} id={id} onDone={() => fileMenu.setOpen(false)} />
               ))}
+              {recent.length > 0 && (
+                <>
+                  <MenuSeparator />
+                  <MenuTitle>Zuletzt geöffnet</MenuTitle>
+                  {recent.slice(0, 6).map((p) => (
+                    <MenuItem key={p} icon="file" label={p.split(/[\\/]/).pop()!} title={p} onClick={() => { fileMenu.setOpen(false); void execute("file.openRecent", { path: p }); }} />
+                  ))}
+                </>
+              )}
               <MenuSeparator />
               <CommandItem id="export.stl" onDone={() => fileMenu.setOpen(false)} />
               <CommandItem id="export.3mf" onDone={() => fileMenu.setOpen(false)} />
