@@ -1262,3 +1262,24 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .rotate-field input { text-align: right; min-width: 0; }
 .rotate-field label.x { color: #4fc7b6; } .rotate-field label.y { color: #5fd894; } .rotate-field label.z { color: #b2df5c; }
 .lib-cats { gap: 2px; } .lib-cats button { padding: 0 8px; font-size: 12px; }
+/* AI glow (replaces the breathing frame): rotating conic gradient in our greens,
+   masked to a thin edge, plus a blurred copy bleeding inward. */
+@property --ai-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+.vp-frame.ai-working { animation: none; }
+.ai-glow { position: absolute; inset: 0; border-radius: 12px; pointer-events: none; opacity: 0; transition: opacity 400ms ease; overflow: hidden; }
+.ai-glow.on { opacity: 1; }
+.ai-glow > span { position: absolute; inset: 0; border-radius: 12px;
+  background: conic-gradient(from var(--ai-angle), #3ddc97 0deg, #2bc4b0 70deg, #1fa2a8 140deg, #7be8c6 200deg, #3ddc97 250deg, #1fa2a8 310deg, #3ddc97 360deg);
+  animation: ai-spin 7s linear infinite; }
+.ai-glow-edge { padding: 2.5px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.85; }
+.ai-glow-blur { padding: 14px; filter: blur(16px); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.38; animation: ai-spin 7s linear infinite, ai-breathe 3.2s ease-in-out infinite; }
+@keyframes ai-spin { to { --ai-angle: 360deg; } }
+@keyframes ai-breathe { 50% { opacity: 0.22; } }
+@media (prefers-reduced-motion: reduce) { .ai-glow > span { animation: none; } }
+/* Soft inner glow: the full gradient, faded in from all four edges (~36 px). */
+.ai-glow-blur { padding: 0; filter: blur(10px); opacity: 0.32;
+  -webkit-mask: linear-gradient(to right, #000, transparent 36px, transparent calc(100% - 36px), #000), linear-gradient(to bottom, #000, transparent 36px, transparent calc(100% - 36px), #000);
+  -webkit-mask-composite: source-over; mask: linear-gradient(to right, #000, transparent 36px, transparent calc(100% - 36px), #000), linear-gradient(to bottom, #000, transparent 36px, transparent calc(100% - 36px), #000);
+  mask-composite: add; }
+@keyframes ai-breathe { 50% { opacity: 0.2; } }
+.ai-glow-edge { padding: 2px; opacity: 0.9; }

@@ -422,6 +422,7 @@ export function Viewport() {
   const textTool = useTextTool((s) => s.active);
   const frame = useViewportFrame();
   const aiRunning = useAiRun((s) => s.running) && workspace !== "preview";
+  const aiAnimations = useSettings((s) => s.aiAnimations);
   const free = { left: frame.left, right: frame.right };
 
   return (
@@ -497,7 +498,12 @@ export function Viewport() {
       </Canvas>
 
       <div className="vp-free" style={free}>
-      <div className={`vp-frame ${aiRunning ? "ai-working" : ""}`} />
+      <div className="vp-frame" />
+      {/* Siri-style glow while the AI works: CSS only, the canvas never re-renders for it. */}
+      <div className={`ai-glow ${aiRunning && aiAnimations ? "on" : ""}`} aria-hidden>
+        <span className="ai-glow-edge" />
+        <span className="ai-glow-blur" />
+      </div>
       {kernel.status !== "ready" || kernel.busy > 0 ? (
         <div className="vp-badge">
           {kernel.status === "error" ? (
