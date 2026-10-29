@@ -1,5 +1,5 @@
-// Switches between perspective and orthographic cameras while keeping the framing,
-// and handles one-shot view requests (isometric preset).
+// Camera: orbit controls plus one tween for all view changes (projection toggle,
+// 2D top view, isometric preset) that keeps the framing continuous.
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -10,6 +10,12 @@ import { usePreview } from "../ui/preview";
 import { useApp } from "../core/store";
 
 type Controls = { target: THREE.Vector3; update(): void; object: THREE.Camera };
+
+const BASE_FOV = 35;
+/** Field of view at which the perspective camera hands over to the orthographic one. */
+const ORTHO_FOV = 4;
+/** Same duration and easing for every camera transition. */
+const TWEEN_MS = 320;
 
 export function CameraRig() {
   const projection = useSettings((s) => s.projection);
@@ -35,76 +41,141 @@ export function CameraRig() {
     if (controls) target.current.copy(controls.target);
   });
 
-  useEffect(() => {
-    const from = camera;
-    const to = projection === "orthographic" ? ortho : persp.current;
-    if (from === to) return;
-    const fov = THREE.MathUtils.degToRad(persp.current.fov);
-    const dist = from.position.distanceTo(target.current);
-    to.position.copy(from.position);
-    to.quaternion.copy(from.quaternion);
-    to.up.copy(from.up);
-    if (to === ortho) {
-      // Same apparent size at the target: visible height = 2·d·tan(fov/2).
-      ortho.zoom = size.height / (2 * dist * Math.tan(fov / 2));
-    } else if ((from as THREE.OrthographicCamera).isOrthographicCamera) {
-      const zoom = (from as THREE.OrthographicCamera).zoom;
-      const d = size.height / (2 * zoom * Math.tan(fov / 2));
-      const dir = from.position.clone().sub(target.current).normalize();
-      to.position.copy(target.current).addScaledVector(dir, d);
+  // ── One camera tween for every view change ─────────────────────────────────
+  // Orientation is slerped; the projection blends perspective ↔ orthographic as a
+  // dolly zoom (the visible height H at the target stays continuous, the field of
+  // view narrows to ~4° and the real orthographic camera takes over at the end).
+  // Sketch enter/exit, the projection toggle and the iso preset all use it, and a
+  // new request mid-tween simply starts from wherever the camera is.
+  const workspace = useApp((s) => s.workspace);
+  const tween = useRef<{
+    q0: THREE.Quaternion; q1: THREE.Quaternion;
+    h0: number; h1: number;
+    f0: number; f1: number;
+    proj: "perspective" | "orthographic";
+    start: number;
+  } | null>(null);
+
+  /** Visible height (mm) at the target for the current camera. */
+  const visibleHeight = () => {
+    const c = camera as THREE.PerspectiveCamera & THREE.OrthographicCamera;
+    if (c.isOrthographicCamera) return size.height / c.zoom;
+    return 2 * c.position.distanceTo(target.current) * Math.tan(THREE.MathUtils.degToRad(c.fov) / 2);
+  };
+  const orientationFor = (dir: THREE.Vector3) => {
+    const m = new THREE.Matrix4().lookAt(dir, new THREE.Vector3(), new THREE.Vector3(0, 1, 0));
+    return new THREE.Quaternion().setFromRotationMatrix(m);
+  };
+
+  const startTween = (dir: THREE.Vector3 | null, h: number | null, proj: "perspective" | "orthographic") => {
+    const c = camera as THREE.PerspectiveCamera & THREE.OrthographicCamera;
+    const h0 = visibleHeight();
+    const f0 = c.isOrthographicCamera ? ORTHO_FOV : c.fov;
+    const q0 = c.quaternion.clone();
+    // The tween always renders through the perspective camera.
+    if (c !== persp.current) {
+      const p = persp.current;
+      p.quaternion.copy(q0);
+      p.fov = f0;
+      p.position.copy(target.current).add(new THREE.Vector3(0, 0, 1).applyQuaternion(q0).multiplyScalar(h0 / (2 * Math.tan(THREE.MathUtils.degToRad(f0) / 2))));
+      p.far = 40000;
+      p.updateProjectionMatrix();
+      set({ camera: p });
     }
-    to.updateProjectionMatrix();
-    set({ camera: to });
+    tween.current = {
+      q0,
+      q1: dir ? orientationFor(dir.clone().normalize()) : q0.clone(),
+      h0,
+      h1: h ?? h0,
+      f0,
+      f1: proj === "orthographic" ? ORTHO_FOV : BASE_FOV,
+      proj,
+      start: performance.now(),
+    };
+    const ctl = controls as unknown as { enabled: boolean } | null;
+    if (ctl) ctl.enabled = false;
+  };
+
+  useFrame((state) => {
+    const tw = tween.current;
+    if (!tw) return;
+    // Controls get recreated when the camera object changes; keep them off while tweening.
+    const live = state.controls as unknown as { enabled: boolean } | null;
+    if (live) live.enabled = false;
+    // Dev only: window.__tweenMs slows the tween down for frame captures.
+    const ms = (import.meta.env.DEV && (window as unknown as { __tweenMs?: number }).__tweenMs) || TWEEN_MS;
+    const k = Math.min(1, (performance.now() - tw.start) / ms);
+    const e = 1 - Math.pow(1 - k, 3);
+    const p = persp.current;
+    const q = tw.q0.clone().slerp(tw.q1, e);
+    const fov = Math.exp(THREE.MathUtils.lerp(Math.log(tw.f0), Math.log(tw.f1), e));
+    const h = THREE.MathUtils.lerp(tw.h0, tw.h1, e);
+    const d = h / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
+    p.fov = fov;
+    p.far = Math.max(5000, d + 5000);
+    p.quaternion.copy(q);
+    p.position.copy(target.current).add(new THREE.Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(d));
+    p.updateProjectionMatrix();
+    if (k < 1) return;
+    tween.current = null;
+    if (tw.proj === "orthographic") {
+      ortho.position.copy(p.position);
+      ortho.quaternion.copy(q);
+      ortho.zoom = size.height / h;
+      ortho.updateProjectionMatrix();
+      set({ camera: ortho });
+    } else {
+      p.far = 5000;
+      p.updateProjectionMatrix();
+    }
+    const ctl = state.controls as unknown as (Controls & { enabled: boolean }) | null;
+    if (ctl) {
+      ctl.enabled = true;
+      ctl.update();
+    }
+  });
+
+  // Projection toggle (O, Ansicht menu, Inspektor).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      if (projection === "orthographic") startTween(null, null, "orthographic");
+      return;
+    }
+    if (tween.current?.proj === projection) return; // already heading there (2D workspace)
+    startTween(null, null, projection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection]);
 
   // 2D workspace: glide to a top view (orthographic) and back to the previous view afterwards.
-  const workspace = useApp((s) => s.workspace);
-  const saved = useRef<{ position: THREE.Vector3; projection: "perspective" | "orthographic" } | null>(null);
-  const tween = useRef<{ from: THREE.Vector3; to: THREE.Vector3; start: number } | null>(null);
+  const saved = useRef<{ dir: THREE.Vector3; h: number; projection: "perspective" | "orthographic" } | null>(null);
   useEffect(() => {
-    const t = target.current;
     if (workspace === "sketch" && !saved.current) {
-      saved.current = { position: camera.position.clone(), projection: useSettings.getState().projection };
-      useSettings.setState({ projection: "orthographic" });
-      const dist = Math.max(150, camera.position.distanceTo(t));
+      const dir = camera.position.clone().sub(target.current).normalize();
+      saved.current = { dir, h: visibleHeight(), projection: useSettings.getState().projection };
       // A hair towards +Z (CAD front) so CAD +Y points up on screen.
-      tween.current = { from: camera.position.clone(), to: t.clone().add(new THREE.Vector3(0, dist, 0.001)), start: performance.now() };
+      startTween(new THREE.Vector3(0, 1, 0.0005), Math.max(visibleHeight(), 120), "orthographic");
+      useSettings.setState({ projection: "orthographic" });
     } else if (workspace !== "sketch" && saved.current) {
       const back = saved.current;
       saved.current = null;
+      startTween(back.dir, back.h, back.projection);
       useSettings.setState({ projection: back.projection });
-      tween.current = { from: camera.position.clone(), to: back.position, start: performance.now() };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace]);
-  useFrame((state) => {
-    const tw = tween.current;
-    if (!tw) return;
-    const k = Math.min(1, (performance.now() - tw.start) / 320);
-    const e = 1 - Math.pow(1 - k, 3);
-    state.camera.position.lerpVectors(tw.from, tw.to, e);
-    state.camera.lookAt(target.current);
-    if (k >= 1) tween.current = null;
-    (state.controls as unknown as Controls | null)?.update();
-  });
 
   const request = useViewRequest((s) => s.request);
   useEffect(() => {
     if (!request || request.kind !== "iso") return;
-    const t = target.current;
-    const dist = camera.position.distanceTo(t);
     // CAD (1, -1, 1) = front-right-top; the scene is Y-up, so that is (1, 1, 1) here.
-    const dir = new THREE.Vector3(1, 1, 1).normalize();
-    camera.position.copy(t).addScaledVector(dir, dist);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(t);
-    controls?.update();
-  }, [request, camera, controls]);
+    startTween(new THREE.Vector3(1, 1, 1), null, useSettings.getState().projection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
 
   return (
     <OrbitControls
-      key={projection}
       makeDefault
       enableRotate={workspace !== "sketch"}
       // Direct camera by default; "Leicht" adds a short glide.

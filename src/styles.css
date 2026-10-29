@@ -1083,3 +1083,6 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .bold-toggle { height: 34px; }
 .bold-toggle.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
 .text-field input { text-align: left; }
+/* Viewport projection toggle: neutral pill like the workspace switcher */
+.view-controls .segmented.bare .segmented-pill { background: var(--panel-3); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 3px rgba(0, 0, 0, 0.25); }
+.view-controls .segmented.bare > button.on, .view-controls .segmented.bare > button.on svg { color: var(--text); }
