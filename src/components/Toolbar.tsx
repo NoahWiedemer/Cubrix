@@ -6,6 +6,7 @@ import { useGizmo } from "../ui/gizmo";
 import { useSketch } from "../ui/sketch";
 import { useTextTool } from "../ui/textTool";
 import { openValuePopover } from "./ValuePopover";
+import { openRotatePopover } from "./RotatePopover";
 
 /** Commands that ask for one value first (same inline popover as the context menu). */
 const VALUE_COMMANDS: Record<string, string> = { "object.fillet": "radius", "object.chamfer": "radius" };
@@ -14,9 +15,13 @@ function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; ic
   const cmd = getCommand(id)!;
   const tip = tipText ?? cmd.description.split(".")[0];
   const run = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (id === "tool.rotate") {
+      const sel = useApp.getState().selection;
+      if (sel.length === 1) return openRotatePopover({ id: sel[0], at: { x: r.left + r.width / 2, y: r.top }, placement: "above" });
+    }
     const param = VALUE_COMMANDS[id];
     if (!param) return void execute(id);
-    const r = e.currentTarget.getBoundingClientRect();
     openValuePopover({ command: id, param, at: { x: r.left + r.width / 2, y: r.top }, placement: "above" });
   };
   return (

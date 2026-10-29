@@ -1257,3 +1257,7 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .vp-frame.ai-working { border-color: rgba(110, 231, 197, 0.45); box-shadow: inset 0 0 0 1px rgba(110, 231, 197, 0.12), inset 0 0 28px rgba(110, 231, 197, 0.08); animation: frame-breathe 2.4s ease-in-out infinite; }
 @keyframes frame-breathe { 50% { border-color: rgba(110, 231, 197, 0.22); box-shadow: inset 0 0 0 1px rgba(110, 231, 197, 0.05), inset 0 0 16px rgba(110, 231, 197, 0.04); } }
 @media (prefers-reduced-motion: reduce) { .run-dot, .run-phase, .vp-frame.ai-working, .msg-steps .step-row { animation: none; } .run-phase { color: var(--text-2); background: none; } }
+.rotate-pop { flex-wrap: nowrap; }
+.rotate-field { width: 74px; flex: none; height: 32px; }
+.rotate-field input { text-align: right; min-width: 0; }
+.rotate-field label.x { color: #4fc7b6; } .rotate-field label.y { color: #5fd894; } .rotate-field label.z { color: #b2df5c; }

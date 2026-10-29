@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { clearPreview, execute, getCommand, previewCommand } from "../core/commands";
 import { Icon } from "../ui/icons";
+import { useClampX } from "../ui/useClampX";
 
 interface Request {
   command: string;
@@ -103,7 +104,8 @@ function Popover({ req }: { req: Request }) {
   };
 
   const above = req.placement === "above";
-  const x = above ? req.at.x : Math.min(req.at.x, window.innerWidth - 250);
+  const dx = useClampX(box, req.at.x, above);
+  const x = above ? req.at.x + dx : Math.min(req.at.x, window.innerWidth - 250);
   const y = above ? req.at.y - 8 : Math.min(req.at.y, window.innerHeight - 140);
   const unit = spec && "unit" in spec ? spec.unit : undefined;
 

@@ -9,6 +9,7 @@ import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 import { TooltipLayer } from "./ui/Tooltip";
 import { ValuePopover } from "./components/ValuePopover";
+import { RotatePopover } from "./components/RotatePopover";
 import { ContextMenu } from "./components/ContextMenu";
 import { HelpCenter } from "./help/HelpCenter";
 import { useViewportFrame } from "./ui/viewportFrame";
@@ -89,6 +90,7 @@ export function App() {
       <TooltipLayer />
       <ContextMenu />
       <ValuePopover />
+      <RotatePopover />
       <Library />
       <HelpCenter />
       <SettingsDialog />

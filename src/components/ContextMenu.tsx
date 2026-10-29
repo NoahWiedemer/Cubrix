@@ -4,6 +4,8 @@ import { create } from "zustand";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { getCommand, isEnabled } from "../core/commands";
 import { openValuePopover } from "./ValuePopover";
+import { openRotatePopover } from "./RotatePopover";
+import { useApp } from "../core/store";
 import { CommandItem } from "../ui/CommandItem";
 
 export const useContextMenu = create<{ at: { x: number; y: number } | null }>(() => ({ at: null }));
@@ -33,6 +35,15 @@ export function ContextMenu() {
         <CommandItem id="object.duplicate" onDone={done} />
         <CommandItem id="object.dropToBed" onDone={done} />
         <CommandItem id="object.setVisibility" label="Ein-/Ausblenden" onDone={done} />
+        <MenuItem
+          icon="rotate"
+          label="Drehen …"
+          disabled={useApp.getState().selection.length !== 1}
+          onClick={() => {
+            done();
+            openRotatePopover({ id: useApp.getState().selection[0], at });
+          }}
+        />
         <MenuSeparator />
         {["object.fillet", "object.chamfer"].map((id) => (
           <MenuItem

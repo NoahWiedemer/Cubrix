@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import * as THREE from "three";
 import { defineCommand, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
 import {
   BOOLEAN_LABELS,
@@ -342,6 +343,44 @@ defineCommand({
       }));
     }
     return next === doc ? null : { doc: next, label: `${items.length} Objekte transformieren` };
+  },
+});
+
+defineCommand({
+  id: "object.rotateBy",
+  kind: "document",
+  label: "Drehen",
+  description:
+    "Dreht ein Objekt RELATIV um X, Y, Z (Grad, Weltachsen) um seine Mitte. Lag es auf dem Bett, liegt es danach wieder darauf.",
+  icon: "rotate",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    by: { type: "vec3", unit: "°", description: "Drehung [x, y, z] in Grad" },
+  },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f) throw new Error("Objekt nicht gefunden");
+    const by = (p.by as number[]).map(Number);
+    if (by.every((v) => !v)) return null;
+    const entries = useMeshes.getState().entries;
+    const box = worldBox(f, entries);
+    const d = THREE.MathUtils.degToRad;
+    const qBy = new THREE.Quaternion().setFromEuler(new THREE.Euler(d(by[0]), d(by[1]), d(by[2]), "XYZ"));
+    const q0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(f.transform.rotation.map(d) as Vec3), "XYZ"));
+    const e = new THREE.Euler().setFromQuaternion(qBy.clone().multiply(q0), "XYZ");
+    const rotation = [e.x, e.y, e.z].map((r) => round(THREE.MathUtils.radToDeg(r)) + 0) as Vec3;
+    // Pivot = centre of the bounding box.
+    const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(...f.transform.position);
+    const pos = new THREE.Vector3(...f.transform.position).sub(c).applyQuaternion(qBy).add(c);
+    let next: Transform = { position: pos.toArray().map(round) as Vec3, rotation };
+    // Resting on the bed before → resting on it again.
+    if (box && Math.abs(box.min.z) < 0.05) {
+      const after = worldBox(f, entries, next);
+      if (after) next = { ...next, position: [next.position[0], next.position[1], round(next.position[2] - after.min.z)] };
+    }
+    const txt = by.map((v, i) => (v ? `${"XYZ"[i]} ${v > 0 ? "+" : ""}${v}°` : "")).filter(Boolean).join(" ");
+    return { doc: updateFeature(doc, f.id, (x) => ({ ...x, transform: next })), label: `${f.name} drehen (${txt})` };
   },
 });
 
