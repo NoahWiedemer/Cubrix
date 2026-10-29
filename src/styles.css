@@ -1144,3 +1144,13 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .segmented-pill, .segmented.bare .segmented-pill { background: var(--active-bg); box-shadow: var(--active-shadow); }
 .segmented > button.on { color: var(--active-fg); }
 .segmented > button.on svg { color: var(--active-icon); }
+/* Vorschau: sidebars slide away (same 320 ms cubic-out as the camera tween) */
+.side-slide { flex: none; display: flex; min-height: 0; overflow: hidden; transition: width 320ms cubic-bezier(0.33, 1, 0.68, 1); }
+.side-slide.right { justify-content: flex-start; }
+.side-slide-inner { display: flex; flex: none; min-height: 0; height: 100%; transition: opacity 260ms cubic-bezier(0.33, 1, 0.68, 1), transform 320ms cubic-bezier(0.33, 1, 0.68, 1); }
+.side-slide.left .side-slide-inner > .rail { flex: none; width: 52px; margin-right: 8px; }
+.side-slide.out .side-slide-inner { opacity: 0; pointer-events: none; }
+.side-slide.left.out .side-slide-inner { transform: translateX(-24px); }
+.side-slide.right.out .side-slide-inner { transform: translateX(24px); }
+.col-resizing .side-slide { transition: none; }
+@media (prefers-reduced-motion: reduce) { .side-slide, .side-slide-inner { transition: none; } }
