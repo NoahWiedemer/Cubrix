@@ -26,7 +26,7 @@ function scaleShape(s: SketchShape, [sx, sy]: Vec3): SketchShape {
 export function scaleDimensions(f: Feature, s: Vec3): Feature {
   const [sx, sy, sz] = s;
   const xy = (sx + sy) / 2;
-  const most = s.reduce((a, b) => (Math.abs(b - 1) > Math.abs(a - 1) ? b : a), 1);
+  const most = dominant(s);
   switch (f.type) {
     case "box":
     case "wedge":
@@ -81,8 +81,25 @@ export function scaleDimensions(f: Feature, s: Vec3): Feature {
   }
 }
 
+/** The factor that changed most (keeps its sign of change), for uniform-only scaling. */
+const dominant = (s: Vec3) => s.reduce((a, b) => (Math.abs(b - 1) > Math.abs(a - 1) ? b : a), 1);
+
+/**
+ * Compounds (booleans) only scale uniformly: their operands may be round or rotated,
+ * and those cannot be stretched along one world axis without changing the shape.
+ */
+export const scalesUniformly = (f: Feature) => f.type === "boolean";
+
+/** The factors actually applied to `f` for a requested scale. */
+export function effectiveScale(f: Feature, s: Vec3): Vec3 {
+  if (!scalesUniformly(f) || (s[0] === s[1] && s[1] === s[2])) return s;
+  const k = dominant(s);
+  return [k, k, k];
+}
+
 /** Scales a feature so that `anchor` (CAD world point) stays where it is. */
-export function scaleFeature(f: Feature, s: Vec3, anchor: Vec3): Feature {
+export function scaleFeature(f: Feature, requested: Vec3, anchor: Vec3): Feature {
+  const s = effectiveScale(f, requested);
   const scaled = scaleDimensions(f, s);
   const position = f.transform.position.map((v, i) => r2(anchor[i] + (v - anchor[i]) * s[i])) as Vec3;
   return { ...scaled, transform: { ...f.transform, position } };

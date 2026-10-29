@@ -13,7 +13,7 @@ import type { Feature, Transform, Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
-import { ROUND_TYPES } from "../core/scale";
+import { ROUND_TYPES, scalesUniformly } from "../core/scale";
 
 export { useGizmo };
 
@@ -206,7 +206,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           k = L / L0;
         }
         k = Math.max(0.02, k);
-        const uniform = d.index === 3 || ev.shiftKey;
+        const uniform = d.index === 3 || ev.shiftKey || scalesUniformly(f);
         const factor: Vec3 = uniform ? [k, k, k] : (size.map((_, i) => (i === d.index ? k : 1)) as Vec3);
         scaleFactor.current = factor;
         setLabel({ text: size.map((v, i) => fmt(v * factor[i])).join(" × ") + " mm", at: d.center.toArray() as Vec3 });
