@@ -434,6 +434,9 @@ export function cloneFeature(f: Feature): Feature {
 }
 
 /** Geometry-relevant part of a feature, ignoring its own placement. Used as mesh cache key. */
+/** Bodies without real edges to round or chamfer (curved all round, or threads). */
+export const hasNoEdges = (f: Feature) => ["sphere", "torus", "thread", "threadhole"].includes(f.type);
+
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
     const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };

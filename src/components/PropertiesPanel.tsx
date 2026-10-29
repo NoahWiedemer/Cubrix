@@ -7,7 +7,7 @@ import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { featureTypeLabel, findFeature, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
+import { featureTypeLabel, findFeature, hasNoEdges, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes, useMissingFonts } from "../cad/kernel";
 import { FontPicker } from "./FontPicker";
 import { ColorRow } from "./ColorRow";
@@ -448,7 +448,7 @@ function SingleObject({ f }: { f: Feature }) {
       <ColorRow key={f.id + (f.color ?? "")} ids={[f.id]} current={f.color} />
       <TransformFields f={f} kind="position" />
       <TransformFields f={f} kind="rotation" />
-      {f.type !== "sphere" && f.type !== "torus" && f.type !== "sketch" && (
+      {!hasNoEdges(f) && f.type !== "sketch" && (
         <div className="group">
           <div className="group-label"><span><Icon name="fillet" size={15} />Kanten</span></div>
           <div className="field-row two">

@@ -4,7 +4,7 @@ import type { IconName } from "../ui/icons";
 
 export type ExtraType =
   | "capsule" | "ellipsoid" | "star" | "roundedbox" | "gear" | "countersink" | "hook" | "pin" | "clip"
-  | "heart" | "arrow" | "knob" | "handle" | "vase" | "bowl" | "honeycomb" | "slotted";
+  | "heart" | "arrow" | "knob" | "handle" | "vase" | "bowl" | "honeycomb" | "slotted" | "thread" | "threadhole";
 
 export interface ShapeDef {
   label: string;
@@ -37,6 +37,8 @@ export const SHAPE_DEFAULTS: Record<ExtraType, ShapeDef> = {
   vase: { label: "Vase", icon: "vase", category: "deco", hint: "Gedreht, mit Wand", round: true, params: { diameter: 50, height: 90, wall: 1.6 }, labels: { diameter: "Ø", height: "Höhe", wall: "Wand" } },
   bowl: { label: "Schale", icon: "bowl", category: "deco", hint: "Gedreht, mit Wand", round: true, params: { diameter: 80, height: 35, wall: 1.6 }, labels: { diameter: "Ø", height: "Höhe", wall: "Wand" } },
   honeycomb: { label: "Wabenplatte", icon: "hexagon", category: "plates", hint: "Platte mit Sechseck-Löchern", params: { width: 80, depth: 60, height: 3, cell: 8, wall: 1.6 }, labels: { width: "Breite", depth: "Tiefe", height: "Dicke", cell: "Wabe", wall: "Steg" } },
+  thread: { label: "Gewinde", icon: "screw", category: "functional", hint: "Gewindestange mit echter Helix (M8 = 8 mm, Steigung 1,25)", round: true, params: { diameter: 8, pitch: 1.25, length: 20 }, labels: { diameter: "Ø", pitch: "Steigung", length: "Länge" }, counts: ["pitch"] },
+  threadhole: { label: "Gewindeloch", icon: "nut", category: "functional", hint: "Innengewinde mit 0,3 mm Spiel, zum Abziehen", round: true, params: { diameter: 8, pitch: 1.25, length: 10 }, labels: { diameter: "Ø", pitch: "Steigung", length: "Länge" }, counts: ["pitch"] },
   slotted: { label: "Langlochplatte", icon: "slots", category: "plates", hint: "Platte mit Langlöchern", params: { width: 80, depth: 40, height: 3, slots: 5, slotWidth: 4 }, labels: { width: "Breite", depth: "Tiefe", height: "Dicke", slots: "Löcher", slotWidth: "Lochbreite" }, counts: ["slots"] },
 };
 

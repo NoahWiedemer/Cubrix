@@ -1,6 +1,6 @@
 // Additional library shapes (parametric, kernel-built). Every solid stands on z = 0
 // and is centred on the origin in X/Y, like the basic primitives.
-import { draw, drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, makeBaseBox, makeCylinder, makeSphere, type Drawing, type Shape3D } from "replicad";
+import { draw, drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, genericSweep, makeBaseBox, makeCompound, makeCylinder, makeHelix, makePolygon, makeSphere, type Drawing, type Shape3D } from "replicad";
 
 const extrude = (d: Drawing, h: number) => d.sketchOnPlane("XY").extrude(h) as Shape3D;
 /** Revolves a closed profile drawn in (radius, z) around the Z axis. */
@@ -8,7 +8,35 @@ const revolve = (d: Drawing) => d.sketchOnPlane("XZ").revolve([0, 0, 1]) as Shap
 /** Extrudes a side profile drawn in (x, z) by `depth` in Y, centred. */
 const sideExtrude = (d: Drawing, depth: number) => (d.sketchOnPlane("XZ").extrude(depth) as Shape3D).translateY(depth / 2);
 
+/**
+ * Metric-style thread: a trapezoid tooth (60° flanks, ISO depth 0.6134·P) swept along a
+ * real helix, next to a core cylinder. The two solids stay a compound (fusing a swept
+ * thread into its core takes seconds); booleans handle them one by one (build.ts).
+ * `clearance` > 0 makes an inner-thread tool: everything grows by that much.
+ */
+function thread(diameter: number, pitch: number, length: number, clearance = 0): Shape3D {
+  const P = Math.max(0.2, pitch);
+  const h = 0.6134 * P;
+  const rMaj = diameter / 2 + clearance;
+  const rMin = Math.max(0.2, rMaj - h);
+  if (length < P * 1.5) throw new Error(`Das Gewinde muss mindestens ${(Math.ceil(P * 15) / 10).toLocaleString("de-DE")} mm lang sein.`);
+  if (rMin < P) throw new Error("Die Steigung ist für diesen Durchmesser zu groß.");
+  const base = 0.875 * P;
+  const tip = 0.125 * P;
+  const z0 = base / 2;
+  // The tooth reaches 0.1 mm into the core so the solids overlap cleanly.
+  const r0 = rMin - 0.1;
+  const tooth = makePolygon([[r0, 0, z0 - base / 2], [rMaj, 0, z0 - tip / 2], [rMaj, 0, z0 + tip / 2], [r0, 0, z0 + base / 2]]).outerWire();
+  const ridge = genericSweep(tooth as never, makeHelix(P, length - base, r0, [0, 0, z0]), { frenet: true }) as Shape3D;
+  // Ridge first: cutting it after the core silently fails in OCC (it would only touch the
+  // already removed core), cutting it first works.
+  return makeCompound([ridge, makeCylinder(rMin, length)]) as Shape3D;
+}
+
 export const EXTRA_BUILDERS: Record<string, (p: Record<string, number>) => Shape3D> = {
+  thread: ({ diameter, pitch, length }) => thread(diameter, pitch, length),
+  // Inner thread: subtract it from a part; it pokes 0.5 mm out on both ends for a clean cut.
+  threadhole: ({ diameter, pitch, length }) => thread(diameter, pitch, length + 1, 0.3).translateZ(-0.5),
   capsule: ({ diameter, height }) => {
     const r = diameter / 2;
     const mid = Math.max(0.01, height - diameter);

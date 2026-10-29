@@ -13,6 +13,7 @@ describe("Bibliotheksformen", () => {
     it(`${type} baut einen Körper auf dem Bett`, () => {
       const s = EXTRA_BUILDERS[type](def.params);
       expect(measureVolume(s)).toBeGreaterThan(1);
-      expect(s.boundingBox.bounds[0][2]).toBeCloseTo(0, 1);
+      // The thread hole is a cutting tool: it pokes 0.5 mm out below for a clean cut.
+      expect(s.boundingBox.bounds[0][2]).toBeCloseTo(type === "threadhole" ? -0.5 : 0, 1);
     });
 });

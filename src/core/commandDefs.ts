@@ -14,6 +14,7 @@ import {
   newId,
   uniqueName,
   parentsOf,
+  hasNoEdges,
   rememberPrinter,
   updateFeature,
   type BooleanFeature,
@@ -606,8 +607,8 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
       const f = findFeature(doc, p.id ?? ctx.selection[0]);
       if (!f) throw new Error("Objekt nicht gefunden");
       if (f.type === "sketch") throw new Error("Flache Skizzen haben keine Kanten – zuerst im Inspektor eine Höhe geben.");
-      if (f.type === "sphere" || f.type === "torus")
-        throw new Error(`${PRIMITIVE_LABELS[f.type]} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
+      if (hasNoEdges(f))
+        throw new Error(`${f.name} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
       const current = (fillet ? f.fillet : f.chamfer) ?? 0;
       let size: number = p.radius;
       if (size === undefined) {

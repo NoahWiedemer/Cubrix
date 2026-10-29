@@ -1,9 +1,9 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, Compound, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCompound, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
-import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
+import { hasNoEdges, isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
 export class EdgeTreatmentError extends Error {}
@@ -39,7 +39,7 @@ function applyEdgeTreatment(shape: Shape3D, f: Feature): Shape3D {
   const chamfer = f.chamfer ?? 0;
   if (fillet <= 0 && chamfer <= 0) return shape;
   // Spheres and tori only have seam edges, nothing that could be rounded.
-  if (f.type === "sphere" || f.type === "torus" || shape.edges.length === 0)
+  if (hasNoEdges(f) || shape.edges.length === 0)
     throw new EdgeTreatmentError(`${f.name} hat keine Kanten zum ${fillet > 0 ? "Abrunden" : "Fasen"}.`);
   let result = shape;
   if (chamfer > 0) result = edgePass(result, f, "chamfer", chamfer);
@@ -287,6 +287,28 @@ function buildRevolve(profile: SketchShape[], offset: number, corner = 0): Shape
   return solid.translate(minX - offset, (minY + maxY) / 2, 0);
 }
 
+/** Several solids kept side by side (threads: core + swept ridge, see shapes.ts). */
+const isMultiSolid = (s: Shape3D) => s instanceof Compound && s.solids.length > 1;
+const solidsOf = (s: Shape3D): Shape3D[] => (s instanceof Compound ? s.solids : [s]);
+
+/**
+ * Booleans with multi-solid shapes, one solid at a time: OCC fails or silently ignores a
+ * compound operand (and fusing a swept thread into its core takes seconds). Cuts and
+ * intersections are exact this way; a union keeps the solids next to each other, which
+ * slicers merge when printing.
+ */
+function compoundBoolean(op: "union" | "subtract" | "intersect", a: Shape3D, tools: Shape3D[]): Shape3D {
+  const toolSolids = tools.flatMap(solidsOf);
+  if (op === "union") return makeCompound([...solidsOf(a), ...toolSolids]) as Shape3D;
+  const parts = solidsOf(a).flatMap((part) => {
+    if (op === "subtract") return [toolSolids.reduce((acc, t) => acc.cut(t.clone()), part)];
+    return toolSolids.map((t) => part.clone().intersect(t.clone()));
+  });
+  const kept = parts.filter((x) => !x.isNull && measureVolume(x) > 1e-6);
+  if (!kept.length) throw new Error("Die Schnittmenge ist leer.");
+  return kept.length === 1 ? kept[0] : (makeCompound(kept) as Shape3D);
+}
+
 /** Parsed imports (STL/STEP), normalised to stand centred on z = 0; filled by the worker. */
 export const importedShapes = new Map<string, Shape3D>();
 
@@ -301,6 +323,7 @@ export function buildLocal(f: Feature): Shape3D {
     const a = buildPlaced(base);
     const tools = rest.filter((c) => c.visible).map((c) => buildPlaced(c));
     if (!tools.length) shape = a;
+    else if ([a, ...tools].some(isMultiSolid)) shape = compoundBoolean(f.op, a, tools);
     else {
       const b = tools.reduce((acc, t) => acc.fuse(t));
       shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);

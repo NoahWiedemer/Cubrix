@@ -1,6 +1,6 @@
 import { execute, getCommand, isEnabled } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { findFeature, parentsOf } from "../core/document";
+import { findFeature, hasNoEdges, parentsOf } from "../core/document";
 import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
@@ -73,7 +73,7 @@ export function Toolbar() {
             <CommandTool id="tool.scale" active={scale} />
             <CommandTool id="object.pattern" label="Muster" tip="Reihe, Raster, Kreis oder Spiegeln" />
             {single && (single.type === "extrude") && isEnabled("sketch.smooth") && <CommandTool id="sketch.smooth" tip="Kantige Kontur in eine glatte Kurve umwandeln" />}
-            {single && single.type !== "sphere" && single.type !== "torus" && (
+            {single && !hasNoEdges(single) && (
               <>
                 <CommandTool id="object.fillet" />
                 <CommandTool id="object.chamfer" />
