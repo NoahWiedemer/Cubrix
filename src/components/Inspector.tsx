@@ -169,6 +169,9 @@ function View() {
         <Toggle label="KI-Animationen" value={s.aiAnimations} onChange={(aiAnimations) => useSettings.setState({ aiAnimations })} />
       )}
       {more && (
+        <Toggle label="Oberflächenstruktur" value={s.surfaceTexture} onChange={(surfaceTexture) => useSettings.setState({ surfaceTexture })} />
+      )}
+      {more && (
         <label className="slider-row">
           <span>Raster ausblenden ab</span>
           <input type="range" min={150} max={1500} step={50} value={s.gridFade} onChange={(e) => useSettings.setState({ gridFade: Number(e.target.value) })} />

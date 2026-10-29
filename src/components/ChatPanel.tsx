@@ -26,7 +26,7 @@ type Step = ChatStep;
 
 let controller: AbortController | null = null;
 
-const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Schlüsselanhänger mit Loch", "Wie ziehe ich eine Skizze in 3D?"];
+const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Schlüsselanhänger mit Loch", "Mach daraus einen Spielwürfel"];
 
 const markFor = (p: Provider) => (p === "anthropic" ? "claude" : "openai");
 const PROVIDER_LABEL: Record<Provider, string> = { anthropic: "Anthropic", openai: "OpenAI" };

@@ -12,6 +12,8 @@ interface ViewSettings {
   showGrid: boolean;
   /** Objects created by the AI materialize, moves tween (respects reduced motion). */
   aiAnimations: boolean;
+  /** Fine matte micro-grain on objects (display only). */
+  surfaceTexture: boolean;
   /** Colour picked last; new objects get it (null = neutral). */
   lastColor: string | null;
   /** Custom colours used recently (newest first). */
@@ -24,7 +26,7 @@ interface ViewSettings {
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, lastColor: null, recentColors: [] }),
+    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, surfaceTexture: true, lastColor: null, recentColors: [] }),
     {
       name: "cubrix.settings",
       version: 3,

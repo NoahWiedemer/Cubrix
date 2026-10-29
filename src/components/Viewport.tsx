@@ -56,43 +56,82 @@ function useTransform(f: Feature): Transform {
  * roughness. It fades out where the grain gets denser than a pixel, so there's no moiré.
  */
 const SURFACE_GLSL = /* glsl */ `
-  float sHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-  float sNoise(vec3 x) {
-    vec3 i = floor(x), f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(sHash(i), sHash(i + vec3(1, 0, 0)), f.x), mix(sHash(i + vec3(0, 1, 0)), sHash(i + vec3(1, 1, 0)), f.x), f.y),
-               mix(mix(sHash(i + vec3(0, 0, 1)), sHash(i + vec3(1, 0, 1)), f.x), mix(sHash(i + vec3(0, 1, 1)), sHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  // 3D simplex noise (Gustavson): isotropic, no lattice or diagonal artifacts.
+  vec4 sPerm(vec4 x) { return mod(((x * 34.0) + 10.0) * x, 289.0); }
+  float sSimplex(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - 0.5;
+    i = mod(i, 289.0);
+    vec4 p = sPerm(sPerm(sPerm(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    const vec3 ns = vec3(0.285714285714, -0.928571428571, 0.142857142857);
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = inversesqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.5 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 105.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+  }
+  // Two octaves, each faded out before its features reach pixel size (w = feature/px ratio).
+  float sGrain(vec3 p, float w) {
+    float a = 1.0 - smoothstep(0.18, 0.45, w);
+    float b = 1.0 - smoothstep(0.18, 0.45, w * 2.1);
+    return sSimplex(p) * a + 0.5 * sSimplex(p * 2.1 + 17.3) * b;
   }
 `;
 
-function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhang: boolean) {
+function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhang: boolean, grain: boolean) {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
     .replace(
       "#include <worldpos_vertex>",
       "#include <worldpos_vertex>\nvWorldN = normalize(mat3(modelMatrix) * objectNormal);\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;",
     );
-  shader.fragmentShader = shader.fragmentShader
-    .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;\n" + SURFACE_GLSL)
+  shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;\n" + SURFACE_GLSL);
+  if (grain)
+    shader.fragmentShader = shader.fragmentShader
     .replace(
       "#include <roughnessmap_fragment>",
       `#include <roughnessmap_fragment>
-      vec3 sp = vWorldP / 0.45;
-      // Fade the grain out once it is finer than ~1.5 px (no shimmer when zoomed out).
-      float sFade = 1.0 - smoothstep(0.35, 0.7, length(fwidth(sp)));
-      float sN = sNoise(sp);
-      roughnessFactor = clamp(roughnessFactor + (sN - 0.5) * 0.1 * sFade, 0.0, 1.0);`,
+      // Fine matte grain, ~0.08 mm features in world space (3D noise, so no UV/projection seams).
+      vec3 sp = vWorldP / 0.08;
+      float sW = length(fwidth(sp));
+      float sN = sGrain(sp, sW);
+      roughnessFactor = clamp(roughnessFactor + sN * 0.03, 0.0, 1.0);`,
     )
     .replace(
       "#include <normal_fragment_maps>",
       `#include <normal_fragment_maps>
-      {
-        float e = 0.35;
-        vec3 g = vec3(sNoise(sp + vec3(e, 0, 0)), sNoise(sp + vec3(0, e, 0)), sNoise(sp + vec3(0, 0, e))) - sN;
+      if (sW < 0.45) {
+        float e = 0.2;
+        vec3 g = vec3(sGrain(sp + vec3(e, 0, 0), sW), sGrain(sp + vec3(0, e, 0), sW), sGrain(sp + vec3(0, 0, e), sW)) - sN;
         vec3 gv = mat3(viewMatrix) * (g / e);
         // Only the part of the gradient along the surface tilts the normal.
         vec3 tilt = gv - dot(gv, normal) * normal;
-        normal = normalize(normal - tilt * 0.11 * sFade);
+        normal = normalize(normal - tilt * 0.035);
       }`,
     );
   if (overhang)
@@ -136,6 +175,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
   const anim = useBuildAnimation(f.id, t.position);
   const overhangsOn = usePrintView((s) => s.overhangs);
   const showOverhangs = overhangsOn && !presenting;
+  const grain = useSettings((s) => s.surfaceTexture);
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -188,9 +228,9 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
           // the selected body wins, then later bodies over earlier ones.
           polygonOffsetFactor={1}
           polygonOffsetUnits={selected ? 1 : 2 + Math.max(0, 40 - order) * 2}
-          key={showOverhangs ? "overhang" : "plain"}
-          onBeforeCompile={(sh) => surfaceShader(sh, showOverhangs)}
-          customProgramCacheKey={() => (showOverhangs ? "surface-overhang" : "surface")}
+          key={`${showOverhangs ? "overhang" : "plain"}-${grain ? "grain" : "flat"}`}
+          onBeforeCompile={(sh) => surfaceShader(sh, showOverhangs, grain)}
+          customProgramCacheKey={() => `surface-${showOverhangs ? "overhang" : "plain"}-${grain ? "grain" : "flat"}`}
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null} visible={!presenting}>
