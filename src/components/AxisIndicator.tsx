@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import * as THREE from "three";
-import { Line, useGizmoContext } from "@react-three/drei";
+import { Html, Line, useGizmoContext } from "@react-three/drei";
 import { AXIS_COLORS } from "../ui/axisColors";
 
 // CAD axes expressed in the internal Y-up scene frame.
@@ -12,32 +12,20 @@ const AXES = [
 
 const LENGTH = 34;
 
-function labelTexture(text: string, color: string) {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = color;
-  ctx.font = "650 76px 'Inter Variable', Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, size / 2, size / 2 + 4);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 function Axis({ label, color, dir }: (typeof AXES)[number]) {
   const { tweenCamera } = useGizmoContext();
   const [hover, setHover] = useState(false);
-  const tex = useMemo(() => labelTexture(label, color), [label, color]);
   const tip = dir.clone().multiplyScalar(LENGTH);
   return (
     <group>
-      <Line points={[[0, 0, 0], tip.toArray()]} color={color} lineWidth={2} />
-      <sprite
-        position={dir.clone().multiplyScalar(LENGTH + 11).toArray()}
-        scale={hover ? 20 : 17}
+      <Line points={[[0, 0, 0], tip.toArray()]} color={color} lineWidth={hover ? 3 : 2} />
+      {/* No letters: a small dot at the tip; a larger invisible target makes it easy to click. */}
+      <mesh position={tip.toArray()}>
+        <sphereGeometry args={[hover ? 4.2 : 3.2, 16, 12]} />
+        <meshBasicMaterial color={color} depthTest={false} toneMapped={false} />
+      </mesh>
+      <mesh
+        position={tip.toArray()}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHover(true);
@@ -48,13 +36,19 @@ function Axis({ label, color, dir }: (typeof AXES)[number]) {
           tweenCamera(dir);
         }}
       >
-        <spriteMaterial map={tex} transparent depthTest={false} toneMapped={false} />
-      </sprite>
+        <sphereGeometry args={[11, 8, 6]} />
+        <meshBasicMaterial visible={false} />
+      </mesh>
+      {hover && (
+        <Html position={tip.toArray()} style={{ pointerEvents: "none", transform: "translate(10px, -26px)" }}>
+          <div className="dim-label">{label}-Achse · Ansicht entlang {label}</div>
+        </Html>
+      )}
     </group>
   );
 }
 
-/** Small X/Y/Z axis tripod that turns with the camera; click a letter to look along that axis. */
+/** Small axis tripod that turns with the camera; click an axis tip to look along that axis. */
 export function AxisIndicator() {
   return (
     <group>

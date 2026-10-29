@@ -119,7 +119,22 @@ export interface TextFeature extends FeatureBase {
   params: TextFeatureParams;
 }
 
-export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature | TextFeature;
+/** An imported mesh/solid (STL, 3MF or STEP). Its data lives in `ModelDocument.assets`. */
+export interface ImportFeature extends FeatureBase {
+  type: "import";
+  assetId: string;
+  /** Uniform scale (imports can't be stretched parametrically). */
+  scale: number;
+}
+
+export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature | TextFeature | ImportFeature;
+
+/** Embedded import data (base64): STL for meshes (3MF is converted), STEP for exact solids. */
+export interface Asset {
+  format: "stl" | "step";
+  name: string;
+  data: string;
+}
 export type Feature = SolidFeature | SketchFeature;
 
 export interface PrinterProfile {
@@ -135,6 +150,8 @@ export interface ModelDocument {
   units: "mm";
   printer: PrinterProfile;
   features: Feature[];
+  /** Imported file data, referenced by import features. */
+  assets?: Record<string, Asset>;
 }
 
 export const DEFAULT_PRINTER: PrinterProfile = {
@@ -213,6 +230,7 @@ export function featureTypeLabel(f: Feature): string {
   if (f.type === "sketch") return "Skizze";
   if (f.type === "extrude") return "Extrusion";
   if (f.type === "text") return "Text";
+  if (f.type === "import") return "Import";
   return PRIMITIVE_LABELS[f.type];
 }
 
@@ -407,6 +425,7 @@ export function geometryKey(f: Feature): string {
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "sketch") return { ...base, s: x.shapes };
     if (x.type === "extrude") return { ...base, pr: x.profile, h: x.height };
+    if (x.type === "import") return { ...base, a: x.assetId, s: x.scale };
     return { ...base, p: x.params };
   };
   return JSON.stringify(strip(f, true));

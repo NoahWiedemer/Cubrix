@@ -16,7 +16,7 @@ import { runTurn, type Block, type Message, type Provider, type ToolSpec, type T
 export const toolName = (id: string) => id.replace(/\./g, "__");
 export const commandId = (name: string) => name.replace(/__/g, ".");
 
-const HIDDEN = new Set(["file.new", "file.open", "history.redoAlt", "selection.clear", "app.settings"]);
+const HIDDEN = new Set(["file.new", "file.open", "file.import", "history.redoAlt", "selection.clear", "app.settings"]);
 
 export function buildTools(): ToolSpec[] {
   const commands = listCommands()
@@ -53,7 +53,7 @@ export function modelSnapshot() {
     objects: doc.features.map((f) => {
       const b = isSolid(f) && entries[geometryKey(f)] ? worldBox(f, entries) : null;
       const { id, name, type, visible, transform } = f;
-      const extra = f.type === "boolean" ? { op: f.op, children: f.children.map((c) => c.name) } : f.type === "sketch" ? { shapes: f.shapes } : f.type === "extrude" ? { height: f.height } : { params: f.params };
+      const extra = f.type === "boolean" ? { op: f.op, children: f.children.map((c) => c.name) } : f.type === "sketch" ? { shapes: f.shapes } : f.type === "extrude" ? { height: f.height } : f.type === "import" ? { scale: f.scale } : { params: f.params };
       return {
         id, name, type, visible, transform, fillet: f.fillet, chamfer: f.chamfer, ...extra,
         bounds: b ? { min: [r(b.min.x), r(b.min.y), r(b.min.z)], max: [r(b.max.x), r(b.max.y), r(b.max.z)] } : undefined,

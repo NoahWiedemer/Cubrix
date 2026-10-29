@@ -200,6 +200,9 @@ function buildExtrusion(profile: SketchShape[], height: number, corner = 0): Sha
   return region.sketchOnPlane("XY").extrude(height) as Shape3D;
 }
 
+/** Parsed imports (STL/STEP), normalised to stand centred on z = 0; filled by the worker. */
+export const importedShapes = new Map<string, Shape3D>();
+
 export function buildLocal(f: Feature): Shape3D {
   if (f.type === "sketch") throw new Error("Skizzen sind keine Körper.");
   let shape: Shape3D;
@@ -215,6 +218,10 @@ export function buildLocal(f: Feature): Shape3D {
       const b = tools.reduce((acc, t) => acc.fuse(t));
       shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
     }
+  } else if (f.type === "import") {
+    const base = importedShapes.get(f.assetId);
+    if (!base) throw new Error("Importierte Datei fehlt im Projekt.");
+    shape = f.scale !== 1 ? base.clone().scale(f.scale, [0, 0, 0]) : base.clone();
   } else if (f.type === "extrude") {
     shape = buildExtrusion(f.profile, f.height, f.corner ?? 0);
   } else if (f.type === "text") {

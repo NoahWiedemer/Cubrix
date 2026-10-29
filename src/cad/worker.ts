@@ -4,10 +4,11 @@
 
 import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
-import { makeCompound, setOC, type Face, type Shape3D } from "replicad";
-import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
+import { importSTEP, makeCompound, setOC, type Face, type Shape3D } from "replicad";
+import { buildLocal, buildPlaced, EdgeTreatmentError, importedShapes } from "./build";
 import { zipSync, strToU8 } from "fflate";
 import { loadFonts, registerFont } from "./text";
+import { stlToSolid } from "./stl";
 import inter400 from "@fontsource/inter/files/inter-latin-400-normal.woff?url";
 import inter700 from "@fontsource/inter/files/inter-latin-700-normal.woff?url";
 import slab400 from "@fontsource/roboto-slab/files/roboto-slab-latin-400-normal.woff?url";
@@ -191,6 +192,18 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   try {
     await init();
     if (req.kind === "init") return post({ id: req.id, ok: true, kind: "init" });
+
+    if (req.kind === "asset") {
+      if (!importedShapes.has(req.assetId)) {
+        const blob = new Blob([req.data]);
+        const raw = (req.format === "step" ? await importSTEP(blob) : stlToSolid(req.data)) as Shape3D;
+        // Stand it on the bed, centred like every other body.
+        const b = raw.boundingBox;
+        const [min, max] = b.bounds;
+        importedShapes.set(req.assetId, raw.translate(-(min[0] + max[0]) / 2, -(min[1] + max[1]) / 2, -min[2]));
+      }
+      return post({ id: req.id, ok: true, kind: "asset" });
+    }
 
     if (req.kind === "font") {
       await registerFont(req.name, req.data);

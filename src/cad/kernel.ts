@@ -5,6 +5,7 @@ import { geometryKey, type Feature } from "../core/document";
 import type { ExportFormat, MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 import { fontKey, isBundledFont } from "./fontKeys";
 import { logError } from "../core/errorLog";
+import { assetById, base64ToBuffer } from "./assets";
 
 type Pending = { resolve: (r: WorkerResponse) => void };
 type Distribute<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -106,8 +107,31 @@ export function ensureFont(font: string, bold: boolean): Promise<boolean> {
   return p;
 }
 
-/** Loads the system fonts a feature uses; unavailable ones are swapped for Inter. */
+const assetLoads = new Map<string, Promise<void>>();
+
+/** Sends an imported file to the worker once (parsing a big STL takes a moment). */
+function ensureAsset(id: string): Promise<void> {
+  let p = assetLoads.get(id);
+  if (!p) {
+    const a = assetById(id);
+    if (!a) return Promise.reject(new Error("Importierte Datei fehlt im Projekt."));
+    p = request({ kind: "asset", assetId: id, format: a.format, data: base64ToBuffer(a.data) }).then((r) => {
+      if (!r.ok) {
+        assetLoads.delete(id);
+        throw new Error(r.error);
+      }
+    });
+    assetLoads.set(id, p);
+  }
+  return p;
+}
+
+/** Loads what a feature needs in the worker first: system fonts (unavailable → Inter) and imports. */
 async function withFonts(f: Feature): Promise<Feature> {
+  if (f.type === "import") {
+    await ensureAsset(f.assetId);
+    return f;
+  }
   if (f.type === "text") return (await ensureFont(f.params.font, f.params.bold)) ? f : { ...f, params: { ...f.params, font: "inter" } };
   if (f.type === "boolean") return { ...f, children: (await Promise.all(f.children.map(withFonts))) as [Feature, ...Feature[]] };
   return f;

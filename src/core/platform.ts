@@ -55,6 +55,27 @@ export async function openTextFile(filter: FileFilter): Promise<{ path: string; 
   return { path, text: await readTextFile(path) };
 }
 
+/** Opens a binary file (import). */
+export async function openBinaryFile(filter: FileFilter): Promise<{ path: string; data: Uint8Array } | null> {
+  if (!isTauri) {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = filter.extensions.map((e) => "." + e).join(",");
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        resolve(file ? { path: file.name, data: new Uint8Array(await file.arrayBuffer()) } : null);
+      };
+      input.click();
+    });
+  }
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const { readFile } = await import("@tauri-apps/plugin-fs");
+  const path = await open({ multiple: false, directory: false, filters: [filter] });
+  if (!path || Array.isArray(path)) return null;
+  return { path, data: await readFile(path) };
+}
+
 export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }

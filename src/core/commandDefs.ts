@@ -16,6 +16,7 @@ import {
   type BooleanFeature,
   type BooleanOp,
   type TextFeature,
+  type ImportFeature,
   type TextFeatureParams,
   type Feature,
   type ModelDocument,
@@ -52,7 +53,9 @@ import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { MANUAL, PRINTERS, bestOrientation } from "./printAnalysis";
 import { worldBox } from "./bounds";
-import { baseName, isTauri, openTextFile, saveFile } from "./platform";
+import { baseName, isTauri, openBinaryFile, openTextFile, saveFile } from "./platform";
+import { svgToShapes, threeMfObjects } from "./importFormats";
+import { bufferToBase64, registerAsset } from "../cad/assets";
 import type { IconName } from "../ui/icons";
 
 const hasSelection = (ctx: CommandContext) => ctx.selection.length > 0;
@@ -513,7 +516,7 @@ defineCommand({
   },
   apply(doc, p) {
     const f = findFeature(doc, p.id);
-    if (!f || f.type === "boolean" || f.type === "sketch") throw new Error("Nur Grundkörper haben Maße");
+    if (!f || f.type === "boolean" || f.type === "sketch" || f.type === "import") throw new Error("Nur Grundkörper haben Maße (Importe: object.scale)");
     const patch = typeof p.params === "string" ? JSON.parse(p.params) : p.params;
     if (f.type === "extrude") {
       const h = Number(patch.height);
@@ -1785,6 +1788,65 @@ defineCommand({
   params: {},
   perform() {
     useSettingsDialog.setState({ open: true });
+  },
+});
+
+// ── Import ───────────────────────────────────────────────────────────────────
+
+/** Adds imported parts (STL/STEP data) as import features standing on a free spot of the bed. */
+function importParts(parts: { name: string; format: "stl" | "step"; data: Uint8Array }[]) {
+  const app = useApp.getState();
+  let doc = app.nodes[app.currentId].doc;
+  const ids: string[] = [];
+  const assets = { ...(doc.assets ?? {}) };
+  const features = [...doc.features];
+  for (const part of parts) {
+    const assetId = newId();
+    assets[assetId] = { format: part.format, name: part.name, data: bufferToBase64(part.data) };
+    registerAsset(assetId, assets[assetId]);
+    const f: ImportFeature = {
+      id: newId(),
+      type: "import",
+      name: uniqueName({ ...doc, features }, part.name.replace(/\.[^.]+$/, "").slice(0, 40) || "Import"),
+      visible: true,
+      assetId,
+      scale: 1,
+      ...newColor(),
+      transform: { position: freeSpot({ ...doc, features }, 40), rotation: [0, 0, 0] },
+    };
+    features.push(f);
+    ids.push(f.id);
+  }
+  doc = { ...doc, assets, features };
+  app.commit({ commandId: "file.import", label: parts.length === 1 ? `${parts[0].name} importieren` : `${parts.length} Teile importieren`, icon: "open", source: "user", doc, selection: ids });
+}
+
+defineCommand({
+  id: "file.import",
+  kind: "action",
+  label: "Importieren …",
+  description: "Importiert STL, 3MF oder STEP als Körper bzw. SVG als Skizze (mit echten Kurven).",
+  icon: "open",
+  shortcut: "shift+mod+i",
+  params: {},
+  async perform() {
+    const file = await openBinaryFile({ name: "3D-Modell oder SVG", extensions: ["stl", "3mf", "step", "stp", "svg"] });
+    if (!file) return;
+    const name = baseName(file.path);
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (ext === "svg") {
+      const shapes = svgToShapes(new TextDecoder().decode(file.data));
+      const app = useApp.getState();
+      const doc = app.nodes[app.currentId].doc;
+      const sketch: SketchFeature = { id: newId(), type: "sketch", name: uniqueName(doc, name.replace(/\.svg$/i, "").slice(0, 40) || "SVG"), visible: true, ...newColor(), transform: { position: [0, 0, 0], rotation: [0, 0, 0] }, shapes };
+      app.commit({ commandId: "file.import", label: `${name} importieren`, icon: "open", source: "user", doc: { ...doc, features: [...doc.features, sketch] }, selection: [sketch.id] });
+      app.toast("success", `${shapes.length} Formen aus ${name} – im Inspektor eine Höhe geben, um sie in 3D zu ziehen.`);
+      return;
+    }
+    if (ext === "3mf") return importParts(threeMfObjects(file.data).map((o) => ({ name: o.name, format: "stl" as const, data: o.stl })));
+    if (ext === "step" || ext === "stp") return importParts([{ name, format: "step", data: file.data }]);
+    if (ext === "stl") return importParts([{ name, format: "stl", data: file.data }]);
+    throw new Error("Dieses Dateiformat wird nicht unterstützt (STL, 3MF, STEP, SVG).");
   },
 });
 

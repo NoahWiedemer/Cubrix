@@ -1387,3 +1387,4 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .align-row button:disabled { opacity: 0.4; }
 .align-axis { font-size: 12px; font-weight: 650; color: var(--text-3); display: grid; place-items: center; }
 .align-axis.x { color: #4fc7b6; } .align-axis.y { color: #5fd894; } .align-axis.z { color: #b2df5c; }
+.muted-note { font-size: 11.5px; font-weight: 400; color: var(--text-3); }

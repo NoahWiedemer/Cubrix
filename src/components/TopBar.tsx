@@ -50,7 +50,7 @@ export function TopBar() {
           </button>
           {fileMenu.open && (
             <Menu style={{ top: 36, left: 0 }}>
-              {["file.new", "file.open", "file.save", "file.saveAs"].map((id) => (
+              {["file.new", "file.open", "file.import", "file.save", "file.saveAs"].map((id) => (
                 <CommandItem key={id} id={id} onDone={() => fileMenu.setOpen(false)} />
               ))}
               <MenuSeparator />

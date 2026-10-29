@@ -9,6 +9,7 @@ import { openContextMenu } from "./ContextMenu";
 
 export function featureIcon(f: Feature): IconName {
   if (isExtraType(f.type)) return SHAPE_DEFAULTS[f.type].icon;
+  if (f.type === "import") return "open";
   return f.type === "boolean" ? f.op : f.type === "sketch" ? "sketch" : f.type === "extrude" ? "extrude" : f.type;
 }
 

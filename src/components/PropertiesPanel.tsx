@@ -195,6 +195,7 @@ function Dimensions({ f }: { f: Feature }) {
 
   if (f.type === "text") return null;
   if (f.type === "sketch" || f.type === "extrude") return <ProfileSize f={f} />;
+  if (f.type === "import") return <ImportSize f={f} />;
   const fields = PARAM_FIELDS[f.type];
   const params = f.params as Record<string, number>;
   const set = (key: string, v: number) => {
@@ -226,6 +227,26 @@ function Dimensions({ f }: { f: Feature }) {
       <div className={`field-caption ${cols(fields.length)}`} style={fields.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
         {fields.map(({ key, label }) => <span key={key}>{label}</span>)}
       </div>
+    </div>
+  );
+}
+
+/** Imports scale uniformly: the size fields scale the whole part proportionally. */
+function ImportSize({ f }: { f: Feature & { type: "import" } }) {
+  const entries = useMeshes((s) => s.entries);
+  const b = worldBox(f, entries);
+  const size = b ? [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z] : [0, 0, 0];
+  return (
+    <div className="group">
+      <div className="group-label"><span><Icon name="measure" size={15} />Maße</span><span className="muted-note">proportional</span></div>
+      <div className="field-row">
+        {size.map((v, i) => (
+          <NumberField key={i} label={"BTH"[i]} value={Math.round(v * 100) / 100} min={0.1}
+            onCommit={(n) => v > 0 && void execute("object.scale", { id: f.id, factor: [n / v, n / v, n / v] })}
+            onPercent={(k) => void execute("object.scale", { id: f.id, factor: [k, k, k] })} />
+        ))}
+      </div>
+      <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
     </div>
   );
 }
