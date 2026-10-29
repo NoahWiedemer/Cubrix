@@ -29,6 +29,8 @@ interface FeatureBase {
   transform: Transform;
   /** Optional edge rounding radius in mm (0 = sharp). */
   fillet?: number;
+  /** Optional edge chamfer distance in mm (0 = sharp). Exclusive with fillet. */
+  chamfer?: number;
 }
 
 export type PrimitiveFeature = {
@@ -144,7 +146,7 @@ export function cloneFeature(f: Feature): Feature {
 /** Geometry-relevant part of a feature, ignoring its own placement. Used as mesh cache key. */
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
-    const base = { type: x.type, fillet: x.fillet ?? 0, t: top ? undefined : x.transform };
+    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => strip(c, false)) };
     return { ...base, p: x.params };

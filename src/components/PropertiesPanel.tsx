@@ -7,6 +7,7 @@ import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { Icon } from "../ui/icons";
 import { featureIcon } from "./ObjectTree";
+import { useLayout } from "../ui/layout";
 
 const show = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
 const parse = (s: string) => Number(s.trim().replace(",", "."));
@@ -212,12 +213,16 @@ function SingleObject({ f }: { f: Feature }) {
       <Dimensions f={f} />
       <TransformFields f={f} kind="position" />
       <TransformFields f={f} kind="rotation" />
-      <div className="group">
-        <div className="group-label">Kanten abrunden</div>
-        <div className="field-row one">
-          <NumberField label="R" value={f.fillet ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.fillet", { id: f.id, radius: v })} />
+      {f.type !== "sphere" && f.type !== "torus" && (
+        <div className="group">
+          <div className="group-label">Kanten</div>
+          <div className="field-row two">
+            <NumberField value={f.fillet ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.fillet", { id: f.id, radius: v })} />
+            <NumberField value={f.chamfer ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.chamfer", { id: f.id, radius: v })} />
+          </div>
+          <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
         </div>
-      </div>
+      )}
       <div className="props-actions">
         <button className="btn-ghost" onClick={() => execute("object.duplicate")}><Icon name="duplicate" size={14} />Duplizieren</button>
         <button className="btn-ghost" onClick={() => execute("object.dropToBed")}><Icon name="dropToBed" size={14} />Aufs Bett</button>
@@ -234,9 +239,7 @@ export function PropertiesPanel() {
   const selected = selection.map((id) => doc.features.find((f) => f.id === id)).filter(Boolean) as Feature[];
 
   return (
-    <section className="panel props">
-      <div className="section-head">Eigenschaften</div>
-      <div className="scroll" style={{ flex: 1 }}>
+    <div className="scroll props-body">
         {selected.length === 1 && <SingleObject key={selected[0].id} f={selected[0]} />}
         {selected.length > 1 && (
           <>
@@ -264,14 +267,29 @@ export function PropertiesPanel() {
             )}
           </>
         )}
-        {selected.length === 0 && (
-          <>
-            <div className="props-empty">
-              Wähle ein Objekt aus, um Maße, Position und Drehung zu ändern. Mit <span className="kbd">⇧</span> + Klick wählst du mehrere aus.
-            </div>
-          </>
-        )}
-      </div>
-    </section>
+    </div>
+  );
+}
+
+/**
+ * Floats over the viewport's right edge so selecting never resizes the canvas.
+ * Stays mounted briefly after deselecting to fade out.
+ */
+export function PropertiesOverlay() {
+  const hasSelection = useApp((s) => s.selection.length > 0);
+  const enabled = useLayout((s) => s.panels.props.open);
+  const [shown, setShown] = useState(hasSelection);
+  useEffect(() => {
+    if (hasSelection) setShown(true);
+    else {
+      const t = setTimeout(() => setShown(false), 160);
+      return () => clearTimeout(t);
+    }
+  }, [hasSelection]);
+  if (!enabled || !shown) return null;
+  return (
+    <aside className={`props-overlay ${hasSelection ? "in" : "out"}`} onPointerDown={(e) => e.stopPropagation()}>
+      <PropertiesPanel />
+    </aside>
   );
 }

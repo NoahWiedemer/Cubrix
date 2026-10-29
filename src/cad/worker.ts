@@ -4,17 +4,9 @@
 
 import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
-import {
-  drawCircle,
-  draw,
-  makeBaseBox,
-  makeCylinder,
-  makeSphere,
-  setOC,
-  type Shape3D,
-} from "replicad";
+import { setOC, type Shape3D } from "replicad";
+import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
 import { zipSync, strToU8 } from "fflate";
-import type { Feature } from "../core/document";
 import type { MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -30,78 +22,6 @@ function init() {
     })();
   }
   return ready;
-}
-
-function buildPrimitive(f: Feature): Shape3D {
-  switch (f.type) {
-    case "box": {
-      const { width, depth, height } = f.params;
-      return makeBaseBox(width, depth, height);
-    }
-    case "cylinder": {
-      const { diameter, height } = f.params;
-      return makeCylinder(diameter / 2, height);
-    }
-    case "sphere": {
-      const r = f.params.diameter / 2;
-      return makeSphere(r).translateZ(r);
-    }
-    case "cone": {
-      const { bottomDiameter, topDiameter, height } = f.params;
-      const r1 = Math.max(bottomDiameter / 2, 0);
-      const r2 = Math.max(topDiameter / 2, 0);
-      // Revolve the profile (in the XZ plane) around the Z axis.
-      const pen = draw([0, 0]).lineTo([r1, 0]);
-      const profile = (r2 > 0.001 ? pen.lineTo([r2, height]) : pen).lineTo([0, height]).close();
-      return profile.sketchOnPlane("XZ").revolve([0, 0, 1]) as Shape3D;
-    }
-    case "torus": {
-      const { diameter, thickness } = f.params;
-      const minor = thickness / 2;
-      const major = Math.max(diameter / 2 - minor, minor + 0.01);
-      return drawCircle(minor)
-        .translate(major, minor)
-        .sketchOnPlane("XZ")
-        .revolve([0, 0, 1]) as Shape3D;
-    }
-    default:
-      throw new Error("Unbekannter Typ");
-  }
-}
-
-const warnings: string[] = [];
-
-function buildLocal(f: Feature): Shape3D {
-  let shape: Shape3D;
-  if (f.type === "boolean") {
-    const [a, b] = f.children.map((c) => buildPlaced(c));
-    shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
-  } else {
-    shape = buildPrimitive(f);
-  }
-  if (f.fillet && f.fillet > 0) {
-    try {
-      shape = shape.fillet(f.fillet);
-    } catch {
-      warnings.push("Abrundung zu groß für diese Form – ohne Abrundung angezeigt.");
-    }
-  }
-  return shape;
-}
-
-function place(shape: Shape3D, f: Feature): Shape3D {
-  const [rx, ry, rz] = f.transform.rotation;
-  let s = shape;
-  if (rz) s = s.rotate(rz, [0, 0, 0], [0, 0, 1]);
-  if (ry) s = s.rotate(ry, [0, 0, 0], [0, 1, 0]);
-  if (rx) s = s.rotate(rx, [0, 0, 0], [1, 0, 0]);
-  const [x, y, z] = f.transform.position;
-  if (x || y || z) s = s.translate(x, y, z);
-  return s;
-}
-
-function buildPlaced(f: Feature): Shape3D {
-  return place(buildLocal(f), f);
 }
 
 // Small LRU of local shapes keyed by geometry, so moving objects never re-meshes.
@@ -191,7 +111,6 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     if (req.kind === "init") return post({ id: req.id, ok: true, kind: "init" });
 
     if (req.kind === "mesh") {
-      warnings.length = 0;
       const key = JSON.stringify(req.feature);
       let mesh = meshCache.get(key);
       if (!mesh) {
@@ -209,7 +128,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         edges: mesh.edges.slice(),
       };
       return post(
-        { id: req.id, ok: true, kind: "mesh", mesh: out, warning: warnings[0] },
+        { id: req.id, ok: true, kind: "mesh", mesh: out },
         [out.vertices.buffer, out.normals.buffer, out.indices.buffer, out.edges.buffer],
       );
     }
@@ -222,6 +141,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       return post({ id: req.id, ok: true, kind: "export", data }, [data]);
     }
   } catch (e) {
-    post({ id: req.id, ok: false, error: e instanceof Error ? e.message : String(e) });
+    const error = e instanceof EdgeTreatmentError || e instanceof Error ? e.message : `CAD-Fehler (${String(e)})`;
+    post({ id: req.id, ok: false, error, edgeTreatment: e instanceof EdgeTreatmentError });
   }
 };

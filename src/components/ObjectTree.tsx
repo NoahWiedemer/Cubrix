@@ -76,17 +76,10 @@ function Row({ f }: { f: Feature }) {
 export function ObjectTree() {
   const doc = useDoc();
   return (
-    <section className="panel tree">
-      <div className="section-head">
-        Objekte <span className="count">{doc.features.length || ""}</span>
-      </div>
-      <div className="scroll tree-list">
-        {doc.features.length === 0 ? (
-          <div className="empty-tree">Noch keine Objekte. Füge über <b>Grundkörper</b> links einen Quader, Zylinder oder eine Kugel hinzu.</div>
-        ) : (
-          doc.features.map((f) => <Row key={f.id} f={f} />)
-        )}
-      </div>
-    </section>
+    <div className="scroll tree-list">
+      {doc.features.map((f) => (
+        <Row key={f.id} f={f} />
+      ))}
+    </div>
   );
 }

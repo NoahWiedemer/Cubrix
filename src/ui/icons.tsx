@@ -24,6 +24,7 @@ import {
   Shapes,
   Sparkles,
   SquareDashed,
+  Slice,
   SquaresIntersect,
   SquaresSubtract,
   SquaresUnite,
@@ -35,6 +36,7 @@ import {
   ArrowDownToLine,
   Crosshair,
   Layers,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +56,7 @@ export const ICONS = {
   rotate: Rotate3d,
   resize: Scaling,
   fillet: SquareDashed,
+  chamfer: Slice,
   union: SquaresUnite,
   subtract: SquaresSubtract,
   intersect: SquaresIntersect,
@@ -73,6 +76,8 @@ export const ICONS = {
   redo: Redo2,
   measure: Ruler,
   ai: Sparkles,
+  layers: Layers,
+  history: History,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

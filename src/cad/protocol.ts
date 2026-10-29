@@ -14,6 +14,6 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { id: number; ok: true; kind: "init" }
-  | { id: number; ok: true; kind: "mesh"; mesh: MeshData; warning?: string }
+  | { id: number; ok: true; kind: "mesh"; mesh: MeshData }
   | { id: number; ok: true; kind: "export"; data: ArrayBuffer }
-  | { id: number; ok: false; error: string };
+  | { id: number; ok: false; error: string; edgeTreatment?: boolean };

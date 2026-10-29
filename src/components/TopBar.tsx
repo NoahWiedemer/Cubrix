@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronDown, Undo2, Redo2 } from "lucide-react";
+import { ChevronDown, Undo2, Redo2, PanelsTopLeft, Check } from "lucide-react";
+import { PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 import { execute, formatShortcut } from "../core/commands";
 import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
@@ -21,6 +22,8 @@ export function TopBar() {
   const [editing, setEditing] = useState(false);
   const fileMenu = usePopover();
   const exportMenu = usePopover();
+  const viewMenu = usePopover();
+  const panels = useLayout((s) => s.panels);
 
   const commitName = (value: string) => {
     setEditing(false);
@@ -88,6 +91,34 @@ export function TopBar() {
         <button className="icon-btn" disabled={!canRedo} onClick={() => execute("history.redo")} data-tip={`Wiederholen  ${formatShortcut("shift+mod+z")}`} data-tip-pos="bottom">
           <Redo2 size={16} strokeWidth={1.75} />
         </button>
+        <div ref={viewMenu.ref} style={{ position: "relative" }}>
+          <button className={`icon-btn ${viewMenu.open ? "active" : ""}`} onClick={() => viewMenu.setOpen(!viewMenu.open)} data-tip={viewMenu.open ? undefined : "Ansicht"} data-tip-pos="bottom">
+            <PanelsTopLeft size={16} strokeWidth={1.75} />
+          </button>
+          {viewMenu.open && (
+            <div className="popover" style={{ top: 38, right: 0 }}>
+              <div className="menu-title">Ansicht</div>
+              {(Object.keys(PANEL_TITLES) as PanelId[]).map((id) => (
+                <button
+                  key={id}
+                  className="menu-item"
+                  onClick={() => {
+                    const p = panels[id];
+                    useLayout.getState().setPanel(id, p.open ? { open: false } : { open: true, collapsed: false });
+                  }}
+                >
+                  <span className="check">{panels[id].open && <Check size={14} />}</span>
+                  {PANEL_TITLES[id]}
+                </button>
+              ))}
+              <div className="menu-sep" />
+              <button className="menu-item" onClick={() => { useLayout.getState().reset(); viewMenu.setOpen(false); }}>
+                <span className="check" />
+                Layout zurücksetzen
+              </button>
+            </div>
+          )}
+        </div>
         <div ref={exportMenu.ref} style={{ position: "relative" }}>
           <button className="btn-primary" disabled={!hasVisible} onClick={() => exportMenu.setOpen(!exportMenu.open)}>
             Exportieren

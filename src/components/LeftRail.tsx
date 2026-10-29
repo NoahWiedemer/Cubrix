@@ -2,6 +2,7 @@ import { execute } from "../core/commands";
 import { useApp } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { usePopover } from "../ui/usePopover";
+import { PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -10,6 +11,30 @@ export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.cone", icon: "cone", label: "Kegel" },
   { id: "primitive.torus", icon: "torus", label: "Torus" },
 ];
+
+const PANEL_ICONS: Record<PanelId, IconName> = { tree: "layers", history: "history", props: "resize" };
+
+/** Closed panels stay reachable: one icon each at the bottom of the rail. */
+function ClosedPanels() {
+  const panels = useLayout((s) => s.panels);
+  const closed = (Object.keys(panels) as PanelId[]).filter((id) => !panels[id].open);
+  if (!closed.length) return null;
+  return (
+    <div className="rail-bottom">
+      {closed.map((id) => (
+        <button
+          key={id}
+          className="rail-btn"
+          data-tip={`${PANEL_TITLES[id]} öffnen`}
+          data-tip-pos="right"
+          onClick={() => useLayout.getState().setPanel(id, { open: true, collapsed: false })}
+        >
+          <Icon name={PANEL_ICONS[id]} size={18} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function LeftRail() {
   const pop = usePopover();
@@ -35,6 +60,7 @@ export function LeftRail() {
         <Icon name="shapes" size={18} />
       </button>
 
+      <ClosedPanels />
       {pop.open && (
         <div className="popover">
           <div className="menu-title">Grundkörper hinzufügen</div>

@@ -211,33 +211,60 @@ defineCommand({
   },
 });
 
-defineCommand({
-  id: "object.fillet",
-  kind: "document",
-  label: "Abrunden",
-  description: "Rundet alle Kanten eines Objekts mit dem angegebenen Radius ab (0 entfernt die Abrundung).",
-  icon: "fillet",
-  params: {
-    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
-    radius: { type: "number", unit: "mm", min: 0, optional: true, description: "Radius; ohne Angabe ein passender Vorschlag" },
-  },
-  isEnabled: hasOne,
-  apply(doc, p, ctx) {
-    const f = findFeature(doc, p.id ?? ctx.selection[0]);
-    if (!f) throw new Error("Objekt nicht gefunden");
-    let radius: number = p.radius;
-    if (radius === undefined) {
-      const b = worldBox(f, useMeshes.getState().entries);
-      const smallest = b ? Math.min(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) : 20;
-      radius = f.fillet ? 0 : Math.max(0.5, Math.round(smallest * 0.1 * 2) / 2);
-    }
-    if ((f.fillet ?? 0) === radius) return null;
-    return {
-      doc: updateFeature(doc, f.id, (x) => ({ ...x, fillet: radius })),
-      label: radius ? `${f.name} abrunden (${radius} mm)` : `${f.name}: Abrundung entfernen`,
-    };
-  },
-});
+function defineEdgeCommand(kind: "fillet" | "chamfer") {
+  const fillet = kind === "fillet";
+  defineCommand({
+    id: `object.${kind}`,
+    kind: "document",
+    label: fillet ? "Abrunden" : "Fasen",
+    description: fillet
+      ? "Rundet alle Kanten eines Objekts mit dem angegebenen Radius ab (0 entfernt die Abrundung)."
+      : "Schrägt alle Kanten eines Objekts mit dem angegebenen Abstand ab (0 entfernt die Fase).",
+    icon: fillet ? "fillet" : "chamfer",
+    params: {
+      id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+      radius: { type: "number", unit: "mm", min: 0, optional: true, description: "Größe; ohne Angabe ein passender Vorschlag" },
+    },
+    isEnabled: hasOne,
+    apply(doc, p, ctx) {
+      const f = findFeature(doc, p.id ?? ctx.selection[0]);
+      if (!f) throw new Error("Objekt nicht gefunden");
+      if (f.type === "sphere" || f.type === "torus")
+        throw new Error(`${PRIMITIVE_LABELS[f.type]} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
+      const current = (fillet ? f.fillet : f.chamfer) ?? 0;
+      let size: number = p.radius;
+      if (size === undefined) {
+        const b = worldBox(f, useMeshes.getState().entries);
+        const smallest = b ? Math.min(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) : 20;
+        size = current ? 0 : Math.max(0.5, Math.round(smallest * 0.1 * 2) / 2);
+      }
+      const limit = maxEdgeSize(f);
+      if (size > 0 && limit !== null && size >= limit)
+        throw new Error(`${size.toLocaleString("de-DE")} mm ist zu groß für ${f.name}. Höchstens etwa ${(Math.floor((limit - 0.05) * 10) / 10).toLocaleString("de-DE")} mm.`);
+      if (current === size && !(fillet ? f.chamfer : f.fillet)) return null;
+      const verb = fillet ? "abrunden" : "fasen";
+      return {
+        doc: updateFeature(doc, f.id, (x) => ({ ...x, fillet: fillet ? size : 0, chamfer: fillet ? 0 : size })),
+        label: size ? `${f.name} ${verb} (${size.toLocaleString("de-DE")} mm)` : `${f.name}: ${fillet ? "Abrundung" : "Fase"} entfernen`,
+      };
+    },
+  });
+}
+
+/** Upper bound for fillet/chamfer size on simple primitives (null = let the kernel decide). */
+function maxEdgeSize(f: Feature): number | null {
+  switch (f.type) {
+    case "box":
+      return Math.min(f.params.width, f.params.depth, f.params.height) / 2;
+    case "cylinder":
+      return Math.min(f.params.diameter / 2, f.params.height / 2);
+    default:
+      return null;
+  }
+}
+
+defineEdgeCommand("fillet");
+defineEdgeCommand("chamfer");
 
 defineCommand({
   id: "object.rename",

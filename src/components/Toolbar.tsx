@@ -31,7 +31,12 @@ export function Toolbar() {
           PRIMITIVES.map((p) => <CommandTool key={p.id} id={p.id} icon={p.icon} label={p.label} />)}
         {mode === "single" && (
           <>
-            <CommandTool id="object.fillet" />
+            {single && single.type !== "sphere" && single.type !== "torus" && (
+              <>
+                <CommandTool id="object.fillet" />
+                <CommandTool id="object.chamfer" />
+              </>
+            )}
             {single?.type === "boolean" && <CommandTool id="boolean.split" />}
             <div className="tool-sep" />
             <CommandTool id="object.duplicate" />

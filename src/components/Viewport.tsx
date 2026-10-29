@@ -17,10 +17,11 @@ import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { type Feature, type Transform, type Vec3 } from "../core/document";
-import { getGeometry, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
+import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
 import { transformMatrix, worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { PropertiesOverlay } from "./PropertiesPanel";
 import { PRIMITIVES } from "./LeftRail";
 import { Icon } from "../ui/icons";
 import { usePrintCheck } from "../core/printCheck";
@@ -43,12 +44,16 @@ function FeatureObject({ f }: { f: Feature }) {
   useEffect(() => {
     let alive = true;
     getGeometry(f)
-      .then((e) => {
+      .then((e) => alive && setEntry(e))
+      .catch((err) => {
         if (!alive) return;
-        setEntry(e);
-        if (e.warning) useApp.getState().toast("info", e.warning);
-      })
-      .catch((err) => alive && useApp.getState().toast("error", `${f.name}: ${err.message}`));
+        const app = useApp.getState();
+        app.toast("error", err instanceof KernelError && err.edgeTreatment ? err.message : `${f.name}: ${err.message}`);
+        // A rejected rounding/chamfer step is taken back so the model never shows a value it can't build.
+        const node = app.nodes[app.currentId];
+        if (err instanceof KernelError && err.edgeTreatment && node.parentId && /^object\.(fillet|chamfer)$/.test(node.commandId))
+          app.jumpTo(node.parentId);
+      });
     return () => {
       alive = false;
     };
@@ -290,7 +295,7 @@ export function Viewport() {
         </group>
         <OrbitControls makeDefault enableDamping dampingFactor={0.12} target={[0, 12, 0]} minDistance={20} maxDistance={1500} />
         <SelectionOutline />
-        <GizmoHelper alignment="top-right" margin={[62, 62]} renderPriority={2}>
+        <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
           <AxisIndicator />
         </GizmoHelper>
       </Canvas>
@@ -336,6 +341,7 @@ export function Viewport() {
       )}
 
       {workspace === "model" && <Toolbar />}
+      {workspace === "model" && <PropertiesOverlay />}
 
       {workspace !== "model" && (
         <div className="soon">

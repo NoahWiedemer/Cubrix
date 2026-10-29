@@ -45,12 +45,17 @@ export function initKernel() {
   );
 }
 
+export class KernelError extends Error {
+  constructor(message: string, readonly edgeTreatment = false) {
+    super(message);
+  }
+}
+
 export interface GeometryEntry {
   geometry: THREE.BufferGeometry;
   edges: THREE.BufferGeometry;
   /** Bounding box in the feature's local frame. */
   box: THREE.Box3;
-  warning?: string;
 }
 
 const cache = new Map<string, Promise<GeometryEntry>>();
@@ -81,9 +86,9 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
       useKernel.setState((s) => ({ busy: s.busy - 1 }));
       if (!r.ok || r.kind !== "mesh") {
         cache.delete(key);
-        throw new Error(r.ok ? "Unerwartete Antwort" : r.error);
+        throw new KernelError(r.ok ? "Unerwartete Antwort" : r.error, !r.ok && !!r.edgeTreatment);
       }
-      const entry = { ...toThree(r.mesh), warning: r.warning };
+      const entry = toThree(r.mesh);
       useMeshes.setState((s) => ({ entries: { ...s.entries, [key]: entry } }));
       return entry;
     });

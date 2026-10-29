@@ -3,10 +3,8 @@ import { installShortcuts } from "./core/commands";
 import { useApp } from "./core/store";
 import { TopBar } from "./components/TopBar";
 import { LeftRail } from "./components/LeftRail";
-import { ObjectTree } from "./components/ObjectTree";
-import { HistoryPanel } from "./components/HistoryPanel";
+import { DockColumn } from "./components/Dock";
 import { Viewport } from "./components/Viewport";
-import { PropertiesPanel } from "./components/PropertiesPanel";
 import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 
@@ -24,14 +22,9 @@ export function App() {
       <TopBar />
       <div className="main">
         <LeftRail />
-        <div className="column">
-          <ObjectTree />
-          <HistoryPanel />
-        </div>
+        <DockColumn side="left" />
         <Viewport />
-        <div className="column">
-          <PropertiesPanel />
-        </div>
+        <DockColumn side="right" />
       </div>
       <StatusBar />
       <Toasts />

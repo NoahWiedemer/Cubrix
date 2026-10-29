@@ -41,11 +41,7 @@ export function HistoryPanel() {
   const onLine = new Set(all.map((n) => n.id));
 
   return (
-    <section className="panel history">
-      <div className="section-head">
-        Verlauf <span className="count">{all.length - 1 > 0 ? `${line.past.length - 1} / ${all.length - 1}` : ""}</span>
-      </div>
-      <div className="scroll history-list" ref={listRef}>
+    <div className="scroll history-list" ref={listRef}>
         {all.map((n) => {
           const isFuture = !line.past.includes(n);
           const branches = n.childIds.filter((c) => !onLine.has(c));
@@ -81,7 +77,6 @@ export function HistoryPanel() {
             </div>
           );
         })}
-      </div>
-    </section>
+    </div>
   );
 }
