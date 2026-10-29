@@ -45,10 +45,21 @@ export interface TurnResult {
   sources?: { url: string; title: string }[];
 }
 
+const DYNAMIC_WEB = /^claude-(opus-5-5|opus-5|opus-4-8|opus-4-7|opus-4-6|sonnet-5-5|sonnet-5|sonnet-4-6|fable-5)$/;
+
 /** Anthropic web search tool: the dynamic-filtering version where the model supports it. */
 export function anthropicWebSearch(model: string) {
-  const dynamic = /^claude-(opus-5-5|opus-5|opus-4-8|opus-4-7|opus-4-6|sonnet-5-5|sonnet-5|sonnet-4-6|fable-5)$/.test(model);
-  return { type: dynamic ? "web_search_20260209" : "web_search_20250305", name: "web_search", max_uses: 3 };
+  return { type: DYNAMIC_WEB.test(model) ? "web_search_20260209" : "web_search_20250305", name: "web_search", max_uses: 3 };
+}
+
+/**
+ * Anthropic web tools: search, plus web fetch (reads a whole page, e.g. a datasheet or a
+ * mechanical drawing found by the search) on models with the current tool versions.
+ */
+export function anthropicWebTools(model: string) {
+  return DYNAMIC_WEB.test(model)
+    ? [anthropicWebSearch(model), { type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 }]
+    : [anthropicWebSearch(model)];
 }
 
 /** Splits SSE text into JSON payloads of `data:` lines (handles chunk boundaries). */
@@ -113,6 +124,10 @@ async function anthropicTurn(
       } else if (b.type === "server_tool_use") {
         blocks[i] = { type: "anthropic_raw", block: { ...b } };
         json[i] = "";
+      } else if (b.type === "web_fetch_tool_result") {
+        blocks[i] = { type: "anthropic_raw", block: { ...b } };
+        const page = (b as { content?: { url?: string; content?: { title?: string } } }).content;
+        if (page?.url) sources.push({ url: page.url, title: page.content?.title ?? page.url });
       } else if (b.type === "web_search_tool_result") {
         blocks[i] = { type: "anthropic_raw", block: { ...b } };
         const results = (b as { content?: { type?: string; url?: string; title?: string }[] }).content;
@@ -162,7 +177,7 @@ async function anthropicTurn(
       model,
       max_tokens: 16000,
       system,
-      tools: webSearch ? [...tools, anthropicWebSearch(model)] : tools,
+      tools: webSearch ? [...tools, ...anthropicWebTools(model)] : tools,
       messages: anthropicMessages(messages, model),
       stream: true,
       // Thinking is adaptive by default on current models; depth is set via effort.
