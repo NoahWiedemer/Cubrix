@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
-import { clampColumnWidth, column, resizeColumn } from "../ui/layoutModel";
+import { clampColumnWidth, column, resizeColumn, slotAt } from "../ui/layoutModel";
 import { ObjectTree } from "./ObjectTree";
 import { HistoryPanel } from "./HistoryPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -32,55 +32,94 @@ function PanelMeta({ id }: { id: PanelId }) {
   return null;
 }
 
-/** Drag payload helpers (HTML5 drag and drop between and within sidebars). */
-const startDrag = (id: PanelId) => (e: React.DragEvent) => {
-  e.dataTransfer.setData("text/x-albedo-panel", id);
-  e.dataTransfer.effectAllowed = "move";
-  useLayout.setState({ dragging: id });
-};
-const endDrag = () => useLayout.setState({ dragging: null });
-const draggedPanel = (e: React.DragEvent): PanelId | null =>
-  (e.dataTransfer.getData("text/x-albedo-panel") as PanelId) || useLayout.getState().dragging;
+/**
+ * Panel drag with pointer events (HTML5 drag and drop is unreliable in the Tauri
+ * webview). A press on a header becomes a drag after 5 px; a ghost follows the pointer,
+ * the target slot is shown as a mint line, Esc cancels, release drops.
+ */
+function startPanelDrag(id: PanelId, e: React.PointerEvent) {
+  if (e.button !== 0) return;
+  const x0 = e.clientX;
+  const y0 = e.clientY;
+  let ghost: HTMLDivElement | null = null;
 
-/** A stacked section (stack mode). */
-function StackPanel({ id, side, index }: { id: PanelId; side: Side; index: number }) {
+  const findSlot = (x: number, y: number) => {
+    for (const col of document.querySelectorAll<HTMLElement>(".dock-col[data-side]")) {
+      const r = col.getBoundingClientRect();
+      // Generous horizontal slack so the narrow empty column is easy to hit.
+      if (x < r.left - 24 || x > r.right + 24) continue;
+      const spans = [...col.querySelectorAll<HTMLElement>(".dock-panel[data-panel]")].map((p) => p.getBoundingClientRect());
+      return { side: col.dataset.side as Side, index: slotAt(spans, y) };
+    }
+    return null;
+  };
+
+  const move = (ev: PointerEvent) => {
+    if (!ghost) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
+      ghost = document.createElement("div");
+      ghost.className = "panel-ghost";
+      ghost.textContent = PANEL_TITLES[id];
+      document.body.appendChild(ghost);
+      document.body.classList.add("panel-dragging");
+      useLayout.setState({ dragging: id });
+    }
+    ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 10}px)`;
+    const slot = findSlot(ev.clientX, ev.clientY);
+    const cur = useLayout.getState().slot;
+    if (slot?.side !== cur?.side || slot?.index !== cur?.index) useLayout.setState({ slot });
+  };
+  const finish = (drop: boolean) => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("keydown", key, true);
+    if (!ghost) return;
+    ghost.remove();
+    document.body.classList.remove("panel-dragging");
+    const { slot } = useLayout.getState();
+    useLayout.setState({ dragging: null, slot: null });
+    if (drop && slot) useLayout.getState().dropAt(id, slot.side, slot.index);
+    // The release must not also click a header button (collapse, tab switch).
+    window.addEventListener("click", (c) => c.stopPropagation(), { capture: true, once: true });
+    setTimeout(() => window.dispatchEvent(new Event("panel-drag-end")), 0);
+  };
+  const up = () => finish(true);
+  const key = (ev: KeyboardEvent) => {
+    if (ev.key === "Escape") {
+      ev.stopPropagation();
+      finish(false);
+    }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("keydown", key, true);
+}
+
+/** Mint insertion line at a slot of a column. */
+function DropLine({ side, index }: { side: Side; index: number }) {
+  const slot = useLayout((s) => s.slot);
+  return slot && slot.side === side && slot.index === index ? <div className="drop-line" /> : null;
+}
+
+/** A stacked section. Its header is the drag handle. */
+function StackPanel({ id }: { id: PanelId }) {
   const state = useLayout((s) => s.panels[id]);
   const setPanel = useLayout((s) => s.setPanel);
-  const dragging = useLayout((s) => s.dragging);
-  const [over, setOver] = useState<"top" | "bottom" | null>(null);
+  const dragging = useLayout((s) => s.dragging === id);
 
   return (
     <section
-      className={`panel dock-panel ${state.collapsed ? "collapsed" : ""} ${over ? `drop-${over}` : ""}`}
+      data-panel={id}
+      className={`panel dock-panel ${state.collapsed ? "collapsed" : ""} ${dragging ? "is-dragged" : ""}`}
       style={{ flex: state.collapsed ? "0 0 auto" : `${state.weight} 1 0` }}
-      onDragOver={(e) => {
-        if (!dragging || dragging === id) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const r = e.currentTarget.getBoundingClientRect();
-        setOver(e.clientY < r.top + r.height / 2 ? "top" : "bottom");
-      }}
-      onDragLeave={() => setOver(null)}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const dragged = draggedPanel(e);
-        const at = over === "bottom" ? index + 1 : index;
-        setOver(null);
-        endDrag();
-        if (!dragged) return;
-        const ids = column(useLayout.getState().panels, side);
-        const own = ids.indexOf(dragged);
-        useLayout.getState().drop(dragged, side, own >= 0 && own < at ? at - 1 : at);
-      }}
     >
       {id === "inspector" ? (
         // The inspector's header is its own tab bar; dragging the header moves the panel.
-        <header className="dock-head inspector-head" draggable onDragStart={startDrag(id)} onDragEnd={endDrag}>
+        <header className="dock-head inspector-head" onPointerDown={(e) => startPanelDrag(id, e)}>
           <InspectorTabs />
         </header>
       ) : (
-      <header className="dock-head" draggable onDragStart={startDrag(id)} onDragEnd={endDrag} onDoubleClick={() => setPanel(id, { collapsed: !state.collapsed })}>
+      <header className="dock-head" onPointerDown={(e) => startPanelDrag(id, e)} onDoubleClick={() => setPanel(id, { collapsed: !state.collapsed })}>
         <button className="dock-toggle" onClick={() => setPanel(id, { collapsed: !state.collapsed })}>
           {state.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </button>
@@ -88,7 +127,7 @@ function StackPanel({ id, side, index }: { id: PanelId; side: Side; index: numbe
         <span className="dock-title">{PANEL_TITLES[id]}</span>
         <PanelMeta id={id} />
         <span className="dock-actions">
-          <button data-tip="Schließen (über Ansicht wieder öffnen)" data-tip-pos="bottom-end" onClick={() => useLayout.getState().open(id, false)}>
+          <button data-tip="Schließen (über Ansicht wieder öffnen)" data-tip-pos="bottom-end" onPointerDown={(e) => e.stopPropagation()} onClick={() => useLayout.getState().open(id, false)}>
             <X size={13} />
           </button>
         </span>
@@ -154,30 +193,10 @@ export function DockColumn({ side, override }: { side: Side; override?: ReactNod
   const panels = useLayout((s) => s.panels);
   const width = useLayout((s) => s.width[side]);
   const dragging = useLayout((s) => s.dragging);
+  const slotHere = useLayout((s) => s.slot?.side === side);
   const winWidth = useWindowWidth();
-  const [bodyOver, setBodyOver] = useState(false);
   useApp((s) => s.currentId);
   const ids = column(panels, side);
-  const empty = ids.length === 0;
-
-  // Dropping anywhere on the column body appends the panel to this side.
-  const dropProps = {
-    onDragOver: (e: React.DragEvent) => {
-      if (!dragging) return;
-      e.preventDefault();
-      setBodyOver(true);
-    },
-    onDragLeave: (e: React.DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node)) setBodyOver(false);
-    },
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault();
-      setBodyOver(false);
-      const id = draggedPanel(e);
-      endDrag();
-      if (id) useLayout.getState().drop(id, side, 99);
-    },
-  };
 
   if (override)
     return (
@@ -187,20 +206,26 @@ export function DockColumn({ side, override }: { side: Side; override?: ReactNod
       </div>
     );
 
-  if (empty)
+  if (ids.length === 0)
     return (
-      <div className={`dock-col ${side} empty ${dragging ? "drop-target" : ""} ${bodyOver ? "over" : ""}`} style={{ width: dragging ? 72 : 0 }} {...dropProps} />
+      <div data-side={side} className={`dock-col ${side} empty ${dragging ? "drop-target" : ""} ${slotHere ? "over" : ""}`} style={{ width: dragging ? 72 : 0 }}>
+        {dragging && <DropLine side={side} index={0} />}
+      </div>
     );
 
-  const items: ReactNode[] = [];
+  const items: ReactNode[] = [<DropLine key="d0" side={side} index={0} />];
   ids.forEach((id, i) => {
-      if (i > 0 && !panels[ids[i - 1]].collapsed && !panels[id].collapsed) items.push(<SplitHandle key={`h-${id}`} above={ids[i - 1]} below={id} />);
-      else if (i > 0) items.push(<div key={`g-${id}`} className="split-gap" />);
-      items.push(<StackPanel key={id} id={id} side={side} index={i} />);
-    });
+    if (i > 0) {
+      if (!panels[ids[i - 1]].collapsed && !panels[id].collapsed) items.push(<SplitHandle key={`h-${id}`} above={ids[i - 1]} below={id} />);
+      else items.push(<div key={`g-${id}`} className="split-gap" />);
+      items.push(<DropLine key={`d${i}`} side={side} index={i} />);
+    }
+    items.push(<StackPanel key={id} id={id} />);
+  });
+  items.push(<DropLine key="dn" side={side} index={ids.length} />);
 
   return (
-    <div className={`dock-col ${side} ${bodyOver ? "over" : ""}`} style={{ width: clampColumnWidth(width, winWidth) }} {...dropProps}>
+    <div data-side={side} className={`dock-col ${side}`} style={{ width: clampColumnWidth(width, winWidth) }}>
       <WidthHandle side={side} />
       <div className="dock-stack">{items}</div>
     </div>

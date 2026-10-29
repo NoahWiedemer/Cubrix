@@ -1051,3 +1051,19 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .value-pop-field { width: 100px; flex: none; }
 .value-pop-field input { min-width: 0; }
 .value-pop-error { flex-basis: 100%; }
+/* Pointer-based panel drag: insertion line, ghost, dimmed source */
+.drop-line { position: relative; height: 0; flex: none; z-index: 5; pointer-events: none; }
+.drop-line::after { content: ""; position: absolute; left: 6px; right: 6px; top: -5px; height: 3px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 3px rgba(110, 231, 197, 0.18); }
+.dock-stack > .drop-line:first-child::after { top: -2px; }
+.dock-stack > .drop-line:last-child::after { top: 2px; }
+.dock-col.empty .drop-line { position: absolute; inset: 0; height: auto; }
+.dock-col.empty .drop-line::after { inset: 0; height: auto; border-radius: var(--radius); background: rgba(110, 231, 197, 0.16); box-shadow: inset 0 0 0 2px var(--accent); }
+.dock-panel.is-dragged { opacity: 0.45; }
+.panel-ghost { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; padding: 7px 12px; border-radius: 8px; background: var(--panel-3); border: 1px solid var(--accent-line); color: var(--text); font-size: 13px; font-weight: 550; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45); }
+body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-select: none !important; }
+.dock-head { cursor: grab; }
+.dock-head button { cursor: pointer; }
+.dock-stack > .drop-line { align-self: stretch; width: 100%; }
+.dock-stack > .drop-line:first-child::after { top: 1px; }
+.dock-stack > .drop-line:last-child::after { top: -4px; }
+.dock-stack > .drop-line { z-index: 50; } .dock-stack > .drop-line:last-child::after { top: -6px; }

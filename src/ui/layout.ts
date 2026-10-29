@@ -5,6 +5,7 @@ import type { IconName } from "./icons";
 import {
   clampColumnWidth,
   defaultLayout,
+  dropAtSlot,
   dropPanel,
   normalize,
   setActive,
@@ -21,6 +22,9 @@ export type { PanelId, PanelState, Side, SideMode };
 
 interface LayoutState extends LayoutData {
   dragging: PanelId | null;
+  /** Where the dragged panel would land (shown as a mint insertion line). */
+  slot: { side: Side; index: number } | null;
+  dropAt(id: PanelId, side: Side, slot: number): void;
   setPanel(id: PanelId, patch: Partial<PanelState>): void;
   open(id: PanelId, open: boolean): void;
   drop(id: PanelId, side: Side, index: number): void;
@@ -42,6 +46,8 @@ export const useLayout = create<LayoutState>()(
     (set) => ({
       ...defaultLayout(),
       dragging: null,
+      slot: null,
+      dropAt: (id, side, slot) => set((s) => dropAtSlot(data(s), id, side, slot)),
       setPanel: (id, patch) => set((s) => ({ panels: { ...s.panels, [id]: { ...s.panels[id], ...patch } } })),
       open: (id, open) => set((s) => setOpen(data(s), id, open)),
       drop: (id, side, index) => set((s) => dropPanel(data(s), id, side, index)),

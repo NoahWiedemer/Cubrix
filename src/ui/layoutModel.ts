@@ -153,3 +153,21 @@ export function normalize(raw: unknown): LayoutData {
     hidden: { left: !!r.hidden?.left, right: !!r.hidden?.right },
   });
 }
+
+/** Insertion slot (0..n) in a column for a pointer at `y`, given the panels' vertical spans. */
+export function slotAt(spans: { top: number; bottom: number }[], y: number): number {
+  let i = 0;
+  while (i < spans.length && y > (spans[i].top + spans[i].bottom) / 2) i++;
+  return i;
+}
+
+/**
+ * Applies a drop at a slot. `slot` counts positions in the target column as shown during
+ * the drag (the dragged panel included when it is already there).
+ */
+export function dropAtSlot(l: LayoutData, id: PanelId, side: Side, slot: number): LayoutData {
+  const ids = column(l.panels, side);
+  const own = ids.indexOf(id);
+  const index = own >= 0 && own < slot ? slot - 1 : slot;
+  return dropPanel(l, id, side, index);
+}

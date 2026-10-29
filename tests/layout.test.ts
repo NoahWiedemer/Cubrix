@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { column, defaultLayout, dropPanel, movePanel, normalize, resizeColumn, setOpen } from "../src/ui/layoutModel";
+import { column, defaultLayout, dropAtSlot, dropPanel, movePanel, normalize, resizeColumn, setOpen, slotAt } from "../src/ui/layoutModel";
 
 describe("Dock-Layout", () => {
   it("Standard: links KI (oben, 2/3), Objekte, Verlauf eingeklappt; rechts Inspektor", () => {
@@ -58,5 +58,36 @@ describe("Spaltenbreite ziehen", () => {
   it("begrenzt auf 240 px bis 45 % des Fensters", () => {
     expect(resizeColumn("right", 340, -2000, 1440)).toBe(648);
     expect(resizeColumn("left", 260, -2000, 1440)).toBe(240);
+  });
+});
+
+describe("drag slots", () => {
+  const spans = [
+    { top: 0, bottom: 100 },
+    { top: 110, bottom: 300 },
+    { top: 310, bottom: 340 },
+  ];
+  it("maps a pointer y to an insertion slot", () => {
+    expect(slotAt(spans, -5)).toBe(0);
+    expect(slotAt(spans, 40)).toBe(0);
+    expect(slotAt(spans, 60)).toBe(1);
+    expect(slotAt(spans, 250)).toBe(2);
+    expect(slotAt(spans, 330)).toBe(3);
+    expect(slotAt([], 10)).toBe(0);
+  });
+
+  it("moves panels left→right, right→left and reorders within a side", () => {
+    const l = defaultLayout(); // left: chat, tree, history · right: inspector
+    const r1 = dropAtSlot(l, "history", "right", 1); // below the inspector
+    expect(column(r1.panels, "right")).toEqual(["inspector", "history"]);
+    expect(column(r1.panels, "left")).toEqual(["chat", "tree"]);
+    const r2 = dropAtSlot(r1, "inspector", "left", 0); // right → left, on top
+    expect(column(r2.panels, "left")).toEqual(["inspector", "chat", "tree"]);
+    const r3 = dropAtSlot(l, "chat", "left", 2); // below Objekte (slot counts chat itself)
+    expect(column(r3.panels, "left")).toEqual(["tree", "chat", "history"]);
+    const r4 = dropAtSlot(l, "history", "left", 0); // reorder upwards
+    expect(column(r4.panels, "left")).toEqual(["history", "chat", "tree"]);
+    const r5 = dropAtSlot(r1, "history", "right", 0); // reorder within the right
+    expect(column(r5.panels, "right")).toEqual(["history", "inspector"]);
   });
 });
