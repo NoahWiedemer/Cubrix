@@ -50,7 +50,22 @@ function useTransform(f: Feature): Transform {
  * Tints faces red where they point down steeper than 45° (overhangs). Uses world
  * space: the scene is Y-up, so "down" is -Y. Faces lying on the bed are excluded.
  */
-function overhangShader(shader: THREE.WebGLProgramParametersWithUniforms) {
+/**
+ * Fine matte micro-texture (display only): world-space value noise (grain ≈ 0.45 mm, so it
+ * needs no UVs and is the same on every object) slightly tilts the normal and varies the
+ * roughness. It fades out where the grain gets denser than a pixel, so there's no moiré.
+ */
+const SURFACE_GLSL = /* glsl */ `
+  float sHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float sNoise(vec3 x) {
+    vec3 i = floor(x), f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(sHash(i), sHash(i + vec3(1, 0, 0)), f.x), mix(sHash(i + vec3(0, 1, 0)), sHash(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(sHash(i + vec3(0, 0, 1)), sHash(i + vec3(1, 0, 1)), f.x), mix(sHash(i + vec3(0, 1, 1)), sHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  }
+`;
+
+function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhang: boolean) {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
     .replace(
@@ -58,8 +73,30 @@ function overhangShader(shader: THREE.WebGLProgramParametersWithUniforms) {
       "#include <worldpos_vertex>\nvWorldN = normalize(mat3(modelMatrix) * objectNormal);\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;",
     );
   shader.fragmentShader = shader.fragmentShader
-    .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
+    .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;\n" + SURFACE_GLSL)
     .replace(
+      "#include <roughnessmap_fragment>",
+      `#include <roughnessmap_fragment>
+      vec3 sp = vWorldP / 0.45;
+      // Fade the grain out once it is finer than ~1.5 px (no shimmer when zoomed out).
+      float sFade = 1.0 - smoothstep(0.35, 0.7, length(fwidth(sp)));
+      float sN = sNoise(sp);
+      roughnessFactor = clamp(roughnessFactor + (sN - 0.5) * 0.1 * sFade, 0.0, 1.0);`,
+    )
+    .replace(
+      "#include <normal_fragment_maps>",
+      `#include <normal_fragment_maps>
+      {
+        float e = 0.35;
+        vec3 g = vec3(sNoise(sp + vec3(e, 0, 0)), sNoise(sp + vec3(0, e, 0)), sNoise(sp + vec3(0, 0, e))) - sN;
+        vec3 gv = mat3(viewMatrix) * (g / e);
+        // Only the part of the gradient along the surface tilts the normal.
+        vec3 tilt = gv - dot(gv, normal) * normal;
+        normal = normalize(normal - tilt * 0.11 * sFade);
+      }`,
+    );
+  if (overhang)
+    shader.fragmentShader = shader.fragmentShader.replace(
       "#include <dithering_fragment>",
       `#include <dithering_fragment>
       float down = -normalize(vWorldN).y;
@@ -67,6 +104,7 @@ function overhangShader(shader: THREE.WebGLProgramParametersWithUniforms) {
       gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.86, 0.28, 0.27), over * 0.85);`,
     );
 }
+
 
 // ── Objects ──────────────────────────────────────────────────────────────────
 
@@ -151,8 +189,8 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
           polygonOffsetFactor={1}
           polygonOffsetUnits={selected ? 1 : 2 + Math.max(0, 40 - order) * 2}
           key={showOverhangs ? "overhang" : "plain"}
-          onBeforeCompile={showOverhangs ? overhangShader : undefined}
-          customProgramCacheKey={() => (showOverhangs ? "overhang" : "plain")}
+          onBeforeCompile={(sh) => surfaceShader(sh, showOverhangs)}
+          customProgramCacheKey={() => (showOverhangs ? "surface-overhang" : "surface")}
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null} visible={!presenting}>
