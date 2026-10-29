@@ -403,9 +403,11 @@ export function Viewport() {
         <DepthRange />
         <CameraRig />
         <SelectionOutline />
-        <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
-          <AxisIndicator />
-        </GizmoHelper>
+        {workspace !== "preview" && (
+          <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
+            <AxisIndicator />
+          </GizmoHelper>
+        )}
       </Canvas>
 
       {kernel.status !== "ready" || kernel.busy > 0 ? (

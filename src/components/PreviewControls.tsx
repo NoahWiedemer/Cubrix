@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { setCaptureViewport } from "../ai/agent";
-import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { execute } from "../core/commands";
 import { useApp } from "../core/store";
@@ -9,8 +8,8 @@ import { Icon } from "../ui/icons";
 import { SegmentedControl } from "../ui/SegmentedControl";
 
 const BGS: { id: PreviewBackground; label: string }[] = [
-  { id: "studio", label: "Studio" },
   { id: "dark", label: "Dunkel" },
+  { id: "studio", label: "Studio" },
   { id: "light", label: "Hell" },
 ];
 
@@ -33,16 +32,6 @@ export function PreviewControls() {
           options={BGS.map((b) => ({ value: b.id, label: b.label, icon: <span className={`bg-swatch ${b.id}`} /> }))}
         />
         <div className="tool-sep" />
-        <button className={`tool ${p.section ? "active" : ""}`} onClick={() => usePreview.setState({ section: !p.section })} data-tip="Schnittansicht: ins Innere schauen" data-tip-pos="top">
-          <Icon name="section" size={18} />Schnitt
-        </button>
-        {p.section && (
-          <label className="section-slider">
-            <input type="range" min={0} max={120} step={0.5} value={p.sectionZ} onChange={(e) => usePreview.setState({ sectionZ: Number(e.target.value) })} />
-            <span>{p.sectionZ.toLocaleString("de-DE")} mm</span>
-          </label>
-        )}
-        <div className="tool-sep" />
         <button className="tool" onClick={() => execute("view.screenshot")} data-tip="Bild als PNG speichern" data-tip-pos="top">
           <Icon name="camera" size={18} />Bild speichern
         </button>
@@ -51,7 +40,6 @@ export function PreviewControls() {
   );
 }
 
-/** Applies the section plane to all meshes and captures PNG screenshots after rendering. */
 /** Lets the AI agent grab a PNG of the viewport right after a frame is rendered. */
 export function ViewportCapture() {
   const gl = useThree((s) => s.gl);
@@ -74,27 +62,9 @@ export function ViewportCapture() {
   return null;
 }
 
+/** Saves a PNG screenshot right after the next rendered frame. */
 export function PreviewEffects() {
   const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  const preview = useApp((s) => s.workspace === "preview");
-  const { section, sectionZ } = usePreview();
-
-  useEffect(() => {
-    gl.localClippingEnabled = true;
-    // CAD Z is the scene's Y axis; keep everything below the cut.
-    const planes = preview && section ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), sectionZ)] : [];
-    scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-      const isFeatureLine = (o as THREE.LineSegments).isLineSegments && o.parent?.children.some((c) => c.layers.isEnabled(1));
-      if (m && ((o as THREE.Mesh).layers?.isEnabled(1) || isFeatureLine)) {
-        m.clippingPlanes = planes;
-        m.clipShadows = true;
-        m.side = planes.length ? THREE.DoubleSide : THREE.FrontSide;
-        m.needsUpdate = true;
-      }
-    });
-  });
 
   useFrame(() => {
     const { captureAt } = usePreview.getState();
