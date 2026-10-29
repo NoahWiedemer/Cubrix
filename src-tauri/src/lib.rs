@@ -1,4 +1,5 @@
 mod ai;
+mod fonts;
 
 use tauri::{Emitter, Manager};
 
@@ -113,6 +114,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ai::AiState::default())
         .invoke_handler(tauri::generate_handler![
+            fonts::fonts_list,
+            fonts::font_bytes,
             log_status,
             boot_progress,
             splash_finished,

@@ -81,7 +81,8 @@ export interface TextFeatureParams {
   size: number;
   /** Extrusion depth in mm (emboss height / engrave depth on a face). */
   depth: number;
-  font: "inter" | "roboto-slab" | "roboto-mono";
+  /** Bundled font ("inter", "roboto-slab", "roboto-mono") or an installed family name. */
+  font: string;
   bold: boolean;
   align: "left" | "center" | "right";
   /** Set when the text sits on a face as the tool of a union (emboss) or cut (engrave). */

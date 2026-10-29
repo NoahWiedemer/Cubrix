@@ -1,20 +1,26 @@
 // 3D text: font outlines (opentype via replicad) → closed profiles with holes
 // (O, A, B, Ä …) → extruded solid. Fonts are bundled (OFL / Apache 2.0).
 import { loadFont, textBlueprints, type Shape3D } from "replicad";
+import { FONTS, fontKey, type FontId } from "./fontKeys";
 
-export type FontId = "inter" | "roboto-slab" | "roboto-mono";
+export { FONTS, fontKey, isBundledFont, type FontId } from "./fontKeys";
+
 export type TextAlign = "left" | "center" | "right";
 
-export const FONTS: Record<FontId, { label: string }> = {
-  inter: { label: "Inter" },
-  "roboto-slab": { label: "Roboto Slab" },
-  "roboto-mono": { label: "Roboto Mono" },
-};
-
-const family = (font: FontId, bold: boolean) => `${font}-${bold ? 700 : 400}`;
+const family = fontKey;
 
 /** Cap height as a share of the em size, per loaded family (to size text by capital height). */
 const capRatio: Record<string, number> = {};
+
+/** Registers one font's bytes; throws if opentype.js cannot read it (e.g. CFF2). */
+export async function registerFont(name: string, data: ArrayBuffer) {
+  const f = await loadFont(data, name, true);
+  if (!f.glyphs || f.glyphs.length < 2) throw new Error("Schrift enthält keine lesbaren Zeichen.");
+  const os2 = (f.tables as { os2?: { sCapHeight?: number } }).os2;
+  capRatio[name] = os2?.sCapHeight ? os2.sCapHeight / f.unitsPerEm : 0.7;
+}
+
+export const hasFont = (name: string) => name in capRatio;
 
 /** Registers all bundled fonts; `load` returns the file bytes for e.g. "inter-700". */
 export async function loadFonts(load: (name: string) => Promise<ArrayBuffer>) {
@@ -36,7 +42,8 @@ export interface TextParams {
   size: number;
   /** Extrusion depth in mm. */
   depth: number;
-  font: FontId;
+  /** Bundled font id or installed family name. */
+  font: string;
   bold: boolean;
   align: TextAlign;
 }

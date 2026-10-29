@@ -7,7 +7,7 @@ import wasmUrl from "replicad-opencascadejs/wasm?url";
 import { makeCompound, setOC, type Face, type Shape3D } from "replicad";
 import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
 import { zipSync, strToU8 } from "fflate";
-import { loadFonts } from "./text";
+import { loadFonts, registerFont } from "./text";
 import inter400 from "@fontsource/inter/files/inter-latin-400-normal.woff?url";
 import inter700 from "@fontsource/inter/files/inter-latin-700-normal.woff?url";
 import slab400 from "@fontsource/roboto-slab/files/roboto-slab-latin-400-normal.woff?url";
@@ -180,6 +180,11 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   try {
     await init();
     if (req.kind === "init") return post({ id: req.id, ok: true, kind: "init" });
+
+    if (req.kind === "font") {
+      await registerFont(req.name, req.data);
+      return post({ id: req.id, ok: true, kind: "font" });
+    }
 
     if (req.kind === "mesh") {
       const key = JSON.stringify(req.feature);

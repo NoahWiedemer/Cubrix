@@ -1163,3 +1163,6 @@ body.space-pan .viewport canvas:active { cursor: grabbing !important; }
 .toolbar-set, .toolbar { gap: 1px; }
 .statusbar { justify-content: flex-end; }
 .field.scrub-body { cursor: ew-resize; } .field.scrub-body:focus-within { cursor: text; } .field.scrub-body input { cursor: inherit; }
+.font-menu .menu-item .menu-label span { font-size: 14px; }
+.menu-note { padding: 8px 10px; font-size: 12.5px; color: var(--text-3); }
+.text-section .hint { margin: -2px 0 0; font-size: 12px; color: #e8c37a; }

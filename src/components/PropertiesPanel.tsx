@@ -5,7 +5,8 @@ import { maxEdgeSize, textOf } from "../core/commandDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
-import { useMeshes } from "../cad/kernel";
+import { useMeshes, useMissingFonts } from "../cad/kernel";
+import { FontPicker } from "./FontPicker";
 import { worldBox } from "../core/bounds";
 import { Icon } from "../ui/icons";
 import { featureIcon } from "./ObjectTree";
@@ -250,7 +251,9 @@ function TransformFields({ f, kind }: { f: Feature; kind: "position" | "rotation
 function TextSection({ f }: { f: Feature }) {
   const t = textOf(f);
   const [draft, setDraft] = useState<string | null>(null);
+  const missingFonts = useMissingFonts((s) => s.missing);
   if (!t) return null;
+  const missing = missingFonts.includes(t.params.font);
   const p = t.params;
   const edit = (patch: Record<string, unknown>) => void execute("text.edit", { id: f.id, ...patch });
   const commitText = () => {
@@ -276,8 +279,8 @@ function TextSection({ f }: { f: Feature }) {
         <SegmentedControl size="sm" className="block" value={p.onFace} onChange={(mode) => edit({ mode })}
           options={[{ value: "emboss", label: "Prägen" }, { value: "engrave", label: "Gravieren" }]} />
       )}
-      <SegmentedControl size="sm" className="block" value={p.font} onChange={(font) => edit({ font })}
-        options={[{ value: "inter", label: "Inter" }, { value: "roboto-slab", label: "Slab" }, { value: "roboto-mono", label: "Mono" }]} />
+      <FontPicker value={p.font} onChange={(font) => edit({ font })} />
+      {missing && <p className="hint">„{p.font}“ ist hier nicht installiert – ersatzweise Inter.</p>}
       <div className="field-row two">
         <NumberField value={p.size} min={0.5} step={0.5} unit="mm" onCommit={(v) => edit({ size: v })} />
         <NumberField value={p.depth} min={0.1} step={0.2} unit="mm" onCommit={(v) => edit({ depth: v })} />

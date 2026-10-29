@@ -339,12 +339,10 @@ export function maxEdgeSize(f: Feature): number | null {
 
 // ── Text ─────────────────────────────────────────────────────────────────────
 
-const TEXT_FONTS = ["inter", "roboto-slab", "roboto-mono"] as const;
-
 const textParamSchema = {
   text: { type: "string", description: "Der Text (eine Zeile, Umlaute erlaubt)" },
   size: { type: "number", unit: "mm", min: 0.5, default: 10, description: "Höhe der Großbuchstaben" },
-  font: { type: "enum", options: TEXT_FONTS, default: "inter", description: "Schriftart: inter, roboto-slab, roboto-mono" },
+  font: { type: "string", default: "inter", description: "Schrift: inter, roboto-slab, roboto-mono (mitgeliefert) oder der Name einer installierten Schriftfamilie, z. B. „Futura“" },
   bold: { type: "boolean", default: true, description: "Fett" },
   align: { type: "enum", options: ["left", "center", "right"], default: "center", description: "Ausrichtung zum Fußpunkt" },
 } as const;
@@ -460,7 +458,7 @@ defineCommand({
     text: { type: "string", optional: true, description: "Neuer Text" },
     size: { type: "number", unit: "mm", min: 0.5, optional: true, description: "Höhe der Großbuchstaben" },
     depth: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Tiefe" },
-    font: { type: "enum", options: TEXT_FONTS, optional: true, description: "Schriftart" },
+    font: { type: "string", optional: true, description: "Schrift (mitgeliefert oder installierte Familie)" },
     bold: { type: "boolean", optional: true, description: "Fett" },
     align: { type: "enum", options: ["left", "center", "right"], optional: true, description: "Ausrichtung" },
     mode: { type: "enum", options: ["emboss", "engrave"], optional: true, description: "Nur für Text auf einer Fläche: prägen oder gravieren" },
