@@ -15,6 +15,7 @@ export function Menu({ children, style, className = "" }: { children: ReactNode;
 
 export function MenuItem({
   icon,
+  iconNode,
   label,
   shortcut,
   checked,
@@ -23,6 +24,8 @@ export function MenuItem({
   onClick,
 }: {
   icon?: IconName;
+  /** Custom icon element (e.g. a provider logo) instead of a named icon. */
+  iconNode?: ReactNode;
   label: ReactNode;
   shortcut?: string;
   checked?: boolean;
@@ -32,7 +35,7 @@ export function MenuItem({
 }) {
   return (
     <button className="menu-item" role="menuitem" disabled={disabled} title={title} onClick={onClick}>
-      <span className="menu-icon">{icon && <Icon name={icon} size={16} />}</span>
+      <span className="menu-icon">{iconNode ?? (icon && <Icon name={icon} size={16} />)}</span>
       <span className="menu-label">{label}</span>
       {shortcut && <Kbd keys={shortcutKeys(shortcut)} />}
       <span className="menu-check">{checked && <Check size={14} strokeWidth={2.25} />}</span>

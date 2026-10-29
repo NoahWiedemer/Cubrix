@@ -7,6 +7,10 @@ import { Icon } from "../ui/icons";
 import { runAgent } from "../ai/agent";
 import { DEFAULT_MODEL, MODELS, tauriTransport, type Message, type Provider } from "../ai/providers";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
+import { ChevronDown } from "lucide-react";
+import { ProviderLogo } from "../ui/ProviderLogo";
+import { usePopover } from "../ui/usePopover";
+import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
 interface Step {
   label: string;
@@ -73,18 +77,20 @@ function SetupCard({ onDone }: { onDone(): void }) {
     <div className="chat-setup">
       <div className="chat-setup-title"><Icon name="key" size={16} />KI verbinden</div>
       <p>Wähle einen Anbieter und füge deinen API-Schlüssel ein. Er wird sicher im Schlüsselbund deines Systems gespeichert.</p>
+      {!isTauri && <div className="chat-error">Die Verbindung funktioniert nur in der Desktop-App.</div>}
       <div className="seg">
         {PROVIDERS.map((p) => (
           <button key={p.id} className={provider === p.id ? "on" : ""} onClick={() => useAiSettings.setState({ provider: p.id })}>
+            <ProviderLogo mark={p.id} />
             {p.label}
           </button>
         ))}
       </div>
-      {provider === "openai" && <ModelPicker />}
+      <ModelPicker />
       <div className="field chat-key">
         <input type="password" placeholder={provider === "anthropic" ? "sk-ant-…" : "sk-…"} value={key} onChange={(e) => setKey(e.target.value)} />
       </div>
-      <button className="btn-primary" disabled={!key.trim() || state === "testing"} onClick={test} style={{ width: "100%", justifyContent: "center" }}>
+      <button className="btn-primary" disabled={!isTauri || !key.trim() || state === "testing"} onClick={test} style={{ width: "100%", justifyContent: "center" }}>
         {state === "testing" ? "Teste Verbindung …" : "Verbindung testen"}
       </button>
       {state === "error" && <div className="chat-error">{error}</div>}
@@ -98,14 +104,32 @@ function SetupCard({ onDone }: { onDone(): void }) {
 function ModelPicker() {
   const { provider, model } = useAiSettings();
   const value = model[provider];
+  const pop = usePopover();
   const set = (m: string) => useAiSettings.setState((s) => ({ model: { ...s.model, [provider]: m } }));
-  if (MODELS[provider].length)
+  if (!MODELS[provider].length)
     return (
-      <select className="select chat-model" value={value} onChange={(e) => set(e.target.value)}>
-        {MODELS[provider].map((m) => <option key={m} value={m}>{m}</option>)}
-      </select>
+      <div className="model-input">
+        <ProviderLogo mark="openai" />
+        <input placeholder="Modell-ID aus deinem OpenAI-Konto" value={value} onChange={(e) => set(e.target.value)} />
+      </div>
     );
-  return <input className="select chat-model" placeholder="Modell-ID, z. B. aus deinem OpenAI-Konto" value={value} onChange={(e) => set(e.target.value)} />;
+  return (
+    <div ref={pop.ref} className="model-picker">
+      <button className="model-button" onClick={() => pop.setOpen(!pop.open)}>
+        <ProviderLogo mark="claude" />
+        <span>{value}</span>
+        <ChevronDown size={14} />
+      </button>
+      {pop.open && (
+        <Menu style={{ top: 36, left: 0 }}>
+          <MenuTitle>Anthropic</MenuTitle>
+          {MODELS[provider].map((m) => (
+            <MenuItem key={m} iconNode={<ProviderLogo mark="claude" />} label={m} checked={m === value} onClick={() => { set(m); pop.setOpen(false); }} />
+          ))}
+        </Menu>
+      )}
+    </div>
+  );
 }
 
 export function ChatPanel() {
@@ -131,14 +155,6 @@ export function ChatPanel() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [entries]);
-
-  if (!isTauri)
-    return (
-      <div className="chat-empty">
-        <img src={logo} alt="" />
-        <p>Der KI-Assistent ist in der Desktop-App verfügbar (API-Schlüssel bleiben im Schlüsselbund des Systems).</p>
-      </div>
-    );
 
   if (hasKey === false || showSetup)
     return (
