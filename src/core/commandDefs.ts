@@ -326,7 +326,7 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
 }
 
 /** Upper bound for fillet/chamfer size on simple primitives (null = let the kernel decide). */
-function maxEdgeSize(f: Feature): number | null {
+export function maxEdgeSize(f: Feature): number | null {
   switch (f.type) {
     case "box":
       return Math.min(f.params.width, f.params.depth, f.params.height) / 2;

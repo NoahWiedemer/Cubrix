@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, Link2, Link2Off } from "lucide-react";
 import { SegmentedControl } from "../ui/SegmentedControl";
-import { textOf } from "../core/commandDefs";
-import { execute } from "../core/commands";
+import { maxEdgeSize, textOf } from "../core/commandDefs";
+import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
@@ -20,20 +20,23 @@ interface NumberFieldProps {
   unit?: string;
   step?: number;
   min?: number;
+  max?: number;
   readOnly?: boolean;
+  /** Scrub by dragging anywhere on the field (a plain click still types). */
+  scrubBody?: boolean;
   onCommit(v: number): void;
   /** Called continuously while scrubbing the label; commit follows on release. */
   onPreview?(v: number): void;
 }
 
-function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly, onCommit, onPreview }: NumberFieldProps) {
+function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, scrubBody, onCommit, onPreview }: NumberFieldProps) {
   const [text, setText] = useState(show(value));
   const focused = useRef(false);
   useEffect(() => {
     if (!focused.current) setText(show(value));
   }, [value]);
 
-  const clamp = (v: number) => (min !== undefined ? Math.max(min, v) : v);
+  const clamp = (v: number) => Math.min(max ?? Infinity, min !== undefined ? Math.max(min, v) : v);
   const commit = (v: number) => {
     if (!Number.isFinite(v)) return setText(show(value));
     v = clamp(v);
@@ -41,15 +44,20 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly,
     if (Math.abs(v - value) > 1e-9) onCommit(v);
   };
 
-  const scrub = (e: React.PointerEvent<HTMLLabelElement>) => {
+  const scrub = (e: React.PointerEvent<HTMLElement>, threshold = 0) => {
     if (readOnly) return;
     e.preventDefault();
     const startX = e.clientX;
     const start = value;
     let current = value;
+    let moved = threshold === 0;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
+      if (!moved) {
+        if (Math.abs(ev.clientX - startX) < threshold) return;
+        moved = true;
+      }
       const unit = step * (ev.altKey ? 0.1 : 1);
       const raw = start + ((ev.clientX - startX) / 4) * unit * (ev.shiftKey ? 10 : 1);
       current = clamp(Math.round(Math.round(raw / unit) * unit * 1000) / 1000);
@@ -59,6 +67,12 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly,
     const up = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
+      if (!moved) {
+        // A click without dragging: type a value instead.
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        return;
+      }
       if (Math.abs(current - start) > 1e-9) onCommit(current);
       else onPreview?.(start);
     };
@@ -71,8 +85,13 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, readOnly,
   const fontSize = text.length > 6 ? 12 : text.length > 4 ? 13 : undefined;
   return (
     <div
-      className="field"
+      className={`field ${scrubBody && !readOnly ? "scrub-body" : ""}`}
+      onPointerDown={(e) => {
+        if (!scrubBody || document.activeElement === inputRef.current) return;
+        scrub(e, 3);
+      }}
       onMouseDown={(e) => {
+        if (scrubBody) return;
         // The whole box is the hit target (except the scrub label): focus and select all.
         if ((e.target as HTMLElement).tagName === "LABEL" || readOnly) return;
         e.preventDefault();
@@ -280,6 +299,16 @@ function TextSection({ f }: { f: Feature }) {
 }
 
 function SingleObject({ f }: { f: Feature }) {
+  const limit = maxEdgeSize(f);
+  // Stay just below the size at which the edge treatment would consume a whole face.
+  const edgeLimit = limit !== null ? Math.floor((limit - 0.05) * 10) / 10 : undefined;
+  const last = useRef(0);
+  const edgePreview = (command: string, v: number) => {
+    const now = performance.now();
+    if (now - last.current < 80) return; // each preview rebuilds the solid
+    last.current = now;
+    previewCommand(command, { id: f.id, radius: v });
+  };
   return (
     <>
       <div className="props-title">
@@ -294,8 +323,21 @@ function SingleObject({ f }: { f: Feature }) {
         <div className="group">
           <div className="group-label"><span><Icon name="fillet" size={15} />Kanten</span></div>
           <div className="field-row two">
-            <NumberField value={f.fillet ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.fillet", { id: f.id, radius: v })} />
-            <NumberField value={f.chamfer ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.chamfer", { id: f.id, radius: v })} />
+            {(["fillet", "chamfer"] as const).map((k) => (
+              <NumberField
+                key={k}
+                value={f[k] ?? 0}
+                min={0}
+                max={edgeLimit}
+                step={0.5}
+                scrubBody
+                onPreview={(v) => edgePreview(`object.${k}`, v)}
+                onCommit={(v) => {
+                  clearPreview();
+                  void execute(`object.${k}`, { id: f.id, radius: v });
+                }}
+              />
+            ))}
           </div>
           <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
         </div>

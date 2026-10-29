@@ -1162,3 +1162,4 @@ body.space-pan .viewport canvas:active { cursor: grabbing !important; }
 .toolbar .tool svg { width: 17px; height: 17px; }
 .toolbar-set, .toolbar { gap: 1px; }
 .statusbar { justify-content: flex-end; }
+.field.scrub-body { cursor: ew-resize; } .field.scrub-body:focus-within { cursor: text; } .field.scrub-body input { cursor: inherit; }
