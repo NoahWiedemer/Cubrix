@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, ArrowLeftRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ArrowLeftToLine, ArrowRightToLine, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
@@ -64,10 +64,13 @@ function Panel({ id, side, index, onDrop }: { id: PanelId; side: Side; index: nu
         <span className="dock-title">{PANEL_TITLES[id]}</span>
         <PanelMeta id={id} />
         <span className="dock-actions">
-          <button title={side === "left" ? "Nach rechts verschieben" : "Nach links verschieben"} onClick={() => useLayout.getState().move(id, side === "left" ? "right" : "left", 99)}>
-            <ArrowLeftRight size={13} />
+          <button
+            data-tip={side === "left" ? "Nach rechts verschieben" : "Nach links verschieben"}
+            onClick={() => useLayout.getState().move(id, side === "left" ? "right" : "left", 99)}
+          >
+            {side === "left" ? <ArrowRightToLine size={13} /> : <ArrowLeftToLine size={13} />}
           </button>
-          <button title="Schließen (über Ansicht wieder öffnen)" onClick={() => setPanel(id, { open: false })}>
+          <button data-tip="Schließen (über Ansicht wieder öffnen)" onClick={() => setPanel(id, { open: false })}>
             <X size={13} />
           </button>
         </span>

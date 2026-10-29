@@ -1,7 +1,7 @@
-// One axis palette for gizmo, axis indicator and property fields (green/mint family,
-// separated by both hue and lightness so the axes never get confused).
-export const AXIS_COLORS = ["#26a69a", "#a3e36b", "#cdf6ea"] as const; // X teal, Y lime, Z pale aqua
-export const AXIS_HOVER = ["#4fd6c7", "#c4f590", "#ffffff"] as const;
+// One axis palette for gizmo and axis indicator: rich greens separated by hue
+// (teal → emerald → olive-lime) and lightness so the axes never get confused.
+export const AXIS_COLORS = ["#1f8f80", "#2fa866", "#86b232"] as const; // X teal, Y emerald, Z lime
+export const AXIS_HOVER = ["#4fc7b6", "#5fd894", "#b2df5c"] as const;
 
 /** Mix of two hex colours, used for plane handles. */
 export function mix(a: string, b: string): string {

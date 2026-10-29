@@ -20,8 +20,6 @@ import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
 import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
-import { useLayout } from "../ui/layout";
-import { useAnimatedNumber } from "../ui/useAnimatedNumber";
 import { PreviewControls, PreviewEffects } from "./PreviewControls";
 import { usePreview } from "../ui/preview";
 import { PrintPanel, usePrintView } from "./PrintPanel";
@@ -255,16 +253,16 @@ function Lights() {
 }
 
 /** Small projection toggle next to the axis indicator. */
-function ViewControls({ shift }: { shift: number }) {
+function ViewControls() {
   const projection = useSettings((s) => s.projection);
   return (
-    <div className="view-controls" style={{ transform: `translateX(${-shift}px)` }}>
+    <div className="view-controls">
       <button
         className={projection === "perspective" ? "on" : ""}
         onClick={() => execute("view.projection", { mode: "perspective" })}
         data-tip="Perspektive"
         data-kbd="o"
-        data-tip-pos="top"
+        data-tip-pos="bottom"
       >
         <Icon name="perspective" size={15} />
       </button>
@@ -293,10 +291,6 @@ export function Viewport() {
   const workspace = useApp((s) => s.workspace);
   const kernel = useKernel();
   const background = usePreview((s) => s.background);
-  // Axis indicator + projection toggle sit top right and slide left of the floating card.
-  const propsOpen = useLayout((s) => s.panels.props.open);
-  const cardVisible = workspace === "print" || (workspace === "model" && propsOpen && selection.length > 0);
-  const clusterShift = useAnimatedNumber(cardVisible ? 316 : 0, 150);
   const quality = QUALITY[useSettings((s) => s.quality)];
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
@@ -344,7 +338,7 @@ export function Viewport() {
         <DepthRange />
         <CameraRig />
         <SelectionOutline />
-        <GizmoHelper alignment="top-right" margin={[52 + clusterShift, 52]} renderPriority={2}>
+        <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
           <AxisIndicator />
         </GizmoHelper>
       </Canvas>
@@ -385,7 +379,7 @@ export function Viewport() {
       {workspace === "model" && <PropertiesOverlay />}
       {workspace === "print" && <PrintPanel />}
       {workspace === "preview" && <PreviewControls />}
-      <ViewControls shift={clusterShift} />
+      <ViewControls />
 
       {workspace === "sketch" && <SketchToolbar />}
     </div>

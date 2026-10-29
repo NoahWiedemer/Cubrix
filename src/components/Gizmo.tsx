@@ -21,8 +21,7 @@ const AXES = [0, 1, 2].map((i) => ({
 }));
 // Plane handles: [first axis, second axis, normal axis].
 const PLANES: [number, number, number][] = [[0, 1, 2], [0, 2, 1], [1, 2, 0]];
-const PLANE_OFFSET = 22; // px from the centre
-const PLANE_SIZE = 13; // px
+const PLANE_SIZE = 24; // px, corner quadrant anchored at the origin
 const ARROW = 88; // px
 const RING = 62; // px
 
@@ -203,17 +202,17 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
             const c = on ? hc : color;
             return (
               <group key={i} quaternion={quat}>
-                <mesh position={[0, 14 + (ARROW - 14) / 2, 0]} renderOrder={20}>
-                  <cylinderGeometry args={[on ? 1.4 : 0.9, on ? 1.4 : 0.9, ARROW - 14, 8]} />
+                <mesh position={[0, (ARROW - 4) / 2, 0]} renderOrder={20}>
+                  <cylinderGeometry args={[on ? 1.3 : 0.85, on ? 1.3 : 0.85, ARROW - 4, 8]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
                 <mesh position={[0, ARROW + 6, 0]} renderOrder={20}>
-                  <coneGeometry args={[on ? 5.5 : 4.5, 13, 20]} />
+                  <coneGeometry args={[on ? 3.8 : 3.2, 18, 24]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
                 {/* Generous invisible hit target */}
-                <mesh position={[0, 14 + ARROW / 2, 0]} onPointerDown={begin("move", i)} {...hoverProps(i)}>
-                  <cylinderGeometry args={[8, 8, ARROW + 8, 8]} />
+                <mesh position={[0, PLANE_SIZE + (ARROW - PLANE_SIZE + 16) / 2, 0]} onPointerDown={begin("move", i)} {...hoverProps(i)}>
+                  <cylinderGeometry args={[8, 8, ARROW - PLANE_SIZE + 16, 8]} />
                   <meshBasicMaterial visible={false} />
                 </mesh>
               </group>
@@ -223,8 +222,8 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           PLANES.map(([a, b], i) => {
             const id = 10 + i;
             const on = active(id);
-            const u = AXES[a].axis.clone().multiplyScalar(PLANE_OFFSET + PLANE_SIZE / 2);
-            const v = AXES[b].axis.clone().multiplyScalar(PLANE_OFFSET + PLANE_SIZE / 2);
+            const u = AXES[a].axis.clone().multiplyScalar(PLANE_SIZE / 2);
+            const v = AXES[b].axis.clone().multiplyScalar(PLANE_SIZE / 2);
             const normal = AXES[PLANES[i][2]].axis;
             const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
             const color = on ? mix(AXES[a].hover, AXES[b].hover) : mix(AXES[a].color, AXES[b].color);
@@ -232,7 +231,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
               <group key={`p${i}`} position={u.add(v)} quaternion={quat}>
                 <mesh renderOrder={19} onPointerDown={begin("plane", i)} {...hoverProps(id)}>
                   <planeGeometry args={[PLANE_SIZE, PLANE_SIZE]} />
-                  <meshBasicMaterial color={color} depthTest={false} transparent opacity={on ? 0.55 : 0.28} side={THREE.DoubleSide} toneMapped={false} />
+                  <meshBasicMaterial color={color} depthTest={false} transparent opacity={on ? 0.5 : 0.22} side={THREE.DoubleSide} toneMapped={false} />
                 </mesh>
                 <lineSegments renderOrder={20} raycast={() => null}>
                   <edgesGeometry args={[new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE)]} />
@@ -258,10 +257,6 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
               </group>
             );
           })}
-        <mesh renderOrder={21}>
-          <sphereGeometry args={[3, 16, 12]} />
-          <meshBasicMaterial color="#e7ebee" depthTest={false} transparent toneMapped={false} />
-        </mesh>
       </group>
       {label && (
         <Html position={label.at} zIndexRange={[30, 0]} style={{ pointerEvents: "none", transform: "translate(14px, 14px)" }}>

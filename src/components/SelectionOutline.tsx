@@ -23,35 +23,44 @@ export function registerMesh(id: string, mesh: THREE.Mesh | null) {
 
 const fragment = /* glsl */ `
   uniform sampler2D mask;
+  uniform sampler2D xray;
   uniform vec2 texel;
   uniform float radius;
   uniform vec3 selColor;
   uniform vec3 hovColor;
   varying vec2 vUv;
   void main() {
-    vec4 c = texture2D(mask, vUv);
+    vec4 c = texture2D(mask, vUv);   // depth-tested: r sel, g hover, b depth, a coverage
+    vec4 cx = texture2D(xray, vUv);  // selected only, unoccluded: r sel, b depth
     float dSel = 100.0;
     float dHov = 100.0;
     float zSel = 1.0;
     float zHov = 1.0;
+    float seen = 0.0;
     for (int x = -6; x <= 6; x++) {
       for (int y = -6; y <= 6; y++) {
         vec2 o = vec2(float(x), float(y));
         float d = length(o);
         if (d > radius + 1.0) continue;
-        vec4 m = texture2D(mask, vUv + o * texel);
-        if (m.r > 0.5 && d < dSel) { dSel = d; zSel = m.b; }
+        vec2 uv = vUv + o * texel;
+        vec4 m = texture2D(mask, uv);
+        vec4 mx = texture2D(xray, uv);
+        if (mx.r > 0.5 && d < dSel) { dSel = d; zSel = mx.b; seen = m.r; }
         if (m.g > 0.5 && d < dHov) { dHov = d; zHov = m.b; }
       }
     }
-    // Outer ring only, with a one-pixel anti-aliased falloff. The ring is not drawn
-    // over surfaces that are in front of the outlined object (b = depth, a = coverage).
-    bool behindSel = c.a < 0.5 || c.b > zSel + 1e-5;
+    // Full silhouette of the selection: solid where its edge is visible, dimmed where
+    // it is hidden behind or inside another body; occluded areas get a faint ghost fill.
+    bool insideSel = cx.r > 0.5;
+    bool frontOfRing = c.a > 0.5 && c.b < zSel - 1e-5;
+    float ring = insideSel ? 0.0 : clamp(radius + 0.5 - dSel, 0.0, 1.0);
+    float aSel = ring * ((seen > 0.5 && !frontOfRing) ? 1.0 : 0.45);
+    float ghost = (insideSel && c.r < 0.5) ? 0.1 : 0.0;
     bool behindHov = c.a < 0.5 || c.b > zHov + 1e-5;
-    float aSel = (c.r > 0.5 || !behindSel) ? 0.0 : clamp(radius + 0.5 - dSel, 0.0, 1.0);
     float hr = max(radius * 0.5, 1.0);
-    float aHov = (c.g > 0.5 || c.r > 0.5 || !behindHov) ? 0.0 : clamp(hr + 0.5 - dHov, 0.0, 1.0) * 0.5;
-    gl_FragColor = aSel > 0.0 ? vec4(selColor, aSel) : vec4(hovColor, aHov);
+    float aHov = (c.g > 0.5 || insideSel || !behindHov) ? 0.0 : clamp(hr + 0.5 - dHov, 0.0, 1.0) * 0.5;
+    float a = max(aSel, ghost);
+    gl_FragColor = a > 0.0 ? vec4(selColor, a) : vec4(hovColor, aHov);
   }
 `;
 
@@ -93,9 +102,20 @@ export function SelectionOutline() {
       }),
     [],
   );
+  const xrayTarget = useMemo(
+    () =>
+      new THREE.WebGLRenderTarget(1, 1, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        type: THREE.FloatType,
+        depthBuffer: true,
+      }),
+    [],
+  );
   const mats = useMemo(
     () => ({
       other: maskMaterial(0, 0),
+      skip: new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false }),
       sel: maskMaterial(1, 0),
       hov: maskMaterial(0, 1),
     }),
@@ -105,6 +125,7 @@ export function SelectionOutline() {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         mask: { value: target.texture },
+        xray: { value: xrayTarget.texture },
         texel: { value: new THREE.Vector2() },
         radius: { value: 2 },
         selColor: { value: new THREE.Color("#6ee7c5") },
@@ -126,11 +147,15 @@ export function SelectionOutline() {
     const w = Math.round(size.width * dpr);
     const h = Math.round(size.height * dpr);
     target.setSize(w, h);
+    xrayTarget.setSize(w, h);
     overlay.material.uniforms.texel.value.set(1 / w, 1 / h);
     overlay.material.uniforms.radius.value = 1.75 * dpr;
-  }, [size, dpr, target, overlay]);
+  }, [size, dpr, target, xrayTarget, overlay]);
 
-  useEffect(() => () => target.dispose(), [target]);
+  useEffect(() => () => {
+    target.dispose();
+    xrayTarget.dispose();
+  }, [target, xrayTarget]);
 
   const clear = useMemo(() => new THREE.Color(), []);
 
@@ -157,6 +182,11 @@ export function SelectionOutline() {
     scene.background = null;
     gl.setRenderTarget(target);
     gl.setClearColor(0x000000, 0);
+    gl.clear();
+    gl.render(scene, camera);
+    // X-ray pass: selected bodies only, ignoring everything in front of them.
+    for (const [id, mesh] of Object.entries(meshes)) mesh.material = selection.includes(id) ? mats.sel : mats.skip;
+    gl.setRenderTarget(xrayTarget);
     gl.clear();
     gl.render(scene, camera);
     gl.setRenderTarget(null);

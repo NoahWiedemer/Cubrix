@@ -643,8 +643,8 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 
 .view-controls {
   position: absolute;
-  right: 16px;
-  top: 112px;
+  left: 14px;
+  top: 14px;
   display: flex;
   align-items: center;
   gap: 2px;
