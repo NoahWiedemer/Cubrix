@@ -146,7 +146,20 @@ export interface ImportFeature extends FeatureBase {
   scale: number;
 }
 
-export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature | TextFeature | ImportFeature;
+/**
+ * A folder of objects (purely organisational, no boolean): it moves, rotates and scales
+ * its members as one and shows them as one row in the object list. Child transforms are
+ * relative to the group, like operands of a boolean.
+ */
+export interface GroupFeature extends FeatureBase {
+  type: "group";
+  children: Feature[];
+}
+
+export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature | TextFeature | ImportFeature | GroupFeature;
+
+/** Features that contain other features (booleans: operands, groups: members). */
+export const childrenOf = (f: Feature): Feature[] | null => (f.type === "boolean" || f.type === "group" ? f.children : null);
 
 /** Embedded import data (base64): STL for meshes (3MF is converted), STEP for exact solids. */
 export interface Asset {
@@ -246,6 +259,7 @@ export const BOOLEAN_LABELS: Record<BooleanOp, string> = {
 
 export function featureTypeLabel(f: Feature): string {
   if (f.type === "boolean") return BOOLEAN_LABELS[f.op];
+  if (f.type === "group") return "Gruppe";
   if (f.type === "sketch") return "Skizze";
   if (f.type === "extrude") return "Extrusion";
   if (f.type === "text") return "Text";
@@ -374,8 +388,9 @@ export function findFeature(doc: ModelDocument, id: string): Feature | undefined
   const walk = (list: Feature[]): Feature | undefined => {
     for (const f of list) {
       if (f.id === id) return f;
-      if (f.type === "boolean") {
-        const hit = walk(f.children);
+      const kids = childrenOf(f);
+      if (kids) {
+        const hit = walk(kids);
         if (hit) return hit;
       }
     }
@@ -384,12 +399,19 @@ export function findFeature(doc: ModelDocument, id: string): Feature | undefined
   return walk(doc.features);
 }
 
-/** Chain of boolean parents (outermost first) of a nested operand; [] for top-level features. */
+/** Chain of boolean parents (outermost first) of a nested operand; [] for top-level features and group members. */
 export function parentsOf(doc: ModelDocument, id: string): BooleanFeature[] {
-  const walk = (list: Feature[], chain: BooleanFeature[]): BooleanFeature[] | null => {
+  // Only the booleans directly around the operand count, not a group further out.
+  const chain = containersOf(doc, id);
+  return chain.slice(chain.map((c) => c.type).lastIndexOf("group") + 1) as BooleanFeature[];
+}
+
+/** Every container (groups and booleans, outermost first) around a feature; [] at top level. */
+export function containersOf(doc: ModelDocument, id: string): (BooleanFeature | GroupFeature)[] {
+  const walk = (list: Feature[], chain: (BooleanFeature | GroupFeature)[]): (BooleanFeature | GroupFeature)[] | null => {
     for (const f of list) {
       if (f.id === id) return chain;
-      if (f.type === "boolean") {
+      if (f.type === "boolean" || f.type === "group") {
         const hit = walk(f.children, [...chain, f]);
         if (hit) return hit;
       }
@@ -397,6 +419,35 @@ export function parentsOf(doc: ModelDocument, id: string): BooleanFeature[] {
     return null;
   };
   return walk(doc.features, []) ?? [];
+}
+
+/** The ids plus every member (at any depth) of the groups among them. */
+export function expandGroups(doc: ModelDocument, ids: string[]): Set<string> {
+  const out = new Set<string>();
+  const add = (f: Feature) => {
+    out.add(f.id);
+    if (f.type === "group") f.children.forEach(add);
+  };
+  for (const id of ids) {
+    const f = findFeature(doc, id);
+    if (f) add(f);
+    else out.add(id);
+  }
+  return out;
+}
+
+/** Groups around a feature, outermost first ([] when it is not in a group). */
+export const groupsOf = (doc: ModelDocument, id: string) => containersOf(doc, id).filter((c): c is GroupFeature => c.type === "group");
+
+/** Removes a feature wherever it is (top level or inside a group); empty groups disappear. */
+export function removeFeatures(doc: ModelDocument, ids: string[]): ModelDocument {
+  const drop = new Set(ids);
+  const walk = (list: Feature[]): Feature[] =>
+    list
+      .filter((f) => !drop.has(f.id))
+      .map((f) => (f.type === "group" ? { ...f, children: walk(f.children) } : f))
+      .filter((f) => f.type !== "group" || f.children.length > 0);
+  return { ...doc, features: walk(doc.features) };
 }
 
 /** Updates a feature anywhere (operands inside booleans too); the parents are rebuilt. */
@@ -409,6 +460,10 @@ export function updateFeature(
     if (f.id === id) return fn(f);
     if (f.type === "boolean") {
       const children = f.children.map(walk) as BooleanFeature["children"];
+      return children.some((c, i) => c !== f.children[i]) ? { ...f, children } : f;
+    }
+    if (f.type === "group") {
+      const children = f.children.map(walk);
       return children.some((c, i) => c !== f.children[i]) ? { ...f, children } : f;
     }
     return f;
@@ -430,7 +485,7 @@ export function cloneFeature(f: Feature): Feature {
   const copy = structuredClone(f);
   const walk = (x: Feature) => {
     x.id = newId();
-    if (x.type === "boolean") x.children.forEach(walk);
+    if (x.type === "boolean" || x.type === "group") x.children.forEach(walk);
   };
   walk(copy);
   return copy;
@@ -438,13 +493,14 @@ export function cloneFeature(f: Feature): Feature {
 
 /** Geometry-relevant part of a feature, ignoring its own placement. Used as mesh cache key. */
 /** Bodies without real edges to round or chamfer (curved all round, or threads). */
-export const hasNoEdges = (f: Feature) => ["sphere", "torus", "thread", "threadhole"].includes(f.type);
+export const hasNoEdges = (f: Feature) => ["sphere", "torus", "thread", "threadhole", "group"].includes(f.type);
 
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
     const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
+    if (x.type === "group") return { ...base, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "sketch") return { ...base, s: x.shapes };
     if (x.type === "extrude") return { ...base, pr: x.profile, h: x.revolve ? 0 : x.height, rv: x.revolve, co: x.corner };
     if (x.type === "import") return { ...base, a: x.assetId, s: x.scale };

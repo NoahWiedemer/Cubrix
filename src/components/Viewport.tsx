@@ -15,7 +15,7 @@ import { SelectionOutline, registerMesh, useMeshObjects } from "./SelectionOutli
 import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { findFeature, parentsOf, type BooleanFeature, type Feature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
+import { findFeature, groupsOf, parentsOf, type BooleanFeature, type Feature, type GroupFeature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
@@ -172,7 +172,39 @@ function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhan
 
 // ── Objects ──────────────────────────────────────────────────────────────────
 
-function FeatureObject({ f, order }: { f: Feature; order: number }) {
+/**
+ * A group: its members inside the group's transform. The group's own (compound) mesh is
+ * only requested for its bounding box (gizmo anchor, dimensions), never drawn.
+ */
+function GroupObject({ f, order, root }: { f: GroupFeature; order: number; root?: string }) {
+  const t = useTransform(f);
+  useEffect(() => {
+    void getGeometry(f).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometryKey(f)]);
+  if (!f.visible) return null;
+  return (
+    <group position={t.position} rotation={new THREE.Euler(deg(t.rotation[0]), deg(t.rotation[1]), deg(t.rotation[2]), "XYZ")}>
+      {f.children.map((c, i) =>
+        c.type === "group" ? <GroupObject key={c.id} f={c} order={order + i} root={root ?? f.id} /> : c.type === "sketch" ? null : <FeatureObject key={c.id} f={c} order={order + i} root={root ?? f.id} />,
+      )}
+    </group>
+  );
+}
+
+/**
+ * What a click on `id` selects: a group member picks its outermost group, unless the
+ * selection is already inside that group (then members are picked one by one).
+ */
+function pickTarget(id: string, root: string | undefined): string {
+  if (!root) return id;
+  const { selection, nodes, currentId } = useApp.getState();
+  const doc = nodes[currentId].doc;
+  const inside = selection.some((s) => s !== root && groupsOf(doc, s).some((g) => g.id === root));
+  return inside ? id : root;
+}
+
+function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: string }) {
   const [entry, setEntry] = useState<GeometryEntry | null>(null);
   const key = geometryKey(f);
   useEffect(() => {
@@ -209,8 +241,9 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     if (presenting) return; // Vorschau: clicks only orbit
-    // Locked objects let the click through to whatever is behind them (or the empty bed).
-    if (f.locked && !useMeasure.getState().active) return;
+    // Locked objects (or members of a locked group) let the click through to whatever is behind.
+    const st = useApp.getState();
+    if ((f.locked || groupsOf(st.nodes[st.currentId].doc, f.id).some((g) => g.locked)) && !useMeasure.getState().active) return;
     e.stopPropagation();
     if (e.delta > 4) return;
     if (useMeasure.getState().active) {
@@ -223,7 +256,13 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
       return;
     }
     const multi = e.shiftKey || e.metaKey || e.ctrlKey;
-    void execute("selection.set", { ids: [f.id], mode: multi ? "toggle" : "replace" });
+    void execute("selection.set", { ids: [pickTarget(f.id, root)], mode: multi ? "toggle" : "replace" });
+  };
+  // Double-click inside a group selects just this member.
+  const onDoubleClick = (e: ThreeEvent<MouseEvent>) => {
+    if (presenting || !root || f.locked) return;
+    e.stopPropagation();
+    void execute("selection.set", { ids: [f.id] });
   };
 
   return (
@@ -235,11 +274,13 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         castShadow={look.opacity === undefined}
         receiveShadow
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onContextMenu={(e) => {
           if (presenting) return;
           e.stopPropagation();
           e.nativeEvent.preventDefault();
-          if (!useApp.getState().selection.includes(f.id)) void execute("selection.set", { ids: [f.id] });
+          const target = pickTarget(f.id, root);
+          if (!useApp.getState().selection.includes(target)) void execute("selection.set", { ids: [target] });
           openContextMenu(e.nativeEvent.clientX, e.nativeEvent.clientY);
         }}
         onPointerOver={(e) => {
@@ -719,6 +760,8 @@ export function Viewport() {
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
   const singleParents = single ? parentsOf(doc, single.id) : [];
+  // The gizmo works in world space; members of a moved or turned group are edited in the Inspektor.
+  const insideMovedGroup = !!single && groupsOf(doc, single.id).some((g) => g.transform.position.some((v) => v !== 0) || g.transform.rotation.some((v) => v !== 0));
   const textTool = useTextTool((s) => s.active);
   const measuring = useMeasure((s) => s.active);
   const box = useBoxSelect();
@@ -782,13 +825,13 @@ export function Viewport() {
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>
           {doc.features.map((f, i) =>
-            isolated && !isolated.includes(f.id) ? null : f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
+            isolated && !isolated.includes(f.id) ? null : f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : f.type === "group" ? <GroupObject key={f.id} f={f} order={i} /> : <FeatureObject key={f.id} f={f} order={i} />,
           )}
           {textTool && <TextPlacementPlane />}
           {measuring && <MeasurePlane />}
           {measuring && <MeasureOverlay />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && workspace === "model" && singleParents.length === 0 && !single.locked && (
+          {single && workspace === "model" && singleParents.length === 0 && !single.locked && !insideMovedGroup && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />

@@ -7,7 +7,7 @@ import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { featureTypeLabel, findFeature, hasNoEdges, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
+import { featureTypeLabel, findFeature, hasNoEdges, type Feature, type GroupFeature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes, useMissingFonts } from "../cad/kernel";
 import { FontPicker } from "./FontPicker";
 import { Appearance } from "./ColorRow";
@@ -197,6 +197,7 @@ function Dimensions({ f }: { f: Feature }) {
   if (f.type === "text") return null;
   if (f.type === "sketch" || f.type === "extrude") return <><ProfileSize f={f} /><ShapeList f={f} /></>;
   if (f.type === "import") return <ImportSize f={f} />;
+  if (f.type === "group") return null;
   const fields = PARAM_FIELDS[f.type];
   const params = f.params as Record<string, number>;
   const set = (key: string, v: number) => {
@@ -470,9 +471,27 @@ function SingleObject({ f }: { f: Feature }) {
           <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
         </div>
       )}
-      {f.type !== "sketch" && <ShellSection f={f} />}
-      <Appearance key={f.id + (f.color ?? "")} ids={[f.id]} color={f.color} material={f.material} />
+      {f.type !== "sketch" && f.type !== "group" && <ShellSection f={f} />}
+      {f.type === "group" ? <GroupAppearance f={f} /> : <Appearance key={f.id + (f.color ?? "")} ids={[f.id]} color={f.color} material={f.material} />}
     </>
+  );
+}
+
+/** A group's look summarises its members (setting it applies to all of them). */
+function GroupAppearance({ f }: { f: GroupFeature }) {
+  const leaves: Feature[] = [];
+  const walk = (x: Feature) => (x.type === "group" ? x.children.forEach(walk) : leaves.push(x));
+  walk(f);
+  const first = leaves[0];
+  return (
+    <Appearance
+      key={f.id}
+      ids={[f.id]}
+      color={first?.color}
+      material={first?.material}
+      mixedColor={leaves.some((l) => l.color !== first?.color)}
+      mixedMaterial={leaves.some((l) => (l.material ?? "matte") !== (first?.material ?? "matte"))}
+    />
   );
 }
 

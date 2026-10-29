@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import { transformMatrix } from "./bounds";
 import { DEFAULT_MATERIAL, MATERIALS, isMaterialId, materialOf, type MaterialId } from "./materials";
 import { useShortcuts } from "../components/ShortcutOverlay";
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
@@ -15,6 +16,10 @@ import {
   newId,
   uniqueName,
   parentsOf,
+  containersOf,
+  expandGroups,
+  removeFeatures,
+  type GroupFeature,
   hasNoEdges,
   rememberPrinter,
   updateFeature,
@@ -262,9 +267,12 @@ defineCommand({
   kind: "document",
   label: "Formen erstellen",
   description:
-    "Erstellt viele Grundkörper in EINEM Schritt. shapes: [{type: 'box'|'cylinder'|'sphere'|…, params: {…mm}, position: [x,y,z], rotation?: [rx,ry,rz], name?}]. Gibt die neuen IDs zurück.",
+    "Erstellt viele Grundkörper in EINEM Schritt. shapes: [{type: 'box'|'cylinder'|'sphere'|…, params: {…mm}, position: [x,y,z], rotation?: [rx,ry,rz], name?}]. Mit groupName landen sie gleich in einer neuen Gruppe. Gibt die neuen IDs zurück.",
   icon: "shapes",
-  params: { shapes: { type: "list", description: "Liste der Formen [{type, params, position, rotation?, name?}]" } },
+  params: {
+    shapes: { type: "list", description: "Liste der Formen [{type, params, position, rotation?, name?}]" },
+    groupName: { type: "string", optional: true, description: "Name einer neuen Gruppe für alle Formen (z. B. \"ESP32 DevKit\")" },
+  },
   apply(doc, p, ctx) {
     const specs = (typeof p.shapes === "string" ? JSON.parse(p.shapes) : p.shapes) as Record<string, any>[];
     if (!Array.isArray(specs) || !specs.length) throw new Error("shapes muss eine Liste sein");
@@ -275,6 +283,10 @@ defineCommand({
       const r = addPrimitive(next, spec, ctx);
       next = r.doc;
       ids.push(r.id);
+    }
+    if (p.groupName) {
+      const g = makeGroup(next, ids, String(p.groupName));
+      return { doc: g.doc, selection: [g.id], label: `${specs.length} Formen als „${g.name}“ erstellen` };
     }
     return { doc: next, selection: ids, label: `${specs.length} Formen erstellen` };
   },
@@ -561,7 +573,7 @@ defineCommand({
   },
   apply(doc, p) {
     const f = findFeature(doc, p.id);
-    if (!f || f.type === "boolean" || f.type === "sketch" || f.type === "import") throw new Error("Nur Grundkörper haben Maße (Importe: object.scale)");
+    if (!f || f.type === "boolean" || f.type === "group" || f.type === "sketch" || f.type === "import") throw new Error("Nur Grundkörper haben Maße (Importe und Gruppen: object.scale)");
     const patch = typeof p.params === "string" ? JSON.parse(p.params) : p.params;
     if (f.type === "extrude") {
       const h = Number(patch.height);
@@ -702,8 +714,9 @@ defineCommand({
   },
   isEnabled: (ctx) => ctx.selection.length > 0,
   apply(doc, p, ctx) {
-    const ids: string[] = p.ids ?? ctx.selection;
+    const picked: string[] = p.ids ?? ctx.selection;
     if (!isMaterialId(p.material)) throw new Error(`Unbekanntes Material. Möglich: ${MATERIALS.map((m) => m.id).join(", ")}.`);
+    const ids = [...expandGroups(doc, picked)];
     const m: MaterialId = p.material;
     let changed = 0;
     let next = doc;
@@ -718,7 +731,8 @@ defineCommand({
     }
     if (!changed) return null;
     const label = materialOf(m).label;
-    return { doc: next, label: changed === 1 ? `${findFeature(doc, ids.find((id) => findFeature(doc, id))!)!.name}: ${label}` : `${changed} Objekte: ${label}` };
+    const first = findFeature(doc, picked[0]);
+    return { doc: next, label: picked.length === 1 && first ? `${first.name}: ${label}` : `${picked.length} Objekte: ${label}` };
   },
 });
 
@@ -734,18 +748,25 @@ defineCommand({
   },
   isEnabled: (ctx) => ctx.selection.length > 0,
   apply(doc, p, ctx) {
-    const ids: string[] = p.ids ?? ctx.selection;
+    const picked: string[] = p.ids ?? ctx.selection;
     const c = String(p.color ?? "").trim().toLowerCase();
     if (c && !/^#[0-9a-f]{6}$/.test(c)) throw new Error("Farbe bitte als #rrggbb angeben.");
+    // A group passes the colour on to all of its members (and keeps it for new ones).
+    const ids = [...expandGroups(doc, picked)];
     let changed = 0;
-    const features = doc.features.map((f) => {
-      if (!ids.includes(f.id) || (f.color ?? "") === c) return f;
+    let next = doc;
+    for (const id of ids) {
+      const f = findFeature(next, id);
+      if (!f || (f.color ?? "") === c) continue;
       changed++;
-      const { color: _old, ...rest } = f;
-      return (c ? { ...rest, color: c } : rest) as Feature;
-    });
+      next = updateFeature(next, id, (x) => {
+        const { color: _old, ...rest } = x;
+        return (c ? { ...rest, color: c } : rest) as Feature;
+      });
+    }
     if (!changed) return null;
-    return { doc: { ...doc, features }, label: changed === 1 ? `${doc.features.find((f) => ids.includes(f.id))!.name}: Farbe` : `${changed} Objekte: Farbe` };
+    const first = findFeature(doc, picked[0]);
+    return { doc: next, label: picked.length === 1 && first ? `${first.name}: Farbe` : `${picked.length} Objekte: Farbe` };
   },
 });
 
@@ -935,13 +956,104 @@ defineCommand({
   isEnabled: hasSelection,
   apply(doc, p, ctx) {
     const ids: string[] = p.ids ?? ctx.selection;
-    const gone = doc.features.filter((f) => ids.includes(f.id));
+    // Top-level objects and group members (operands are removed via operand.remove).
+    const gone = ids.map((id) => findFeature(doc, id)).filter((f): f is Feature => !!f && parentsOf(doc, f.id).length === 0);
     if (!gone.length) return null;
     return {
-      doc: { ...doc, features: doc.features.filter((f) => !ids.includes(f.id)) },
+      doc: removeFeatures(doc, gone.map((f) => f.id)),
       selection: [],
       label: `${gone.length > 1 ? `${gone.length} Objekte` : gone[0].name} löschen`,
     };
+  },
+});
+
+// ── Gruppen ─────────────────────────────────────────────────────────────────
+
+/** The list (top level or a group's members) that directly contains `id`. */
+function siblingsOf(doc: ModelDocument, id: string): Feature[] | null {
+  const chain = containersOf(doc, id);
+  const parent = chain[chain.length - 1];
+  if (!parent) return doc.features;
+  return parent.type === "group" ? parent.children : null; // operands can't be grouped
+}
+
+/** Wraps `ids` (siblings in one list) into a new group at the first member's place. */
+function makeGroup(doc: ModelDocument, ids: string[], name?: string): { doc: ModelDocument; id: string; name: string } {
+  if (!ids.length) throw new Error("Bitte Objekte zum Gruppieren auswählen.");
+  const list = siblingsOf(doc, ids[0]);
+  if (!list) throw new Error("Teile eines Verbunds lassen sich nicht gruppieren.");
+  const members = list.filter((f) => ids.includes(f.id));
+  if (members.length !== new Set(ids).size) throw new Error("Nur Objekte auf derselben Ebene lassen sich gruppieren.");
+  const groupName = name?.trim() || uniqueName(doc, "Gruppe");
+  const group: GroupFeature = { id: newId(), name: groupName, type: "group", visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0] }, children: members };
+  const insert = (fs: Feature[]): Feature[] => {
+    if (!fs.some((f) => ids.includes(f.id))) return fs.map((f) => (f.type === "group" ? { ...f, children: insert(f.children) } : f));
+    const at = fs.findIndex((f) => ids.includes(f.id));
+    const rest = fs.filter((f) => !ids.includes(f.id));
+    rest.splice(at, 0, group);
+    return rest;
+  };
+  return { doc: { ...doc, features: insert(doc.features) }, id: group.id, name: groupName };
+}
+
+/** A member's transform expressed in the group's parent frame (for ungrouping). */
+function composeTransform(outer: Transform, inner: Transform): Transform {
+  const m = transformMatrix(outer).multiply(transformMatrix(inner));
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  m.decompose(pos, quat, new THREE.Vector3());
+  const e = new THREE.Euler().setFromQuaternion(quat, "XYZ");
+  const r = (v: number) => Math.round(v * 1000) / 1000;
+  const deg = (v: number) => r(THREE.MathUtils.radToDeg(v));
+  return { position: [r(pos.x), r(pos.y), r(pos.z)], rotation: [deg(e.x), deg(e.y), deg(e.z)] };
+}
+
+defineCommand({
+  id: "group.create",
+  kind: "document",
+  label: "Gruppieren",
+  description: "Fasst Objekte (auf derselben Ebene) zu einer benannten Gruppe zusammen, z. B. alle Teile eines Bauteils. Die Gruppe bewegt, dreht und skaliert ihre Mitglieder gemeinsam; keine Boolesche Operation.",
+  icon: "folder",
+  shortcut: "mod+g",
+  params: {
+    memberIds: { type: "ids", optional: true, description: "Mitglieder (Standard: Auswahl)" },
+    name: { type: "string", optional: true, description: "Name der Gruppe (Standard: Gruppe N)" },
+  },
+  isEnabled: (ctx) => ctx.selection.length > 1,
+  apply(doc, p, ctx) {
+    const g = makeGroup(doc, p.memberIds ?? ctx.selection, p.name);
+    return { doc: g.doc, selection: [g.id], label: `„${g.name}“ gruppieren` };
+  },
+});
+
+defineCommand({
+  id: "group.ungroup",
+  kind: "document",
+  label: "Gruppierung aufheben",
+  description: "Löst eine Gruppe auf; ihre Mitglieder bleiben genau dort, wo sie sind.",
+  icon: "folder",
+  shortcut: "shift+mod+g",
+  params: { id: { type: "id", optional: true, description: "Gruppen-ID (Standard: Auswahl)" } },
+  isEnabled: (ctx) => ctx.selection.length === 1 && findFeature(ctx.doc, ctx.selection[0])?.type === "group",
+  apply(doc, p, ctx) {
+    const g = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!g || g.type !== "group") throw new Error("Bitte eine Gruppe auswählen.");
+    const members = g.children.map((c) => ({ ...c, transform: composeTransform(g.transform, c.transform) }));
+    const replace = (fs: Feature[]): Feature[] =>
+      fs.flatMap((f) => (f.id === g.id ? members : f.type === "group" ? [{ ...f, children: replace(f.children) }] : [f]));
+    return { doc: { ...doc, features: replace(doc.features) }, selection: members.map((m) => m.id), label: `„${g.name}“ auflösen` };
+  },
+});
+
+defineCommand({
+  id: "group.rename",
+  kind: "document",
+  label: "Gruppe umbenennen",
+  description: "Gibt einer Gruppe einen neuen Namen.",
+  icon: "rename",
+  params: { id: { type: "id", description: "Gruppen-ID" }, name: { type: "string", description: "Neuer Name" } },
+  apply(doc, p, ctx) {
+    return (getCommand("object.rename") as DocumentCommand).apply(doc, p, ctx);
   },
 });
 

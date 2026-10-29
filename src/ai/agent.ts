@@ -53,7 +53,7 @@ export function modelSnapshot() {
     objects: doc.features.map((f) => {
       const b = isSolid(f) && entries[geometryKey(f)] ? worldBox(f, entries) : null;
       const { id, name, type, visible, transform } = f;
-      const extra = f.type === "boolean" ? { op: f.op, children: f.children.map((c) => c.name) } : f.type === "sketch" ? { shapes: f.shapes } : f.type === "extrude" ? { height: f.height } : f.type === "import" ? { scale: f.scale } : { params: f.params };
+      const extra = f.type === "boolean" ? { op: f.op, children: f.children.map((c) => c.name) } : f.type === "group" ? { members: f.children.map((c) => ({ id: c.id, name: c.name, type: c.type })) } : f.type === "sketch" ? { shapes: f.shapes } : f.type === "extrude" ? { height: f.height } : f.type === "import" ? { scale: f.scale } : { params: f.params };
       return {
         id, name, type, visible, transform, fillet: f.fillet, chamfer: f.chamfer, ...extra,
         bounds: b ? { min: [r(b.min.x), r(b.min.y), r(b.min.z)], max: [r(b.max.x), r(b.max.y), r(b.max.z)] } : undefined,
@@ -99,6 +99,7 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
 - Beispiel Spielwürfel: primitive__box 20 mm (mit fillet), dann EIN shapes__createMany mit allen 21 Augen-Kugeln (Positionen auf den 6 Seiten), dann EIN boolean__subtract mit toolIds = alle Augen. Fertig in 3 Aufrufen.
 ${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren (Würfel, Box, Halter mit genannten Maßen: ohne Suche). Höchstens 3 Suchen; web_fetch (falls vorhanden) nur, um eine gefundene Seite mit den Maßen (Datenblatt, Maßzeichnung) ganz zu lesen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
 ` : ""}- Runde Formen IMMER als echte Kurven: sketch__ellipse, sketch__roundedRect, sketch__slot, sketch__path mit arc/spline-Segmenten, Kreise. Nie Rundungen durch Linienzüge/Vielecke annähern. Runde Umrisse über corner (2D) bzw. sketch__roundCorners, nicht über 3D-Kantenrundung. Beispiel ovaler Anhänger: sketch__ellipse (rx, ry, height 3), Loch per Zylinder + boolean__subtract.
+- Mehrteilige Dinge (z. B. „Bau mir ein ESP32-Modell“: Platine, Chips, Pins, USB-Buchse) kommen IMMER in eine benannte Gruppe (z. B. „ESP32 DevKit“): shapes__createMany mit groupName oder danach group__create. Gruppen sind reine Ordner, keine Booleschen Operationen.
 - Gefäße und Gehäuse: Box/Becher per object__shell (Wandstärke, open "top") statt Innenkörper abzuziehen. Runde Gefäße (Vase, Becher, Flasche, Knopf): halbes Querschnittsprofil rechts der Achse mit sketch__path zeichnen (Y = Höhe), dann sketch__revolve, dann object__shell.
 - Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
 - Fragen zur App beantwortest du anhand dieser Hilfe-Themen:

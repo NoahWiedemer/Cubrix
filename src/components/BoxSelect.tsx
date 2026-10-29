@@ -7,6 +7,7 @@ import { execute } from "../core/commands";
 import { useMeshObjects } from "./SelectionOutline";
 import { viewportPick } from "../ui/viewportPick";
 import { useApp } from "../core/store";
+import { groupsOf } from "../core/document";
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
@@ -56,7 +57,8 @@ export function makeRectPicker(getCamera: () => THREE.Camera, canvas: () => HTML
     const c = canvas().getBoundingClientRect();
     const out: string[] = [];
     const { nodes, currentId } = useApp.getState();
-    const locked = new Set(nodes[currentId].doc.features.filter((f) => f.locked).map((f) => f.id));
+    const doc = nodes[currentId].doc;
+    const locked = new Set(doc.features.filter((f) => f.locked).map((f) => f.id));
     const box = new THREE.Box3();
     const centre = new THREE.Vector3();
     for (const [id, mesh] of Object.entries(useMeshObjects.getState().meshes)) {
@@ -64,8 +66,13 @@ export function makeRectPicker(getCamera: () => THREE.Camera, canvas: () => HTML
       box.setFromObject(mesh).getCenter(centre).project(cam);
       const x = c.left + ((centre.x + 1) / 2) * c.width;
       const y = c.top + ((1 - centre.y) / 2) * c.height;
-      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) out.push(id);
+      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) {
+        // Members of a group select their (outermost) group.
+        const top = groupsOf(doc, id)[0];
+        if (top?.locked) continue;
+        out.push(top ? top.id : id);
+      }
     }
-    return out;
+    return [...new Set(out)];
   };
 }

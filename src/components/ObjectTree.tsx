@@ -3,13 +3,14 @@ import { useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import type { BooleanFeature, Feature } from "../core/document";
+import type { BooleanFeature, Feature, GroupFeature } from "../core/document";
 import { Icon, type IconName } from "../ui/icons";
 import { openContextMenu } from "./ContextMenu";
 
 export function featureIcon(f: Feature): IconName {
   if (isExtraType(f.type)) return SHAPE_DEFAULTS[f.type].icon;
   if (f.type === "import") return "open";
+  if (f.type === "group") return "folder";
   return f.type === "boolean" ? f.op : f.type === "sketch" ? "sketch" : f.type === "extrude" ? "extrude" : f.type;
 }
 
@@ -19,14 +20,14 @@ function roleOf(parent: BooleanFeature, index: number): { icon: IconName; tip: s
   return parent.op === "union" ? { icon: "union", tip: "Vereinigt" } : parent.op === "subtract" ? { icon: "subtract", tip: "Abgezogen" } : { icon: "intersect", tip: "Schnittmenge" };
 }
 
-function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; parent?: BooleanFeature; index?: number }) {
+function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; parent?: BooleanFeature | GroupFeature; index?: number }) {
   const selected = useApp((s) => s.selection.includes(f.id));
   const [renaming, setRenaming] = useState(false);
   // Expanded automatically while one of its operands is selected.
-  const childSelected = useApp((s) => f.type === "boolean" && s.selection.some((id) => contains(f, id)));
+  const childSelected = useApp((s) => (f.type === "boolean" || f.type === "group") && s.selection.some((id) => contains(f, id)));
   const [openState, setOpen] = useState(false);
   const open = openState || childSelected;
-  const role = parent ? roleOf(parent, index) : null;
+  const role = parent?.type === "boolean" ? roleOf(parent, index) : null;
 
   return (
     <>
@@ -35,9 +36,17 @@ function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; 
         style={depth ? { paddingLeft: 8 + depth * 16 } : undefined}
         onPointerEnter={() => useApp.setState({ hoveredId: f.id })}
         onPointerLeave={() => useApp.setState({ hoveredId: null })}
-        onClick={(e) =>
-          execute("selection.set", { ids: [f.id], mode: e.shiftKey || e.metaKey || e.ctrlKey ? "toggle" : "replace" })
-        }
+        onClick={(e) => {
+          // Shift: range from the last picked row in the same list; ⌘/Ctrl: toggle one.
+          const { selection, nodes, currentId } = useApp.getState();
+          const siblings = parent ? parent.children : nodes[currentId].doc.features;
+          const anchor = siblings.findIndex((s) => s.id === selection[selection.length - 1]);
+          const here = siblings.findIndex((s) => s.id === f.id);
+          if (e.shiftKey && anchor >= 0 && here >= 0) {
+            const [from, to] = anchor < here ? [anchor, here] : [here, anchor];
+            void execute("selection.set", { ids: siblings.slice(from, to + 1).map((s) => s.id), mode: "add" });
+          } else void execute("selection.set", { ids: [f.id], mode: e.metaKey || e.ctrlKey ? "toggle" : "replace" });
+        }}
         onDoubleClick={() => setRenaming(true)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -45,7 +54,7 @@ function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; 
           openContextMenu(e.clientX, e.clientY);
         }}
       >
-        {f.type === "boolean" ? (
+        {f.type === "boolean" || f.type === "group" ? (
           <button className="tree-chevron" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
             {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </button>
@@ -95,12 +104,12 @@ function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; 
           <Icon name={f.visible ? "visible" : "hidden"} size={14} />
         </button>
       </div>
-      {open && f.type === "boolean" && f.children.map((c, i) => <Row key={c.id} f={c} depth={depth + 1} parent={f} index={i} />)}
+      {open && (f.type === "boolean" || f.type === "group") && f.children.map((c, i) => <Row key={c.id} f={c} depth={depth + 1} parent={f} index={i} />)}
     </>
   );
 }
 
-const contains = (b: Feature, id: string): boolean => b.type === "boolean" && b.children.some((c) => c.id === id || contains(c, id));
+const contains = (b: Feature, id: string): boolean => (b.type === "boolean" || b.type === "group") && b.children.some((c) => c.id === id || contains(c, id));
 
 export function ObjectTree() {
   const doc = useDoc();

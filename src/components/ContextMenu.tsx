@@ -44,6 +44,8 @@ export function ContextMenu() {
         <CommandItem id="object.dropToBed" onDone={done} />
         <CommandItem id="object.setVisibility" label="Ein-/Ausblenden" onDone={done} />
         <CommandItem id="view.isolate" label={st.isolated ? "Isolierung beenden" : "Isolieren"} onDone={done} />
+        {st.selection.length > 1 && <CommandItem id="group.create" onDone={done} />}
+        {sel && findFeature(doc, sel)?.type === "group" && <CommandItem id="group.ungroup" onDone={done} />}
         <CommandItem id="object.lock" label={sel && findFeature(doc, sel)?.locked ? "Entsperren" : "Sperren"} onDone={done} />
         <MenuItem
           icon="rotate"

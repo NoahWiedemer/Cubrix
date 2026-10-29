@@ -315,6 +315,12 @@ export const importedShapes = new Map<string, Shape3D>();
 export function buildLocal(f: Feature): Shape3D {
   if (f.type === "sketch") throw new Error("Skizzen sind keine Körper.");
   let shape: Shape3D;
+  if (f.type === "group") {
+    // A folder of objects: its visible members side by side (no boolean, export keeps them apart).
+    const parts = f.children.filter((c) => c.visible && c.type !== "sketch").flatMap((c) => solidsOf(buildPlaced(c)));
+    if (!parts.length) throw new Error(`${f.name} ist leer.`);
+    return parts.length === 1 ? parts[0] : (makeCompound(parts) as Shape3D);
+  }
   if (f.type === "boolean") {
     // Many tools: fuse them first, then one boolean against the target (much faster
     // than one cut per tool).

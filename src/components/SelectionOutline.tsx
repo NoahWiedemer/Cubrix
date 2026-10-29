@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { create } from "zustand";
 import { useApp } from "../core/store";
+import { expandGroups } from "../core/document";
 
 /** Layer used to render feature meshes into the outline mask. */
 const MASK_LAYER = 1;
@@ -212,11 +213,14 @@ export function SelectionOutline() {
     gl.autoClear = true;
     gl.render(scene, camera);
 
-    const { selection, hoveredId, workspace } = useApp.getState();
+    const { selection: picked, hoveredId, workspace, nodes, currentId } = useApp.getState();
     if (workspace === "preview") return; // pure render view
     const meshes = useMeshObjects.getState().meshes;
+    // A selected group outlines all of its members.
+    const selected = expandGroups(nodes[currentId].doc, picked);
+    const selection = { includes: (id: string) => selected.has(id), some: (fn: (id: string) => boolean) => [...selected].some(fn) };
     const hasHover = !!hoveredId && !selection.includes(hoveredId) && !!meshes[hoveredId];
-    if (!selection.some((id) => meshes[id]) && !hasHover) return;
+    if (!selection.some((id) => !!meshes[id]) && !hasHover) return;
 
     // Mask pass: feature meshes only, others write depth so hidden parts stay hidden.
     const restore: [THREE.Mesh, THREE.Material | THREE.Material[]][] = [];
