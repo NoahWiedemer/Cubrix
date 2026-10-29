@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Gizmo, useGizmo } from "./Gizmo";
 import {
   ContactShadows,
-  Environment,
   GizmoHelper,
   Grid,
   Html,
-  Lightformer,
   OrbitControls,
 } from "@react-three/drei";
 import { SelectionOutline, registerMesh } from "./SelectionOutline";
@@ -20,6 +19,7 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { QUALITY, useSettings } from "../ui/settings";
 import { PropertiesOverlay } from "./PropertiesPanel";
 import { PRIMITIVES } from "./LeftRail";
 import { Icon } from "../ui/icons";
@@ -83,10 +83,10 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         onPointerOut={() => useApp.getState().hoveredId === f.id && useApp.setState({ hoveredId: null })}
       >
         <meshStandardMaterial
-          color="#9aa3aa"
-          roughness={0.62}
-          metalness={0.04}
-          envMapIntensity={0.55}
+          color="#99a1a8"
+          roughness={0.6}
+          metalness={0}
+          envMapIntensity={0.18}
           polygonOffset
           // Coplanar faces of different bodies resolve deterministically:
           // the selected body wins, then later bodies over earlier ones.
@@ -95,7 +95,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null}>
-        <lineBasicMaterial color={selected ? ACCENT : "#2b3237"} transparent opacity={selected ? 0.75 : 0.85} />
+        <lineBasicMaterial color={selected ? ACCENT : "#14181b"} transparent opacity={selected ? 0.8 : 0.55} />
       </lineSegments>
     </group>
   );
@@ -156,20 +156,17 @@ function Bed({ volume }: { volume: Vec3 }) {
   const box = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), [w, d, h]);
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, 0]} receiveShadow raycast={() => null}>
-        <planeGeometry args={[w + 6, d + 6]} />
-        <meshStandardMaterial color="#1e2428" roughness={0.95} metalness={0} />
-      </mesh>
       <Grid
         args={[w, d]}
         position={[0, 0.01, 0]}
         cellSize={5}
         cellThickness={0.7}
-        cellColor="#2f383e"
+        cellColor="#262e33"
         sectionSize={25}
-        sectionThickness={1}
-        sectionColor="#435058"
-        fadeDistance={1200}
+        sectionThickness={0.9}
+        sectionColor="#36414a"
+        fadeDistance={900}
+        fadeStrength={1.4}
         followCamera={false}
         infiniteGrid={false}
       />
@@ -177,34 +174,46 @@ function Bed({ volume }: { volume: Vec3 }) {
         position={[0, -0.3, 0]}
         cellSize={25}
         cellThickness={0.5}
-        cellColor="#1c2226"
+        cellColor="#181d21"
         sectionSize={125}
-        sectionThickness={0.8}
-        sectionColor="#232a2f"
+        sectionThickness={0.7}
+        sectionColor="#1d2327"
         fadeDistance={700}
         fadeStrength={2.2}
         infiniteGrid
       />
       <lineSegments geometry={box} position={[0, h / 2, 0]} raycast={() => null}>
-        <lineBasicMaterial color="#3a454c" transparent opacity={0.5} />
+        <lineBasicMaterial color="#3a454c" transparent opacity={0.35} />
       </lineSegments>
     </group>
   );
 }
 
+/** Neutral studio look: PMREM room environment plus key, fill and rim lights. */
 function Lights() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+    // three ≥ r163: scene.environment uses scene.environmentIntensity, not material.envMapIntensity.
+    scene.environmentIntensity = 0.12;
+    return () => {
+      scene.environment = null;
+      env.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
   return (
     <>
-      <ambientLight intensity={0.35} />
-      <hemisphereLight args={["#dfe7ec", "#1a1e21", 0.55]} />
-      <directionalLight position={[120, 220, 160]} intensity={1.35} />
-      <directionalLight position={[-160, 90, -120]} intensity={0.35} color="#bcd6ff" />
-      <Environment resolution={256} frames={1}>
-        <Lightformer form="rect" intensity={2.2} position={[0, 6, 6]} scale={[12, 4, 1]} />
-        <Lightformer form="rect" intensity={1.2} position={[-8, 2, -2]} rotation-y={Math.PI / 2} scale={[10, 3, 1]} />
-        <Lightformer form="rect" intensity={0.8} position={[8, 3, -4]} rotation-y={-Math.PI / 2} scale={[10, 3, 1]} />
-        <Lightformer form="ring" intensity={0.6} color="#6ee7c5" position={[0, 8, -10]} scale={4} />
-      </Environment>
+      <hemisphereLight args={["#e8eef2", "#101315", 0.15]} />
+      {/* key: upper front-left */}
+      <directionalLight position={[-140, 220, 160]} intensity={1.2} />
+      {/* cool fill */}
+      <directionalLight position={[200, 70, 80]} intensity={0.22} color="#d6e4ff" />
+      {/* rim */}
+      <directionalLight position={[-40, 120, -220]} intensity={0.45} color="#f2fffb" />
     </>
   );
 }
@@ -216,6 +225,7 @@ export function Viewport() {
   const selection = useApp((s) => s.selection);
   const workspace = useApp((s) => s.workspace);
   const kernel = useKernel();
+  const quality = QUALITY[useSettings((s) => s.quality)];
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
 
@@ -226,12 +236,14 @@ export function Viewport() {
     >
       <Canvas
         shadows
-        dpr={[1, 2]}
+        dpr={[1, quality.dpr]}
         camera={{ position: [150, 135, 205], fov: 35, near: 0.5, far: 5000 }}
         gl={{ antialias: true }}
-        onCreated={({ gl }) => {
+        onCreated={(state) => {
+          const { gl } = state;
+          if (import.meta.env.DEV) Object.assign(window, { __viewer: state });
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.05;
+          gl.toneMappingExposure = 0.85;
         }}
         onPointerMissed={(e) => {
           const d = down.current;
@@ -240,7 +252,9 @@ export function Viewport() {
       >
         <Lights />
         <Bed volume={doc.printer.volume} />
-        <ContactShadows position={[0, 0.02, 0]} scale={160} blur={2.4} far={60} opacity={0.55} resolution={512} color="#000000" />
+        {quality.shadows > 0 && (
+          <ContactShadows position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
+        )}
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>
           {doc.features.map((f, i) => (

@@ -1,6 +1,6 @@
 import { Magnet } from "lucide-react";
 import { execute } from "../core/commands";
-import { useApp, useDoc } from "../core/store";
+import { useApp } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
@@ -9,8 +9,6 @@ const snapLabel = (s: number) => (s === 0 ? "Aus" : `${s.toLocaleString("de-DE")
 
 export function StatusBar() {
   const snap = useApp((s) => s.snap);
-  const selection = useApp((s) => s.selection);
-  const doc = useDoc();
   const pop = usePopover();
 
   return (
@@ -28,10 +26,6 @@ export function StatusBar() {
           </Menu>
         )}
       </div>
-      <span className="status-item">
-        {doc.features.length} {doc.features.length === 1 ? "Objekt" : "Objekte"}
-        {selection.length > 0 && <> · {selection.length} ausgewählt</>}
-      </span>
     </footer>
   );
 }

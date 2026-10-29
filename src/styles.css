@@ -308,7 +308,7 @@ input.project-name { outline: none; border-color: var(--accent-line); background
 .hist-branch:hover { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
 
 /* ── Viewport ─────────────────────────────────────────── */
-.viewport { position: relative; overflow: hidden; background: radial-gradient(120% 90% at 50% 35%, #1a1f23 0%, #121619 60%, #0f1214 100%); }
+.viewport { position: relative; overflow: hidden; background: #13171a; }
 .viewport canvas { display: block; outline: none; }
 .vp-overlay { position: absolute; pointer-events: none; }
 .vp-badge {

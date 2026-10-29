@@ -4,7 +4,7 @@
 
 import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
-import { setOC, type Shape3D } from "replicad";
+import { setOC, type Face, type Shape3D } from "replicad";
 import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
 import { zipSync, strToU8 } from "fflate";
 import type { MeshData, WorkerRequest, WorkerResponse } from "./protocol";
@@ -28,14 +28,48 @@ function init() {
 const meshCache = new Map<string, MeshData>();
 
 function meshShape(shape: Shape3D): MeshData {
-  const m = shape.mesh({ tolerance: 0.02, angularTolerance: 12 });
-  const e = shape.meshEdges({ tolerance: 0.02, angularTolerance: 12 });
+  const m = shape.mesh({ tolerance: 0.01, angularTolerance: 0.12 });
+  const e = shape.meshEdges({ tolerance: 0.01, angularTolerance: 0.12 });
+  const keep = featureEdges(shape);
+  const lines: number[] = [];
+  for (const g of e.edgeGroups) {
+    if (!keep.has(g.edgeId)) continue;
+    for (let i = g.start * 3; i < (g.start + g.count) * 3; i++) lines.push(e.lines[i]);
+  }
   return {
     vertices: new Float32Array(m.vertices),
     normals: new Float32Array(m.normals),
     indices: new Uint32Array(m.triangles),
-    edges: new Float32Array(e.lines),
+    edges: new Float32Array(lines),
   };
+}
+
+/**
+ * Edges worth drawing: skips seams (only one adjacent face), degenerated edges
+ * (sphere poles) and edges between tangent-continuous faces (e.g. fillet borders).
+ */
+function featureEdges(shape: Shape3D): Set<number> {
+  const adjacent = new Map<number, Face[]>();
+  for (const face of shape.faces)
+    for (const edge of face.edges) {
+      const list = adjacent.get(edge.hashCode) ?? [];
+      if (!list.some((f) => f.isSame(face))) list.push(face);
+      adjacent.set(edge.hashCode, list);
+    }
+  const keep = new Set<number>();
+  for (const edge of shape.edges) {
+    const faces = adjacent.get(edge.hashCode) ?? [];
+    if (edge.length < 1e-6 || faces.length < 2) continue;
+    const p = edge.pointAt(0.5);
+    const n1 = faces[0].normalAt(p);
+    const n2 = faces[1].normalAt(p);
+    const smooth = n1.dot(n2) > Math.cos((3 * Math.PI) / 180);
+    p.delete();
+    n1.delete();
+    n2.delete();
+    if (!smooth) keep.add(edge.hashCode);
+  }
+  return keep;
 }
 
 function exportStl(shapes: Shape3D[]): ArrayBuffer {

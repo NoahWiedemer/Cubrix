@@ -1,0 +1,16 @@
+// User preferences (persisted per machine).
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+export type Quality = "high" | "balanced" | "fast";
+
+export const QUALITY_LABELS: Record<Quality, string> = { high: "Hoch", balanced: "Ausgewogen", fast: "Schnell" };
+
+/** Max device pixel ratio and shadow resolution per quality level. */
+export const QUALITY: Record<Quality, { dpr: number; shadows: number }> = {
+  high: { dpr: 2, shadows: 1024 },
+  balanced: { dpr: 1.5, shadows: 512 },
+  fast: { dpr: 1, shadows: 0 },
+};
+
+export const useSettings = create<{ quality: Quality }>()(persist(() => ({ quality: "high" as Quality }), { name: "modelonio.settings" }));

@@ -18,7 +18,6 @@ const AXES = [0, 1, 2].map((i) => ({
   axis: new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0),
   color: AXIS_COLORS[i],
   hover: AXIS_HOVER[i],
-  letter: "XYZ"[i],
 }));
 // Plane handles: [first axis, second axis, normal axis].
 const PLANES: [number, number, number][] = [[0, 1, 2], [0, 2, 1], [1, 2, 0]];
@@ -42,34 +41,6 @@ interface Drag {
   axisWorld: THREE.Vector3;
   centerWorld: THREE.Vector3;
   from: THREE.Vector3; // world point or direction at drag start
-}
-
-const letterCache = new Map<string, THREE.Texture>();
-function letterTexture(letter: string, color: string) {
-  const key = letter + color;
-  let tex = letterCache.get(key);
-  if (!tex) {
-    const c = document.createElement("canvas");
-    c.width = c.height = 64;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = color;
-    ctx.font = "650 40px 'Inter Variable', Inter, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(letter, 32, 34);
-    tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    letterCache.set(key, tex);
-  }
-  return tex;
-}
-
-function AxisLetter({ letter, color, y }: { letter: string; color: string; y: number }) {
-  return (
-    <sprite position={[0, y, 0]} scale={16} renderOrder={21} raycast={() => null}>
-      <spriteMaterial map={letterTexture(letter, color)} depthTest={false} transparent toneMapped={false} />
-    </sprite>
-  );
 }
 
 export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
@@ -226,7 +197,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     <>
       <group ref={group} position={center}>
         {mode === "move" &&
-          AXES.map(({ axis, color, hover: hc, letter }, i) => {
+          AXES.map(({ axis, color, hover: hc }, i) => {
             const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
             const on = active(i);
             const c = on ? hc : color;
@@ -240,7 +211,6 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
                   <coneGeometry args={[on ? 5.5 : 4.5, 13, 20]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
-                <AxisLetter letter={letter} color={c} y={ARROW + 24} />
                 {/* Generous invisible hit target */}
                 <mesh position={[0, 14 + ARROW / 2, 0]} onPointerDown={begin("move", i)} {...hoverProps(i)}>
                   <cylinderGeometry args={[8, 8, ARROW + 8, 8]} />
