@@ -78,6 +78,7 @@ export function Toolbar() {
         )}
         {(mode === "pair" || mode === "many") && (
           <>
+            {mode === "pair" && <CommandTool id="object.stackOn" tip="Zweites ausgewähltes Objekt mittig oben auf das erste setzen" />}
             <CommandTool id="boolean.union" />
             <CommandTool id="boolean.subtract" />
             <CommandTool id="boolean.intersect" />

@@ -396,6 +396,34 @@ defineCommand({
   },
 });
 
+defineCommand({
+  id: "object.stackOn",
+  kind: "document",
+  label: "Stapeln",
+  description: "Setzt ein Objekt mittig oben auf ein anderes (Unterseite auf dessen Oberseite). Standard: das zweite ausgewählte auf das erste.",
+  icon: "dropToBed",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt, das oben aufgesetzt wird (Standard: zweite Auswahl)" },
+    targetId: { type: "id", optional: true, description: "Objekt darunter (Standard: erste Auswahl)" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 2,
+  apply(doc, p, ctx) {
+    const top = doc.features.find((f) => f.id === (p.id ?? ctx.selection[1]));
+    const base = doc.features.find((f) => f.id === (p.targetId ?? ctx.selection[0]));
+    if (!top || !base || top.id === base.id) throw new Error("Bitte zwei Objekte auswählen.");
+    const entries = useMeshes.getState().entries;
+    const a = worldBox(top, entries), b = worldBox(base, entries);
+    if (!a || !b) throw new Error("Objekte werden noch berechnet – bitte gleich noch einmal.");
+    const [x, y, z] = top.transform.position;
+    const dx = (b.min.x + b.max.x) / 2 - (a.min.x + a.max.x) / 2;
+    const dy = (b.min.y + b.max.y) / 2 - (a.min.y + a.max.y) / 2;
+    const dz = b.max.z - a.min.z;
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const position = [r2(x + dx), r2(y + dy), r2(z + dz)] as Vec3;
+    return { doc: updateFeature(doc, top.id, (f) => ({ ...f, transform: { ...f.transform, position } })), label: `${top.name} auf ${base.name} stapeln` };
+  },
+});
+
 // ── Ausrichten ───────────────────────────────────────────────────────────────
 
 const AXIS_INDEX = { x: 0, y: 1, z: 2 } as const;

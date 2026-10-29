@@ -116,6 +116,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
   const [label, setLabel] = useState<{ text: string; at: Vec3 } | null>(null);
   const drag = useRef<Drag | null>(null);
   const scaleFactor = useRef<Vec3 | null>(null);
+  const typed = useRef<string | null>(null);
   const cornerRef = useRef<THREE.Group>(null);
   const lastPreview = useRef(0);
 
@@ -254,15 +255,19 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           at: d.center.toArray() as Vec3,
         });
       } else if (d.kind === "move") {
+        if (typed.current !== null) return; // a typed distance wins over the pointer
         const delta = onAxis(r, d.centerWorld, d.axisWorld).sub(d.from).dot(d.axisWorld);
         const snap = useApp.getState().snap;
         const pos = [...d.start.position] as Vec3;
-        const target = d.start.position[d.index] + delta;
-        pos[d.index] = snap > 0 ? Math.round(target / snap) * snap : Math.round(target * 100) / 100;
+        let target = d.start.position[d.index] + delta;
+        // Flush snapping: own min/max/centre onto other bodies' min/max/centre on this axis.
+        const flush = flushSnap(d, target);
+        if (flush) target = flush.value;
+        pos[d.index] = flush ? Math.round(target * 1000) / 1000 : snap > 0 ? Math.round(target / snap) * snap : Math.round(target * 100) / 100;
         next = { ...d.start, position: pos };
         const moved = pos[d.index] - d.start.position[d.index];
         const tip = d.center.clone().addScaledVector(a, 0);
-        setLabel({ text: `${moved >= 0 ? "+" : "−"}${fmt(Math.abs(moved))} mm`, at: tip.toArray() as Vec3 });
+        setLabel({ text: `${moved >= 0 ? "+" : "−"}${fmt(Math.abs(moved))} mm${flush ? ` · bündig mit ${flush.name}` : ""}`, at: tip.toArray() as Vec3 });
       } else {
         const p = onPlane(r, d.centerWorld, d.axisWorld);
         if (!p) return;
@@ -283,9 +288,37 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       }
       useApp.setState({ preview: { id: f.id, transform: next } });
     };
+    // Typed distance while dragging an axis: digits, comma/point, minus; Enter applies, Esc cancels.
+    const key = (ev: KeyboardEvent) => {
+      const d = drag.current;
+      if (!d || d.kind !== "move") return;
+      if (/^[\d.,-]$/.test(ev.key) || ev.key === "Backspace") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const t = ev.key === "Backspace" ? (typed.current ?? "").slice(0, -1) : (typed.current ?? "") + (ev.key === "," ? "." : ev.key);
+        typed.current = t;
+        const v = parseFloat(t);
+        const pos = [...d.start.position] as Vec3;
+        if (Number.isFinite(v)) pos[d.index] = Math.round((d.start.position[d.index] + v) * 1000) / 1000;
+        useApp.setState({ preview: { id: f.id, transform: { ...d.start, position: pos } } });
+        setLabel({ text: `${"XYZ"[d.index]} ${t || "…"} mm  ⏎`, at: d.center.toArray() as Vec3 });
+      } else if (ev.key === "Enter") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        up();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        useApp.setState({ preview: null });
+        typed.current = null;
+        up();
+      }
+    };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("keydown", key, true);
+      typed.current = null;
       drag.current = null;
       setLabel(null);
       gl.domElement.style.cursor = "";
@@ -306,6 +339,34 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("keydown", key, true);
+  };
+
+  /** Nearest flush position on the drag axis against the other bodies (null if none is close). */
+  const flushSnap = (d: Drag, target: number): { value: number; name: string } | null => {
+    if (!box) return null;
+    const k = d.index;
+    const dz = target - d.start.position[k];
+    const startBox = worldBox(f, entries, d.start);
+    if (!startBox) return null;
+    const lo = (b: THREE.Box3) => (k === 0 ? b.min.x : k === 1 ? b.min.y : b.min.z);
+    const hi = (b: THREE.Box3) => (k === 0 ? b.max.x : k === 1 ? b.max.y : b.max.z);
+    const mine = [lo(startBox), (lo(startBox) + hi(startBox)) / 2, hi(startBox)].map((v) => v + dz);
+    // Tolerance follows the zoom: ~10 px on screen.
+    const tol = Math.max(0.3, (camera.position.distanceTo(d.centerWorld) / size.height) * 10 * 0.9);
+    const app = useApp.getState();
+    let best: { value: number; name: string; err: number } | null = null;
+    for (const o of app.nodes[app.currentId].doc.features) {
+      if (o.id === f.id || !o.visible) continue;
+      const b = worldBox(o, entries);
+      if (!b) continue;
+      for (const c of [lo(b), (lo(b) + hi(b)) / 2, hi(b)])
+        for (const m of mine) {
+          const err = Math.abs(c - m);
+          if (err < tol && (!best || err < best.err)) best = { value: target + (c - m), name: o.name, err };
+        }
+    }
+    return best;
   };
 
   const hoverProps = (i: number) => ({
