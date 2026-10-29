@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import { DEFAULT_MATERIAL, MATERIALS, isMaterialId, materialOf, type MaterialId } from "./materials";
 import { useShortcuts } from "../components/ShortcutOverlay";
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
 import { checkForUpdates, useUpdater } from "./updater";
@@ -683,11 +684,43 @@ for (const [type, def] of Object.entries(SHAPE_DEFAULTS) as [ExtraType, ShapeDef
   });
 }
 
-/** New objects (library, text, sketches, AI) get the colour picked last. */
-function newColor(): { color?: string } {
-  const c = useSettings.getState().lastColor;
-  return c ? { color: c } : {};
+/** New objects (library, text, sketches, AI) get the colour and material picked last. */
+function newColor(): { color?: string; material?: MaterialId } {
+  const { lastColor: c, lastMaterial: m } = useSettings.getState();
+  return { ...(c ? { color: c } : {}), ...(m && m !== DEFAULT_MATERIAL ? { material: m } : {}) };
 }
+
+defineCommand({
+  id: "object.setMaterial",
+  kind: "document",
+  label: "Material",
+  description: `Setzt das Aussehen (nur Darstellung, kein Einfluss auf die Form): ${MATERIALS.map((m) => `"${m.id}" = ${m.label} (${m.hint})`).join(", ")}. Wird als Materialname in 3MF exportiert.`,
+  icon: "material",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    material: { type: "enum", options: MATERIALS.map((m) => m.id), description: "Material" },
+  },
+  isEnabled: (ctx) => ctx.selection.length > 0,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    if (!isMaterialId(p.material)) throw new Error(`Unbekanntes Material. Möglich: ${MATERIALS.map((m) => m.id).join(", ")}.`);
+    const m: MaterialId = p.material;
+    let changed = 0;
+    let next = doc;
+    for (const id of ids) {
+      const f = findFeature(next, id);
+      if (!f || (f.material ?? DEFAULT_MATERIAL) === m) continue;
+      changed++;
+      next = updateFeature(next, id, (x) => {
+        const { material: _old, ...rest } = x;
+        return (m === DEFAULT_MATERIAL ? rest : { ...rest, material: m }) as Feature;
+      });
+    }
+    if (!changed) return null;
+    const label = materialOf(m).label;
+    return { doc: next, label: changed === 1 ? `${findFeature(doc, ids.find((id) => findFeature(doc, id))!)!.name}: ${label}` : `${changed} Objekte: ${label}` };
+  },
+});
 
 defineCommand({
   id: "object.setColor",

@@ -1,10 +1,15 @@
-// "Farbe": one compact Inspektor row (swatch + name). Clicking opens a small popover
+// "Aussehen": Farbe and Material at the bottom of the Inspektor. The colour field opens a small popover
 // (also used from the right-click menu) with filament-like swatches, a custom picker /
 // hex field and recent colours. Picks preview live; closing writes ONE history entry.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useSettings } from "../ui/settings";
+import { ChevronDown } from "lucide-react";
+import { MATERIALS, materialOf } from "../core/materials";
+import { Icon } from "../ui/icons";
+import { Menu, MenuItem } from "../ui/Menu";
+import { usePopover } from "../ui/usePopover";
 
 export const SWATCHES: { hex: string; name: string }[] = [
   { hex: "#f2f1ec", name: "Weiß" },
@@ -32,21 +37,96 @@ interface Request {
 const useColorPopover = create<{ req: Request | null }>(() => ({ req: null }));
 export const openColorPopover = (req: Request) => useColorPopover.setState({ req });
 
-/** Compact row in the Inspektor. */
-export function ColorRow({ ids, current }: { ids: string[]; current?: string }) {
+/**
+ * "Aussehen" at the bottom of the Inspektor: Farbe (an input-style field that opens the
+ * colour popover below it) and Material (a select like the other dropdowns).
+ * `color`/`material` undefined with several objects selected = mixed.
+ */
+export function Appearance({ ids, color, material, mixedColor, mixedMaterial }: { ids: string[]; color?: string; material?: string; mixedColor?: boolean; mixedMaterial?: boolean }) {
+  const pop = usePopover();
+  const current = materialOf(material);
   return (
-    <div className="color-row">
-      <span className="color-row-label">Farbe</span>
-      <button
-        className="color-chip"
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          openColorPopover({ ids, current, at: { x: r.left, y: r.bottom + 6 } });
-        }}
-      >
-        <span className="color-dot" style={{ background: current ?? NEUTRAL }} />
-        <span className="color-name">{colorName(current)}</span>
-      </button>
+    <div className="group appearance">
+      <div className="group-label"><span><Icon name="background" size={15} />Aussehen</span></div>
+      <div className="appearance-row">
+        <span className="appearance-label">Farbe</span>
+        <button
+          className="select-btn color-field"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            openColorPopover({ ids, current: color, at: { x: r.left, y: r.bottom + 6 } });
+          }}
+        >
+          <span className="color-dot" style={{ background: mixedColor ? "conic-gradient(#d8443b, #f2c531, #3e9f4f, #2f6fd6, #7c55c9, #d8443b)" : (color ?? NEUTRAL) }} />
+          <span>{mixedColor ? "Gemischt" : colorName(color)}</span>
+          {!mixedColor && color && colorName(color) !== color.toUpperCase() && <em className="color-hex">{color.toUpperCase()}</em>}
+          <ChevronDown size={14} />
+        </button>
+      </div>
+      <div className="appearance-row">
+        <span className="appearance-label">Material</span>
+        <div ref={pop.ref} style={{ position: "relative", minWidth: 0 }}>
+          <button className={`select-btn ${pop.open ? "open" : ""}`} onClick={() => pop.setOpen(!pop.open)}>
+            <Icon name="material" size={15} />
+            <span>{mixedMaterial ? "Gemischt" : current.label}</span>
+            <ChevronDown size={14} />
+          </button>
+          {pop.open && (
+            <Menu className="select-menu" matchWidth>
+              {MATERIALS.map((m) => (
+                <MenuItem
+                  key={m.id}
+                  label={<span className="printer-opt"><span>{m.label}</span><span className="printer-dim">{m.hint}</span></span>}
+                  checked={!mixedMaterial && m.id === current.id}
+                  onClick={() => {
+                    pop.setOpen(false);
+                    void execute("object.setMaterial", { ids, material: m.id }).then((ok) => ok && useSettings.setState({ lastMaterial: m.id }));
+                  }}
+                />
+              ))}
+            </Menu>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const useMaterialMenu = create<{ req: { ids: string[]; current?: string; at: { x: number; y: number } } | null }>(() => ({ req: null }));
+export const openMaterialMenu = (req: { ids: string[]; current?: string; at: { x: number; y: number } }) => useMaterialMenu.setState({ req });
+
+/** Material list opened from the right-click menu, at the same spot. */
+export function MaterialMenu() {
+  const req = useMaterialMenu((s) => s.req);
+  useEffect(() => {
+    if (!req) return;
+    const close = () => useMaterialMenu.setState({ req: null });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const t = setTimeout(() => window.addEventListener("pointerdown", close, { once: true }), 0);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [req]);
+  if (!req) return null;
+  const current = materialOf(req.current).id;
+  return (
+    <div style={{ position: "fixed", left: Math.min(req.at.x, window.innerWidth - 280), top: Math.min(req.at.y, window.innerHeight - 260), zIndex: 300 }} onPointerDown={(e) => e.stopPropagation()}>
+      <Menu inline style={{ position: "static", minWidth: 250 }}>
+        {MATERIALS.map((m) => (
+          <MenuItem
+            key={m.id}
+            label={<span className="printer-opt"><span>{m.label}</span><span className="printer-dim">{m.hint}</span></span>}
+            checked={m.id === current}
+            onClick={() => {
+              useMaterialMenu.setState({ req: null });
+              void execute("object.setMaterial", { ids: req.ids, material: m.id }).then((ok) => ok && useSettings.setState({ lastMaterial: m.id }));
+            }}
+          />
+        ))}
+      </Menu>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import type { MaterialId } from "./materials";
 import { SHAPE_DEFAULTS, type ExtraType } from "./shapeDefs";
 
 // The Cubrix document: a plain, serializable JSON list of features.
@@ -51,6 +52,8 @@ interface FeatureBase {
   chamfer?: number;
   /** Display/print colour as "#rrggbb" (unset = neutral grey). */
   color?: string;
+  /** Display material (unset = matt); see core/materials.ts. */
+  material?: MaterialId;
   /** Geometry mirrored in its own frame (across its local YZ plane for "x", XZ for "y"). */
   mirror?: "x" | "y";
   /** Hollowed out with this wall thickness (mm), optionally open at the top or bottom face. */

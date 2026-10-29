@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { create } from "zustand";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { materialOf } from "../core/materials";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Gizmo, useGizmo } from "./Gizmo";
 import {
@@ -104,7 +106,16 @@ const SURFACE_GLSL = /* glsl */ `
   }
 `;
 
-function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhang: boolean, grain: boolean) {
+/** The studio environment map (set by <Lights>), shared by all object materials. */
+const useStudioEnv = create<{ env: THREE.Texture | null }>(() => ({ env: null }));
+
+/** Wood fill: the picked colour pulled towards a warm light wood (neutral = plain wood). */
+function woodTint(color?: string) {
+  const wood = new THREE.Color("#b98a57");
+  return color ? new THREE.Color(color).lerp(wood, 0.55).getStyle() : wood.getStyle();
+}
+
+function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhang: boolean, grain: boolean, wood = false) {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", "#include <common>\nvarying vec3 vWorldN;\nvarying vec3 vWorldP;")
     .replace(
@@ -133,6 +144,19 @@ function surfaceShader(shader: THREE.WebGLProgramParametersWithUniforms, overhan
         // Only the part of the gradient along the surface tilts the normal.
         vec3 tilt = gv - dot(gv, normal) * normal;
         normal = normalize(normal - tilt * 0.035);
+      }`,
+    );
+  if (wood)
+    // Soft growth rings around the vertical axis, slightly wobbly, darkening the colour.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>
+      {
+        // Rings about 2 mm apart, gently bent by low-frequency noise; fine fibre streaks along them.
+        float ring = length(vWorldP.xz) * 3.1 + sSimplex(vWorldP * vec3(0.08, 0.02, 0.08)) * 2.2;
+        float band = smoothstep(0.6, 1.0, abs(sin(ring)));
+        float fibre = sSimplex(vWorldP * vec3(0.6, 6.0, 0.6)) * 0.5 + 0.5;
+        diffuseColor.rgb *= 1.0 - 0.13 * band - 0.04 * fibre;
       }`,
     );
   if (overhang)
@@ -177,6 +201,10 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
   const overhangsOn = usePrintView((s) => s.overhangs);
   const showOverhangs = overhangsOn && !presenting;
   const grain = useSettings((s) => s.surfaceTexture);
+  const studioEnv = useStudioEnv((s) => s.env);
+  const look = materialOf(f.material);
+  const useGrain = grain && look.grain;
+  const programKey = `surface-${showOverhangs ? "overhang" : "plain"}-${useGrain ? "grain" : "flat"}${look.wood ? "-wood" : ""}`;
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -204,7 +232,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
       <mesh
         ref={(m) => registerMesh(f.id, m)}
         geometry={entry.geometry}
-        castShadow
+        castShadow={look.opacity === undefined}
         receiveShadow
         onClick={onClick}
         onContextMenu={(e) => {
@@ -221,19 +249,29 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         }}
         onPointerOut={() => useApp.getState().hoveredId === f.id && useApp.setState({ hoveredId: null })}
       >
-        <meshStandardMaterial
-          color={f.color ?? "#99a1a8"}
-          roughness={0.6}
-          metalness={0}
-          envMapIntensity={0.18}
+        <meshPhysicalMaterial
+          color={look.wood ? woodTint(f.color) : (f.color ?? "#99a1a8")}
+          roughness={look.roughness}
+          metalness={look.metalness}
+          // Own env map so each material sets its reflection strength (scene.environment
+          // has one global intensity, tuned for matt).
+          envMap={studioEnv}
+          envMapIntensity={look.env}
+          clearcoat={look.clearcoat ?? 0}
+          clearcoatRoughness={look.clearcoatRoughness ?? 0}
+          sheen={look.sheen ?? 0}
+          sheenRoughness={0.35}
+          sheenColor={look.sheen ? "#ffffff" : "#000000"}
+          transparent={look.opacity !== undefined}
+          opacity={look.opacity ?? 1}
           polygonOffset
           // Coplanar faces of different bodies resolve deterministically:
           // the selected body wins, then later bodies over earlier ones.
           polygonOffsetFactor={1}
           polygonOffsetUnits={selected ? 1 : 2 + Math.max(0, 40 - order) * 2}
-          key={`${showOverhangs ? "overhang" : "plain"}-${grain ? "grain" : "flat"}`}
-          onBeforeCompile={(sh) => surfaceShader(sh, showOverhangs, grain)}
-          customProgramCacheKey={() => `surface-${showOverhangs ? "overhang" : "plain"}-${grain ? "grain" : "flat"}`}
+          key={programKey}
+          onBeforeCompile={(sh) => surfaceShader(sh, showOverhangs, useGrain, !!look.wood)}
+          customProgramCacheKey={() => programKey}
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null} visible={!presenting}>
@@ -623,10 +661,12 @@ function Lights() {
     const pmrem = new THREE.PMREMGenerator(gl);
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = env;
+    useStudioEnv.setState({ env });
     // three ≥ r163: scene.environment uses scene.environmentIntensity, not material.envMapIntensity.
     scene.environmentIntensity = 0.16;
     return () => {
       scene.environment = null;
+      useStudioEnv.setState({ env: null });
       env.dispose();
       pmrem.dispose();
     };

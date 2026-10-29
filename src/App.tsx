@@ -21,6 +21,7 @@ import { ProviderDialog } from "./components/ProviderKeys";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import { UpdateToast } from "./components/UpdateToast";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
+import { MaterialMenu } from "./components/ColorRow";
 import { scheduleAutoCheck } from "./core/updater";
 
 /**
@@ -107,6 +108,7 @@ export function App() {
       <RecoveryBanner />
       <UpdateToast />
       <ShortcutOverlay />
+      <MaterialMenu />
     </div>
   );
 }

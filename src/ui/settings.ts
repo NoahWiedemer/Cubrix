@@ -1,6 +1,7 @@
 // User preferences (persisted per machine).
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { MaterialId } from "../core/materials";
 
 export type Projection = "perspective" | "orthographic";
 
@@ -16,6 +17,8 @@ interface ViewSettings {
   surfaceTexture: boolean;
   /** Colour picked last; new objects get it (null = neutral). */
   lastColor: string | null;
+  /** Material picked last; new objects get it (null = matt). */
+  lastMaterial: MaterialId | null;
   /** Custom colours used recently (newest first). */
   recentColors: string[];
   /** Grid line strength in % (100 = the original intensity). */
@@ -26,7 +29,7 @@ interface ViewSettings {
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, surfaceTexture: true, lastColor: null, recentColors: [] }),
+    (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, surfaceTexture: true, lastColor: null, lastMaterial: null, recentColors: [] }),
     {
       name: "cubrix.settings",
       version: 3,

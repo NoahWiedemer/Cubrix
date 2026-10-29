@@ -5,6 +5,7 @@
 import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import { importSTEP, makeCompound, setOC, type Face, type Shape3D } from "replicad";
+import { materialOf } from "../core/materials";
 import { buildLocal, buildPlaced, EdgeTreatmentError, importedShapes } from "./build";
 import { zipSync, strToU8 } from "fflate";
 import { loadFonts, registerFont } from "./text";
@@ -118,11 +119,18 @@ function exportStl(shapes: Shape3D[]): ArrayBuffer {
   return buf;
 }
 
-function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefined)[]): ArrayBuffer {
+function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefined)[], materials: (string | undefined)[] = []): ArrayBuffer {
   const objects: string[] = [];
   const items: string[] = [];
-  // One base material per distinct colour; slicers (Bambu Studio, PrusaSlicer) read it as the part colour.
-  const palette = [...new Set(colors.filter((c): c is string => !!c))];
+  // One base material per distinct colour + display material; slicers (Bambu Studio,
+  // PrusaSlicer) read it as the part colour, the name says the finish ("Seide Rot").
+  const NEUTRAL = "#99a1a8";
+  const keyOf = (i: number) => (colors[i] || materials[i] ? `${colors[i] ?? NEUTRAL}|${materials[i] ?? "matte"}` : "");
+  const palette = [...new Set(shapes.map((_, i) => keyOf(i)).filter(Boolean))];
+  const baseName = (key: string) => {
+    const [color, material] = key.split("|");
+    return `${materialOf(material).label} ${color === NEUTRAL ? "Neutral" : color.toUpperCase()}`;
+  };
   const MAT = 1000;
   shapes.forEach((s, idx) => {
     const m = s.mesh({ tolerance: 0.01, angularTolerance: 0.1 });
@@ -134,15 +142,15 @@ function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefin
       tris.push(`<triangle v1="${m.triangles[i]}" v2="${m.triangles[i + 1]}" v3="${m.triangles[i + 2]}"/>`);
     const id = idx + 1;
     const name = names[idx].replace(/[<>&"]/g, "");
-    const c = colors[idx];
-    const mat = c ? ` pid="${MAT}" pindex="${palette.indexOf(c)}"` : "";
+    const key = keyOf(idx);
+    const mat = key ? ` pid="${MAT}" pindex="${palette.indexOf(key)}"` : "";
     objects.push(`<object id="${id}" name="${name}" type="model"${mat}><mesh><vertices>${verts.join("")}</vertices><triangles>${tris.join("")}</triangles></mesh></object>`);
     items.push(`<item objectid="${id}"/>`);
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="de-DE" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
 <metadata name="Application">Cubrix</metadata>
-<resources>${palette.length ? `<basematerials id="${MAT}">${palette.map((c, i) => `<base name="Farbe ${i + 1}" displaycolor="${c.toUpperCase()}FF"/>`).join("")}</basematerials>` : ""}${objects.join("")}</resources>
+<resources>${palette.length ? `<basematerials id="${MAT}">${palette.map((k) => `<base name="${baseName(k)}" displaycolor="${k.split("|")[0].toUpperCase()}FF"/>`).join("")}</basematerials>` : ""}${objects.join("")}</resources>
 <build>${items.join("")}</build>
 </model>`;
   const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
@@ -242,7 +250,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
         req.format === "stl"
           ? exportStl(shapes)
           : req.format === "3mf"
-            ? export3mf(shapes, names, colors)
+            ? export3mf(shapes, names, colors, req.features.map((f) => f.material))
             : req.format === "obj"
               ? (objResult = exportObj(shapes, names, colors, `${req.name.replace(/[^\w.-]+/g, "_")}.mtl`)).obj
               : await exportStep(shapes);

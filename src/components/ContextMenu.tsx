@@ -6,7 +6,7 @@ import { execute, getCommand, isEnabled } from "../core/commands";
 import { findFeature, parentsOf } from "../core/document";
 import { openValuePopover } from "./ValuePopover";
 import { openRotatePopover } from "./RotatePopover";
-import { openColorPopover } from "./ColorRow";
+import { openColorPopover, openMaterialMenu } from "./ColorRow";
 import { openPatternPopover } from "./PatternPopover";
 import { useApp } from "../core/store";
 import { CommandItem } from "../ui/CommandItem";
@@ -88,6 +88,16 @@ export function ContextMenu() {
             const doc = useApp.getState().nodes[useApp.getState().currentId].doc;
             const first = doc.features.find((f) => f.id === ids[0]);
             openColorPopover({ ids, current: first?.color, at });
+          }}
+        />
+        <MenuItem
+          icon="material"
+          label="Material …"
+          disabled={!useApp.getState().selection.length}
+          onClick={() => {
+            done();
+            const ids = useApp.getState().selection;
+            openMaterialMenu({ ids, current: findFeature(doc, ids[0])?.material, at });
           }}
         />
         {isOperand && (
