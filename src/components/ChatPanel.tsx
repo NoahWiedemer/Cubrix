@@ -11,6 +11,7 @@ import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
 import { VoiceButton } from "./VoiceButton";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { friendlyError, type FriendlyError } from "../ai/errors";
 import { logError } from "../core/errorLog";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
@@ -211,7 +212,7 @@ export function ChatPanel() {
             { role: "user", text: "Bau mir eine Box mit Deckel, 60 × 40 × 30 mm", steps: [] },
             {
               role: "assistant",
-              text: "Fertig: Die Box hat 2 mm Wände und einen passenden Deckel mit 0,3 mm Spiel. Der Deckel liegt rechts daneben auf dem Bett.",
+              text: "## Box mit Deckel\n**Fertig:** Die Box hat *2 mm* Wände und einen Deckel mit `0,3 mm` Spiel.\n\n1. Box 60 × 40 × 30 mm\n   - Innenraum abgezogen\n2. Deckel rechts daneben\n\n| Teil | Maß |\n| --- | --- |\n| Box | 60 × 40 × 30 mm |\n| Deckel | 60 × 40 × 4 mm |\n\n> Tipp: Deckel mit der Oberseite nach unten drucken.\n\n---\nQuelle: [Druckerhersteller](https://example.org)\n\n```\nWandstärke = 2 mm\n```",
               steps: [
                 { label: "Box hinzufügen", ok: true },
                 { label: "Innenraum hinzufügen", ok: true },
@@ -333,7 +334,7 @@ export function ChatPanel() {
         ) : (
           entries.map((e, i) => (
             <div key={i} className={`msg ${e.role}`}>
-              {e.text && <div className="msg-text">{e.text}</div>}
+              {e.text && (e.role === "assistant" ? <div className="msg-text"><ChatMarkdown text={e.text} /></div> : <div className="msg-text">{e.text}</div>)}
               {e.sources && e.sources.length > 0 && (
                 <div className="msg-sources">
                   <Icon name="globe" size={12} />

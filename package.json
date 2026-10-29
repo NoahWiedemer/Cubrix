@@ -30,6 +30,8 @@
     "lucide-react": "^1.64.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1",
     "replicad": "^1.2.0",
     "replicad-opencascadejs": "^1.1.0",
     "three": "^0.186.1",
