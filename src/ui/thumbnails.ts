@@ -50,11 +50,13 @@ function render(geometry: THREE.BufferGeometry): string {
   return renderer.domElement.toDataURL("image/png");
 }
 
-export function thumbnail(type: string): Promise<string> {
-  let p = cache.get(type);
+export function thumbnail(type: string, params?: Record<string, number>, key = type): Promise<string> {
+  let p = cache.get(key);
   if (!p) {
-    p = getGeometry(defaultFeature(type)).then((e) => render(e.geometry));
-    cache.set(type, p);
+    const f = defaultFeature(type);
+    if (params) (f as { params: Record<string, number> }).params = { ...(f as { params: Record<string, number> }).params, ...params };
+    p = getGeometry(f).then((e) => render(e.geometry));
+    cache.set(key, p);
   }
   return p;
 }

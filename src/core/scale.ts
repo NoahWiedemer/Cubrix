@@ -1,12 +1,13 @@
 // Scaling bakes into the parametric dimensions (no scale matrix in the document).
 // Radial dimensions follow the mean of X and Y; bodies that can only scale
 // uniformly (sphere) use the factor that changed most.
+import { SHAPE_DEFAULTS, type ExtraType } from "./shapeDefs";
 import { isClosed, shapePoints, type Feature, type SketchShape, type Vec3 } from "./document";
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Bodies that scale around their bottom centre instead of a bounding-box corner. */
-export const ROUND_TYPES = new Set(["cylinder", "sphere", "torus", "cone", "tube", "hemisphere"]);
+export const ROUND_TYPES = new Set(["cylinder", "sphere", "torus", "cone", "tube", "hemisphere", ...Object.entries(SHAPE_DEFAULTS).filter(([, d]) => d.round).map(([t]) => t)]);
 
 function scaleShape(s: SketchShape, [sx, sy]: Vec3): SketchShape {
   const m = (sx + sy) / 2;
@@ -70,6 +71,17 @@ export function scaleDimensions(f: Feature, s: Vec3): Feature {
       return { ...f, profile: f.profile.map((p) => scaleShape(p, s)), height: r2(f.height * sz) };
     case "sketch":
       return { ...f, shapes: f.shapes.map((p) => scaleShape(p, s)) };
+    default: {
+      // Library shapes: lengths named height/length scale with Z, counts stay, the rest with X/Y.
+      const def = SHAPE_DEFAULTS[(f as { type: ExtraType }).type];
+      const params = Object.fromEntries(
+        Object.entries((f as { params: Record<string, number> }).params).map(([k, v]) => [
+          k,
+          def?.counts?.includes(k) ? v : r2(v * (/^(height|length|headHeight)$/.test(k) ? sz : xy)),
+        ]),
+      );
+      return { ...f, params } as Feature;
+    }
     case "boolean":
       return {
         ...f,

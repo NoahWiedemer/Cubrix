@@ -3,6 +3,7 @@ import { AlignCenter, AlignLeft, AlignRight, Bold, Link2, Link2Off } from "lucid
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { maxEdgeSize, textOf } from "../core/commandDefs";
 import { profileBounds } from "../core/scale";
+import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
@@ -151,6 +152,9 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
 }
 
 const PARAM_FIELDS: Record<PrimitiveFeature["type"], { key: string; label: string }[]> = {
+  ...(Object.fromEntries(
+    Object.entries(SHAPE_DEFAULTS).map(([t, d]) => [t, Object.entries(d.labels).map(([key, label]) => ({ key, label }))]),
+  ) as Record<ExtraType, { key: string; label: string }[]>),
   box: [{ key: "width", label: "Breite" }, { key: "depth", label: "Tiefe" }, { key: "height", label: "Höhe" }],
   cylinder: [{ key: "diameter", label: "Durchmesser" }, { key: "height", label: "Höhe" }],
   sphere: [{ key: "diameter", label: "Durchmesser" }],

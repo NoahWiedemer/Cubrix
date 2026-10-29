@@ -1,6 +1,19 @@
 // Icon names are plain strings in commands and history (so they serialize);
 // this maps them to lucide components.
 import {
+  Pill,
+  Egg,
+  Star,
+  Cog,
+  Anchor,
+  Paperclip,
+  Pin,
+  Heart,
+  ArrowRight,
+  GripHorizontal,
+  Amphora,
+  Soup,
+  Columns3,
   Box,
   Circle,
   Combine,
@@ -79,6 +92,21 @@ import {
 } from "lucide-react";
 
 export const ICONS = {
+  capsule: Pill,
+  egg: Egg,
+  star: Star,
+  gear: Cog,
+  hook: Anchor,
+  pin: Pin,
+  clip: Paperclip,
+  heart: Heart,
+  arrow: ArrowRight,
+  knob: CircleDot,
+  handle: GripHorizontal,
+  vase: Amphora,
+  bowl: Soup,
+  hexagon: Hexagon,
+  slots: Columns3,
   box: Box,
   cylinder: Cylinder,
   sphere: Circle,

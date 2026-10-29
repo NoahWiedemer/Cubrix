@@ -1,3 +1,4 @@
+import { SHAPE_DEFAULTS, isExtraType } from "../core/shapeDefs";
 import { useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { execute } from "../core/commands";
@@ -7,6 +8,7 @@ import { Icon, type IconName } from "../ui/icons";
 import { openContextMenu } from "./ContextMenu";
 
 export function featureIcon(f: Feature): IconName {
+  if (isExtraType(f.type)) return SHAPE_DEFAULTS[f.type].icon;
   return f.type === "boolean" ? f.op : f.type === "sketch" ? "sketch" : f.type === "extrude" ? "extrude" : f.type;
 }
 

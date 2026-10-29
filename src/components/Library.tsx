@@ -10,6 +10,7 @@ import { thumbnail } from "../ui/thumbnails";
 import { viewportPick } from "../ui/viewportPick";
 import { Icon, type IconName } from "../ui/icons";
 import type { Vec3 } from "../core/document";
+import { SHAPE_DEFAULTS, type ShapeDef } from "../core/shapeDefs";
 
 export const useLibrary = create<{ open: boolean }>(() => ({ open: false }));
 
@@ -18,7 +19,15 @@ interface Shape {
   label: string;
   icon: IconName;
   hint: string;
+  /** Preset parameters (e.g. "Ring" = a flat tube). */
+  params?: Record<string, number>;
+  key?: string;
 }
+
+const extra = (category: ShapeDef["category"]): Shape[] =>
+  Object.entries(SHAPE_DEFAULTS)
+    .filter(([, d]) => d.category === category)
+    .map(([type, d]) => ({ type, label: d.label, icon: d.icon, hint: d.hint }));
 
 const CATEGORIES: { id: string; label: string; shapes: Shape[] }[] = [
   {
@@ -29,48 +38,57 @@ const CATEGORIES: { id: string; label: string; shapes: Shape[] }[] = [
       { type: "cylinder", label: "Zylinder", icon: "cylinder", hint: "Stifte, Säulen" },
       { type: "sphere", label: "Kugel", icon: "sphere", hint: "rund" },
       { type: "cone", label: "Kegel", icon: "cone", hint: "Spitzen, Trichter" },
-      { type: "torus", label: "Torus", icon: "torus", hint: "Ring" },
+      { type: "torus", label: "Torus", icon: "torus", hint: "Ring, Donut" },
       { type: "pyramid", label: "Pyramide", icon: "pyramid", hint: "quadratisch" },
       { type: "prism", label: "Prisma", icon: "prism", hint: "Sechskant, Dreieck" },
       { type: "hemisphere", label: "Halbkugel", icon: "hemisphere", hint: "Kuppel" },
       { type: "wedge", label: "Keil", icon: "wedge", hint: "Rampe, Stütze" },
+      { type: "tube", label: "Rohr", icon: "tube", hint: "Hülse, Distanz" },
+      ...extra("basic"),
+    ],
+  },
+  {
+    id: "functional",
+    label: "Funktional",
+    shapes: [
+      { type: "counterbore", label: "Schraubloch", icon: "screw", hint: "M3 mit Kopfsenkung, zum Abziehen" },
+      { type: "nut", label: "Mutterfalle", icon: "nut", hint: "M3 Sechskant, zum Abziehen" },
+      ...extra("functional"),
+    ],
+  },
+  {
+    id: "deco",
+    label: "Deko",
+    shapes: [
+      ...extra("deco"),
+      { type: "tube", key: "ring", label: "Ring", icon: "torus", hint: "Fingerring, Unterlegscheibe", params: { diameter: 21, inner: 17.5, height: 4 } },
     ],
   },
   {
     id: "plates",
     label: "Platten",
-    shapes: [
-      { type: "plate", label: "Platte", icon: "plate", hint: "abgerundete Ecken" },
-      { type: "tube", label: "Rohr", icon: "tube", hint: "Hülse, Distanz" },
-    ],
-  },
-  {
-    id: "hardware",
-    label: "Schrauben",
-    shapes: [
-      { type: "counterbore", label: "Schraubloch", icon: "screw", hint: "M3 mit Senkung, zum Abziehen" },
-      { type: "nut", label: "Mutterfalle", icon: "nut", hint: "M3 Sechskant, zum Abziehen" },
-    ],
+    shapes: [{ type: "plate", label: "Platte", icon: "plate", hint: "abgerundete Ecken" }, ...extra("plates")],
   },
 ];
 
-function Thumb({ type, icon }: { type: string; icon: IconName }) {
+function Thumb({ shape }: { shape: Shape }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    thumbnail(type).then((s) => alive && setSrc(s)).catch(() => {});
+    thumbnail(shape.type, shape.params, shape.key).then((s) => alive && setSrc(s)).catch(() => {});
     return () => {
       alive = false;
     };
-  }, [type]);
+  }, [shape]);
+  const icon = shape.icon;
   return src ? <img src={src} alt="" draggable={false} /> : <span className="lib-thumb-ph"><Icon name={icon} size={26} /></span>;
 }
 
 /** Places a shape: at a dropped spot (on the bed or on top of a body) or on a free spot. */
-function place(type: string, at?: Vec3) {
+function place(shape: Shape, at?: Vec3) {
   const snap = useApp.getState().snap || 1;
   const position = at ? ([Math.round(at[0] / snap) * snap, Math.round(at[1] / snap) * snap, Math.max(0, at[2])] as Vec3) : undefined;
-  void execute(`primitive.${type}`, position ? { position } : {});
+  void execute(`primitive.${shape.type}`, { ...(shape.params ?? {}), ...(position ? { position } : {}) });
 }
 
 function startShapeDrag(shape: Shape, e: React.PointerEvent, src: string | undefined) {
@@ -98,13 +116,13 @@ function startShapeDrag(shape: Shape, e: React.PointerEvent, src: string | undef
     window.removeEventListener("pointerup", up);
     window.removeEventListener("keydown", key, true);
     if (!ghost) {
-      place(shape.type); // a plain click
+      place(shape); // a plain click
       return;
     }
     ghost.remove();
     document.body.classList.remove("shape-dragging");
     const hit = viewportPick.pick?.(ev.clientX, ev.clientY);
-    if (hit) place(shape.type, hit.facesUp ? hit.point : [hit.point[0], hit.point[1], 0]);
+    if (hit) place(shape, hit.facesUp ? hit.point : [hit.point[0], hit.point[1], 0]);
   };
   const key = (ev: KeyboardEvent) => {
     if (ev.key !== "Escape" || !ghost) return;
@@ -172,7 +190,7 @@ export function Library() {
             <div className="lib-grid">
               {c.shapes.map((s) => (
                 <button
-                  key={s.type}
+                  key={s.key ?? s.type}
                   className="lib-item"
                   title={getCommand(`primitive.${s.type}`)?.description}
                   onPointerDown={(e) => {
@@ -181,7 +199,7 @@ export function Library() {
                     startShapeDrag(s, e, thumbs.current[s.type]);
                   }}
                 >
-                  <span className="lib-thumb"><Thumb type={s.type} icon={s.icon} /></span>
+                  <span className="lib-thumb"><Thumb shape={s} /></span>
                   <span className="lib-label">{s.label}</span>
                 </button>
               ))}

@@ -1,3 +1,5 @@
+import { SHAPE_DEFAULTS, type ExtraType } from "./shapeDefs";
+
 // The Albedo document: a plain, serializable JSON list of features.
 // Everything the user builds lives here, so it can be saved, diffed, replayed
 // and (later) read and written by the AI assistant.
@@ -11,12 +13,14 @@ export interface Transform {
   rotation: Vec3;
 }
 
-export type PrimitiveType =
+export type BasicType =
   | "box" | "cylinder" | "sphere" | "cone" | "torus"
   | "pyramid" | "prism" | "tube" | "hemisphere" | "wedge" | "plate" | "counterbore" | "nut";
+/** Every primitive: the basic ones plus the library shapes (see core/shapeDefs.ts). */
+export type PrimitiveType = BasicType | ExtraType;
 export type BooleanOp = "union" | "subtract" | "intersect";
 
-export interface PrimitiveParams {
+interface BasicParams {
   box: { width: number; depth: number; height: number };
   cylinder: { diameter: number; height: number };
   sphere: { diameter: number };
@@ -33,6 +37,8 @@ export interface PrimitiveParams {
   /** Hexagonal nut trap (a tool body to subtract). */
   nut: { acrossFlats: number; height: number };
 }
+
+export type PrimitiveParams = BasicParams & { [K in ExtraType]: Record<string, number> };
 
 interface FeatureBase {
   id: string;
@@ -161,6 +167,7 @@ function starterCube(): Feature {
 }
 
 export const PRIMITIVE_LABELS: Record<PrimitiveType, string> = {
+  ...(Object.fromEntries(Object.entries(SHAPE_DEFAULTS).map(([k, d]) => [k, d.label])) as Record<ExtraType, string>),
   box: "Quader",
   cylinder: "Zylinder",
   sphere: "Kugel",

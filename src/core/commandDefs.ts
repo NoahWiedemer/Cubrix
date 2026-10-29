@@ -36,6 +36,7 @@ import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
+import { SHAPE_DEFAULTS, type ExtraType, type ShapeDef } from "./shapeDefs";
 import { gizmoAnchor } from "../ui/gizmoAnchor";
 import { useTextTool } from "../ui/textTool";
 import { useLibrary } from "../components/Library";
@@ -502,6 +503,15 @@ export function maxEdgeSize(f: Feature): number | null {
     default:
       return null;
   }
+}
+
+// Library shapes (core/shapeDefs.ts): one primitive command each.
+for (const [type, def] of Object.entries(SHAPE_DEFAULTS) as [ExtraType, ShapeDef][]) {
+  const specs = Object.fromEntries(Object.entries(def.params).map(([k, v]) => [k, { description: def.labels[k] ?? k, default: v }]));
+  definePrimitive(type, def.icon, `Fügt ${def.label === "Schale" ? "eine" : "ein(e)"} ${def.label} hinzu (${def.hint}).`, specs as never, (p) => {
+    const vals = Object.values(p as Record<string, number>);
+    return Math.max(10, ...vals.filter((v) => v > 5));
+  });
 }
 
 // ── Text ─────────────────────────────────────────────────────────────────────

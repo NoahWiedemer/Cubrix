@@ -2,6 +2,7 @@
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
 import { drawCircle, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { buildText } from "./text";
+import { EXTRA_BUILDERS } from "./shapes";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
@@ -114,8 +115,11 @@ export function buildPrimitive(f: Feature): Shape3D {
       const { acrossFlats, height } = f.params;
       return drawPolysides(acrossFlats / Math.sqrt(3), 6).sketchOnPlane("XY").extrude(height) as Shape3D;
     }
-    default:
+    default: {
+      const extra = EXTRA_BUILDERS[(f as { type: string }).type];
+      if (extra) return extra((f as unknown as { params: Record<string, number> }).params);
       throw new Error("Unbekannter Typ");
+    }
   }
 }
 

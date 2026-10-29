@@ -1261,3 +1261,4 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .rotate-field { width: 74px; flex: none; height: 32px; }
 .rotate-field input { text-align: right; min-width: 0; }
 .rotate-field label.x { color: #4fc7b6; } .rotate-field label.y { color: #5fd894; } .rotate-field label.z { color: #b2df5c; }
+.lib-cats { gap: 2px; } .lib-cats button { padding: 0 8px; font-size: 12px; }
