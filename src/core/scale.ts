@@ -20,6 +20,16 @@ function scaleShape(s: SketchShape, [sx, sy]: Vec3): SketchShape {
       return { ...s, cx: r2(s.cx * sx), cy: r2(s.cy * sy), r: r2(s.r * m) };
     case "poly":
       return { ...s, points: s.points.map(([x, y]) => [r2(x * sx), r2(y * sy)] as [number, number]) };
+    case "ellipse":
+      return { ...s, cx: r2(s.cx * sx), cy: r2(s.cy * sy), rx: r2(s.rx * sx), ry: r2(s.ry * sy) };
+    case "slot":
+      return { ...s, cx: r2(s.cx * sx), cy: r2(s.cy * sy), length: r2(s.length * sx), width: r2(s.width * sy) };
+    case "rrect":
+      return { ...s, x: r2(s.x * sx), y: r2(s.y * sy), w: r2(s.w * sx), h: r2(s.h * sy), r: r2(s.r * Math.min(sx, sy)) };
+    case "path": {
+      const p = ([x, y]: [number, number]) => [r2(x * sx), r2(y * sy)] as [number, number];
+      return { ...s, start: p(s.start), segments: s.segments.map((g) => (g.type === "arc" ? { ...g, to: p(g.to), via: p(g.via) } : { ...g, to: p(g.to) })) };
+    }
   }
 }
 
@@ -143,9 +153,17 @@ export function resizeProfile(shapes: SketchShape[], width?: number, depth?: num
         return { ...s, x: s.x + dx, y: s.y + dy };
       case "circle":
       case "polygon":
+      case "ellipse":
+      case "slot":
         return { ...s, cx: s.cx + dx, cy: s.cy + dy };
+      case "rrect":
+        return { ...s, x: s.x + dx, y: s.y + dy };
       case "poly":
         return { ...s, points: s.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) };
+      case "path": {
+        const p = ([x, y]: [number, number]) => [x + dx, y + dy] as [number, number];
+        return { ...s, start: p(s.start), segments: s.segments.map((g) => (g.type === "arc" ? { ...g, to: p(g.to), via: p(g.via) } : { ...g, to: p(g.to) })) };
+      }
     }
   };
   return shapes.map((s) => shift(scaleShape(shift(s, -cx, -cy), [sx, sy, 1]), cx, cy)).map((s) => shift(s, 0, 0));

@@ -21,6 +21,7 @@ import {
   type ModelDocument,
   type SketchFeature,
   type SketchShape,
+  type PathSegment,
   isSolid,
   type PrimitiveFeature,
   type PrimitiveParams,
@@ -827,7 +828,9 @@ defineCommand({
 
 // ── Sketches ─────────────────────────────────────────────────────────────────
 
-const shapeLabels: Record<SketchShape["kind"], string> = { rect: "Rechteck", circle: "Kreis", polygon: "Vieleck", poly: "Linienzug" };
+const shapeLabels: Record<SketchShape["kind"], string> = {
+  rect: "Rechteck", circle: "Kreis", polygon: "Vieleck", poly: "Linienzug", ellipse: "Ellipse", slot: "Langloch", rrect: "Abgerundetes Rechteck", path: "Pfad",
+};
 
 defineCommand({
   id: "sketch.addShape",
@@ -892,14 +895,154 @@ defineCommand({
     const { id, name, visible, transform } = f;
     const next: Feature =
       height > 0
-        ? { id, name, visible, transform, type: "extrude", profile: shapes, height, fillet: f.fillet, chamfer: f.chamfer }
-        : { id, name, visible, transform, type: "sketch", shapes };
+        ? { id, name, visible, transform, type: "extrude", profile: shapes, height, fillet: f.fillet, chamfer: f.chamfer, ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}) }
+        : { id, name, visible, transform, type: "sketch", shapes, ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}) };
     if (JSON.stringify(next) === JSON.stringify(f)) return null;
     const label =
       p.height !== undefined && (f.type === "sketch") !== (height === 0)
         ? height > 0 ? `${name} ${height.toLocaleString("de-DE")} mm hochziehen` : `${name} flach machen`
         : `${name}: Größe ändern`;
     return { doc: updateFeature(doc, f.id, () => next), label };
+  },
+});
+
+/** Adds a curve shape as a new sketch (or straight away as a solid with `height`). */
+function addCurveShape(doc: ModelDocument, shape: SketchShape, height: number | undefined, name: string | undefined, corner?: number): DocumentResult {
+  const base = { id: newId(), name: name ?? uniqueName(doc, height ? "Körper" : "Skizze"), visible: true, ...newColor(), transform: { position: [0, 0, 0] as Vec3, rotation: [0, 0, 0] as Vec3 } };
+  const f: Feature =
+    height && height > 0
+      ? { ...base, type: "extrude", profile: [shape], height: round(height), ...(corner ? { corner } : {}) }
+      : { ...base, type: "sketch", shapes: [shape], ...(corner ? { corner } : {}) };
+  return { doc: { ...doc, features: [...doc.features, f] }, selection: [f.id], label: `${shapeLabels[shape.kind]} ${height ? "erstellen" : "zeichnen"}` };
+}
+
+const heightParam = { type: "number", unit: "mm", min: 0, optional: true, description: "Höhe: > 0 erstellt direkt einen Körper, sonst eine flache Skizze" } as const;
+const nameParam = { type: "string", optional: true, description: "Name im Objektbaum" } as const;
+
+defineCommand({
+  id: "sketch.ellipse",
+  kind: "document",
+  label: "Ellipse",
+  description: "Echte Ellipse (kein Vieleck) als Skizze oder mit height direkt als Körper – z. B. ovaler Anhänger.",
+  icon: "egg",
+  params: {
+    center: { type: "vec3", unit: "mm", optional: true, description: "Mitte [x, y, 0], Standard Bettmitte" },
+    rx: { type: "number", unit: "mm", min: 0.1, description: "Halbachse in X" },
+    ry: { type: "number", unit: "mm", min: 0.1, description: "Halbachse in Y" },
+    angle: { type: "number", unit: "°", optional: true, description: "Drehung" },
+    height: heightParam,
+    name: nameParam,
+  },
+  apply(doc, p) {
+    const [cx, cy] = (p.center ?? [0, 0, 0]) as number[];
+    return addCurveShape(doc, { kind: "ellipse", cx, cy, rx: p.rx, ry: p.ry, angle: p.angle ?? 0 }, p.height, p.name);
+  },
+});
+
+defineCommand({
+  id: "sketch.roundedRect",
+  kind: "document",
+  label: "Abgerundetes Rechteck",
+  description: "Rechteck mit echten runden Ecken (Radius r) als Skizze oder mit height direkt als Körper.",
+  icon: "plate",
+  params: {
+    center: { type: "vec3", unit: "mm", optional: true, description: "Mitte [x, y, 0]" },
+    width: { type: "number", unit: "mm", min: 0.1, description: "Breite" },
+    depth: { type: "number", unit: "mm", min: 0.1, description: "Tiefe" },
+    r: { type: "number", unit: "mm", min: 0, description: "Eckradius" },
+    height: heightParam,
+    name: nameParam,
+  },
+  apply(doc, p) {
+    const [cx, cy] = (p.center ?? [0, 0, 0]) as number[];
+    return addCurveShape(doc, { kind: "rrect", x: cx - p.width / 2, y: cy - p.depth / 2, w: p.width, h: p.depth, r: p.r }, p.height, p.name);
+  },
+});
+
+defineCommand({
+  id: "sketch.slot",
+  kind: "document",
+  label: "Langloch",
+  description: "Langloch / Stadion-Form (Rechteck mit halbrunden Enden) als Skizze oder mit height als Körper.",
+  icon: "slots",
+  params: {
+    center: { type: "vec3", unit: "mm", optional: true, description: "Mitte [x, y, 0]" },
+    length: { type: "number", unit: "mm", min: 0.1, description: "Gesamtlänge" },
+    width: { type: "number", unit: "mm", min: 0.1, description: "Breite" },
+    angle: { type: "number", unit: "°", optional: true, description: "Drehung" },
+    height: heightParam,
+    name: nameParam,
+  },
+  apply(doc, p) {
+    const [cx, cy] = (p.center ?? [0, 0, 0]) as number[];
+    return addCurveShape(doc, { kind: "slot", cx, cy, length: p.length, width: p.width, angle: p.angle ?? 0 }, p.height, p.name);
+  },
+});
+
+defineCommand({
+  id: "sketch.path",
+  kind: "document",
+  label: "Pfad",
+  description:
+    "Freie Kontur aus echten Segmenten: segments [{type:'line',to:[x,y]} | {type:'arc',to,via} (Kreisbogen durch via) | {type:'spline',to} (glatte Kurve)]. closed: true für Körper. Mit height direkt als Körper; corner rundet die Ecken in 2D.",
+  icon: "spline",
+  params: {
+    start: { type: "vec3", unit: "mm", description: "Startpunkt [x, y, 0]" },
+    segments: { type: "list", description: "Segmente" },
+    closed: { type: "boolean", default: true, description: "Geschlossen" },
+    corner: { type: "number", unit: "mm", min: 0, optional: true, description: "Ecken in 2D abrunden" },
+    height: heightParam,
+    name: nameParam,
+  },
+  apply(doc, p) {
+    const start = (p.start as number[]).slice(0, 2) as [number, number];
+    const segments = (p.segments as PathSegment[]).map((g) => ({ ...g, to: (g.to as number[]).slice(0, 2) as [number, number], ...(g.type === "arc" ? { via: (g.via as number[]).slice(0, 2) as [number, number] } : {}) })) as PathSegment[];
+    return addCurveShape(doc, { kind: "path", start, segments, closed: p.closed }, p.height, p.name, p.corner);
+  },
+});
+
+/** Fits a smooth spline through every closed polyline of a sketch/profile (true curve afterwards). */
+defineCommand({
+  id: "sketch.smooth",
+  kind: "document",
+  label: "Glätten",
+  description: "Macht aus kantigen Linienzügen einer Skizze/eines Profils eine glatte Kurve (Spline durch die Punkte).",
+  icon: "spline",
+  params: { id: { type: "id", optional: true, description: "Skizzen-/Profil-ID (Standard: Auswahl)" } },
+  isEnabled: (ctx) => {
+    const f = findFeature(ctx.doc, ctx.selection[0]);
+    return ctx.selection.length === 1 && !!f && (f.type === "sketch" || f.type === "extrude") && (f.type === "sketch" ? f.shapes : f.profile).some((s) => s.kind === "poly" && s.points.length >= 3);
+  },
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f || (f.type !== "sketch" && f.type !== "extrude")) throw new Error("Bitte eine Skizze auswählen.");
+    const smooth = (s: SketchShape): SketchShape => {
+      if (s.kind !== "poly" || s.points.length < 3) return s;
+      const pts = s.points;
+      const segments: PathSegment[] = pts.slice(1).map((to) => ({ type: "spline", to }));
+      if (s.closed) segments.push({ type: "spline", to: pts[0] });
+      return { kind: "path", start: pts[0], segments, closed: s.closed };
+    };
+    const next = f.type === "sketch" ? { ...f, shapes: f.shapes.map(smooth) } : { ...f, profile: f.profile.map(smooth) };
+    return { doc: updateFeature(doc, f.id, () => next), label: `${f.name} glätten` };
+  },
+});
+
+defineCommand({
+  id: "sketch.roundCorners",
+  kind: "document",
+  label: "Ecken abrunden (2D)",
+  description: "Rundet die Ecken der Kontur einer Skizze/eines Profils in 2D ab (0 = spitz). Für runde Umrisse besser als 3D-Kanten abrunden.",
+  icon: "fillet",
+  params: {
+    id: { type: "id", optional: true, description: "Skizzen-/Profil-ID (Standard: Auswahl)" },
+    radius: { type: "number", unit: "mm", min: 0, description: "Eckradius" },
+  },
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f || (f.type !== "sketch" && f.type !== "extrude")) throw new Error("Bitte eine Skizze oder ein Profil auswählen.");
+    if ((f.corner ?? 0) === p.radius) return null;
+    return { doc: updateFeature(doc, f.id, (x) => ({ ...x, corner: round(p.radius) }) as Feature), label: `${f.name}: Ecken abrunden (2D)` };
   },
 });
 
@@ -926,6 +1069,7 @@ defineCommand({
     ["line", "Linie", "l", "line"],
     ["rect", "Rechteck", "shift+r", "rect"],
     ["circle", "Kreis", "c", "sphere"],
+    ["ellipse", "Ellipse", "e", "egg"],
     ["polygon", "Vieleck", "p", "polygon"],
   ] as const
 ).forEach(([tool, label, key, icon]) =>

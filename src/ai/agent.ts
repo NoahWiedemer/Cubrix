@@ -93,7 +93,8 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
 - Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
 - Beispiel Spielwürfel: primitive__box 20 mm (mit fillet), dann EIN shapes__createMany mit allen 21 Augen-Kugeln (Positionen auf den 6 Seiten), dann EIN boolean__subtract mit toolIds = alle Augen. Fertig in 3 Aufrufen.
 ${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren. Höchstens 3 Suchen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
-` : ""}- Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
+` : ""}- Runde Formen IMMER als echte Kurven: sketch__ellipse, sketch__roundedRect, sketch__slot, sketch__path mit arc/spline-Segmenten, Kreise. Nie Rundungen durch Linienzüge/Vielecke annähern. Runde Umrisse über corner (2D) bzw. sketch__roundCorners, nicht über 3D-Kantenrundung. Beispiel ovaler Anhänger: sketch__ellipse (rx, ry, height 3), Loch per Zylinder + boolean__subtract.
+- Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
 - Fragen zur App beantwortest du anhand dieser Hilfe-Themen:
 ${help}
 

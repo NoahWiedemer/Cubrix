@@ -1,4 +1,4 @@
-import { execute, getCommand } from "../core/commands";
+import { execute, getCommand, isEnabled } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
@@ -53,6 +53,7 @@ export function Toolbar() {
         {mode === "create" && <CommandTool id="tool.text" active={textTool} tip="Text: aufs Druckbett klicken" />}
         {mode === "single" && single?.type === "sketch" && (
           <>
+            {isEnabled("sketch.smooth") && <CommandTool id="sketch.smooth" tip="Kantige Kontur in eine glatte Kurve umwandeln" />}
             <button className="tool" onClick={() => { useSketch.setState({ activeId: single.id }); void execute("workspace.sketch"); }} data-tip="Skizze im 2D-Modus bearbeiten" data-tip-pos="top">
               <Icon name="sketch" size={18} />In 2D bearbeiten
             </button>
@@ -62,6 +63,7 @@ export function Toolbar() {
           <>
             <CommandTool id="tool.rotate" active={rotate} />
             <CommandTool id="tool.scale" active={scale} />
+            {single && (single.type === "extrude") && isEnabled("sketch.smooth") && <CommandTool id="sketch.smooth" tip="Kantige Kontur in eine glatte Kurve umwandeln" />}
             {single && single.type !== "sphere" && single.type !== "torus" && (
               <>
                 <CommandTool id="object.fillet" />

@@ -90,7 +90,7 @@ function featureEdges(shape: Shape3D): Set<number> {
 }
 
 function exportStl(shapes: Shape3D[]): ArrayBuffer {
-  const meshes = shapes.map((s) => s.mesh({ tolerance: 0.01, angularTolerance: 5 }));
+  const meshes = shapes.map((s) => s.mesh({ tolerance: 0.01, angularTolerance: 0.1 }));
   const triCount = meshes.reduce((n, m) => n + m.triangles.length / 3, 0);
   const buf = new ArrayBuffer(84 + triCount * 50);
   const view = new DataView(buf);
@@ -124,7 +124,7 @@ function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefin
   const palette = [...new Set(colors.filter((c): c is string => !!c))];
   const MAT = 1000;
   shapes.forEach((s, idx) => {
-    const m = s.mesh({ tolerance: 0.01, angularTolerance: 5 });
+    const m = s.mesh({ tolerance: 0.01, angularTolerance: 0.1 });
     const verts: string[] = [];
     for (let i = 0; i < m.vertices.length; i += 3)
       verts.push(`<vertex x="${m.vertices[i].toFixed(4)}" y="${m.vertices[i + 1].toFixed(4)}" z="${m.vertices[i + 2].toFixed(4)}"/>`);

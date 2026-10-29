@@ -122,6 +122,12 @@ export function SketchDraw({ sketches }: { sketches: SketchFeature[] }) {
       if (Math.abs(w) < 0.1 || Math.abs(h) < 0.1) return null;
       return { kind: "rect", x: Math.min(a[0], a[0] + w), y: Math.min(a[1], a[1] + h), w: Math.abs(w), h: Math.abs(h) };
     }
+    if (tool === "ellipse") {
+      // Drag from the centre to a corner of the bounding box: true ellipse, not a polygon.
+      const rx = values[0] ? values[0] / 2 : Math.abs(b[0] - a[0]);
+      const ry = values[1] ? values[1] / 2 : Math.abs(b[1] - a[1]);
+      return rx < 0.1 || ry < 0.1 ? null : { kind: "ellipse", cx: a[0], cy: a[1], rx, ry };
+    }
     const r = values[0] ? values[0] / 2 : Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (r < 0.1) return null;
     if (tool === "circle") return { kind: "circle", cx: a[0], cy: a[1], r };
@@ -156,7 +162,7 @@ export function SketchDraw({ sketches }: { sketches: SketchFeature[] }) {
       } else if (e.key === "Tab") {
         e.preventDefault();
         e.stopImmediatePropagation();
-        setField((s.field + 1) % (tool === "rect" ? 2 : 1));
+        setField((s.field + 1) % (tool === "rect" || tool === "ellipse" ? 2 : 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
         e.stopImmediatePropagation();

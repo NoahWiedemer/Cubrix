@@ -64,16 +64,31 @@ export interface BooleanFeature extends FeatureBase {
   children: [Feature, ...Feature[]];
 }
 
-/** 2D shapes on the bed plane (mm, CAD X/Y). */
+/** One segment of a path: straight, a true circular arc through `via`, or a smooth spline. */
+export type PathSegment =
+  | { type: "line"; to: [number, number] }
+  | { type: "arc"; to: [number, number]; via: [number, number] }
+  | { type: "spline"; to: [number, number] };
+
+/** 2D shapes on the bed plane (mm, CAD X/Y). Curves are real curves in the kernel. */
 export type SketchShape =
   | { kind: "rect"; x: number; y: number; w: number; h: number }
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "polygon"; cx: number; cy: number; r: number; sides: number }
-  | { kind: "poly"; points: [number, number][]; closed: boolean };
+  | { kind: "poly"; points: [number, number][]; closed: boolean }
+  /** Ellipse (rx along X before rotating by `angle` degrees). */
+  | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number; angle?: number }
+  /** Stadium / slot: a rectangle with fully round ends. */
+  | { kind: "slot"; cx: number; cy: number; length: number; width: number; angle?: number }
+  /** Rectangle with rounded corners. */
+  | { kind: "rrect"; x: number; y: number; w: number; h: number; r: number }
+  | { kind: "path"; start: [number, number]; segments: PathSegment[]; closed: boolean };
 
 export interface SketchFeature extends FeatureBase {
   type: "sketch";
   shapes: SketchShape[];
+  /** 2D corner rounding of the profile in mm (applied when it gets a height). */
+  corner?: number;
 }
 
 export interface ExtrudeFeature extends FeatureBase {
@@ -81,6 +96,8 @@ export interface ExtrudeFeature extends FeatureBase {
   /** Closed profiles; shapes lying inside another become holes. */
   profile: SketchShape[];
   height: number;
+  /** 2D corner rounding of the profile in mm (rounded outline, not 3D edge fillets). */
+  corner?: number;
 }
 
 export interface TextFeatureParams {
@@ -202,7 +219,45 @@ export function featureTypeLabel(f: Feature): string {
 export const isSolid = (f: Feature): f is SolidFeature => f.type !== "sketch";
 
 export function isClosed(s: SketchShape): boolean {
-  return s.kind !== "poly" || (s.closed && s.points.length >= 3);
+  if (s.kind === "poly") return s.closed && s.points.length >= 3;
+  if (s.kind === "path") return s.closed && s.segments.length >= 2;
+  return true;
+}
+
+/** Catmull-Rom style sample of a smooth curve through points (display only). */
+function smoothThrough(pts: [number, number][], closed: boolean, per = 12): [number, number][] {
+  const out: [number, number][] = [];
+  const n = pts.length;
+  const at = (i: number) => (closed ? pts[(i + n) % n] : pts[Math.max(0, Math.min(n - 1, i))]);
+  const last = closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const [p0, p1, p2, p3] = [at(i - 1), at(i), at(i + 1), at(i + 2)];
+    for (let k = 0; k < per; k++) {
+      const t = k / per, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map((j) => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3)) as [number, number]);
+    }
+  }
+  if (!closed) out.push(pts[n - 1]);
+  return out;
+}
+
+/** Points of a circular arc from a through m to b (display only). */
+function arcPoints(a: [number, number], m: [number, number], b: [number, number], steps = 24): [number, number][] {
+  const [ax, ay] = a, [bx, by] = m, [cx, cy] = b;
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-9) return [b];
+  const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+  const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+  const r = Math.hypot(ax - ux, ay - uy);
+  const a0 = Math.atan2(ay - uy, ax - ux), am = Math.atan2(by - uy, bx - ux), a1 = Math.atan2(cy - uy, cx - ux);
+  const norm = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  // Direction: go the way that passes the middle point.
+  const ccw = norm(am - a0) < norm(a1 - a0);
+  const sweep = ccw ? norm(a1 - a0) : -norm(a0 - a1);
+  return Array.from({ length: steps }, (_, i) => {
+    const t = a0 + (sweep * (i + 1)) / steps;
+    return [ux + Math.cos(t) * r, uy + Math.sin(t) * r] as [number, number];
+  });
 }
 
 /** Outline points of a sketch shape (closed shapes repeat no point). */
@@ -222,6 +277,54 @@ export function shapePoints(s: SketchShape, segments = 96): [number, number][] {
       });
     case "poly":
       return s.points;
+    case "ellipse": {
+      const a = ((s.angle ?? 0) * Math.PI) / 180;
+      return Array.from({ length: segments }, (_, i) => {
+        const t = (i / segments) * Math.PI * 2;
+        const x = Math.cos(t) * s.rx, y = Math.sin(t) * s.ry;
+        return [s.cx + x * Math.cos(a) - y * Math.sin(a), s.cy + x * Math.sin(a) + y * Math.cos(a)] as [number, number];
+      });
+    }
+    case "slot": {
+      const a = ((s.angle ?? 0) * Math.PI) / 180, r = s.width / 2, h = Math.max(0, s.length / 2 - r);
+      const local: [number, number][] = [];
+      const n = Math.max(8, segments / 4);
+      for (let i = 0; i <= n; i++) { const t = -Math.PI / 2 + (i / n) * Math.PI; local.push([h + Math.cos(t) * r, Math.sin(t) * r]); }
+      for (let i = 0; i <= n; i++) { const t = Math.PI / 2 + (i / n) * Math.PI; local.push([-h + Math.cos(t) * r, Math.sin(t) * r]); }
+      return local.map(([x, y]) => [s.cx + x * Math.cos(a) - y * Math.sin(a), s.cy + x * Math.sin(a) + y * Math.cos(a)] as [number, number]);
+    }
+    case "rrect": {
+      const r = Math.max(0, Math.min(s.r, Math.abs(s.w) / 2, Math.abs(s.h) / 2));
+      const x0 = Math.min(s.x, s.x + s.w), y0 = Math.min(s.y, s.y + s.h), x1 = Math.max(s.x, s.x + s.w), y1 = Math.max(s.y, s.y + s.h);
+      const out: [number, number][] = [];
+      const corner = (cx: number, cy: number, from: number) => {
+        for (let i = 0; i <= 8; i++) { const t = from + (i / 8) * (Math.PI / 2); out.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]); }
+      };
+      corner(x1 - r, y0 + r, -Math.PI / 2);
+      corner(x1 - r, y1 - r, 0);
+      corner(x0 + r, y1 - r, Math.PI / 2);
+      corner(x0 + r, y0 + r, Math.PI);
+      return out;
+    }
+    case "path": {
+      const out: [number, number][] = [s.start];
+      let cur = s.start;
+      let run: [number, number][] = [];
+      const flushSpline = () => {
+        if (run.length) out.push(...smoothThrough([cur, ...run], false).slice(1));
+        if (run.length) cur = run[run.length - 1];
+        run = [];
+      };
+      for (const seg of s.segments) {
+        if (seg.type === "spline") { run.push(seg.to); continue; }
+        flushSpline();
+        if (seg.type === "line") out.push(seg.to);
+        else out.push(...arcPoints(cur, seg.via, seg.to));
+        cur = seg.to;
+      }
+      flushSpline();
+      return out;
+    }
   }
 }
 

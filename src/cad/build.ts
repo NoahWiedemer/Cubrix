@@ -1,6 +1,6 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
@@ -137,6 +137,32 @@ function drawingOf(s: SketchShape): Drawing {
       for (const p of rest) pen = pen.lineTo(p);
       return pen.close();
     }
+    // True curves (B-rep), never sampled polylines:
+    case "ellipse": {
+      const d = s.rx >= s.ry ? drawEllipse(s.rx, s.ry) : drawEllipse(s.ry, s.rx).rotate(90);
+      return d.rotate(s.angle ?? 0).translate(s.cx, s.cy);
+    }
+    case "slot": {
+      const w = Math.min(s.width, s.length);
+      return drawRoundedRectangle(s.length, w, w / 2 - 0.001).rotate(s.angle ?? 0).translate(s.cx, s.cy);
+    }
+    case "rrect": {
+      const w = Math.abs(s.w), h = Math.abs(s.h);
+      const r = Math.max(0, Math.min(s.r, w / 2 - 0.001, h / 2 - 0.001));
+      return drawRoundedRectangle(w, h, r).translate(Math.min(s.x, s.x + s.w) + w / 2, Math.min(s.y, s.y + s.h) + h / 2);
+    }
+    case "path": {
+      let pen = draw(s.start);
+      const n = s.segments.length;
+      s.segments.forEach((seg, i) => {
+        // The closing segment back to the start is drawn by close() for lines.
+        const closing = s.closed && i === n - 1 && seg.to[0] === s.start[0] && seg.to[1] === s.start[1];
+        if (seg.type === "line") { if (!closing) pen = pen.lineTo(seg.to); }
+        else if (seg.type === "arc") pen = pen.threePointsArcTo(seg.to, seg.via);
+        else pen = pen.smoothSplineTo(seg.to);
+      });
+      return pen.close();
+    }
   }
 }
 
@@ -147,7 +173,7 @@ function bbox(s: SketchShape) {
 }
 
 /** Closed profiles fused; a profile lying fully inside another one becomes a hole. */
-function buildExtrusion(profile: SketchShape[], height: number): Shape3D {
+function buildExtrusion(profile: SketchShape[], height: number, corner = 0): Shape3D {
   const closed = profile.filter(isClosed);
   if (!closed.length) throw new Error("Die Skizze enthält keine geschlossene Form.");
   const boxes = closed.map(bbox);
@@ -164,6 +190,13 @@ function buildExtrusion(profile: SketchShape[], height: number): Shape3D {
   if (!outer) throw new Error("Die Skizze enthält keine äußere Form.");
   let region: Drawing = outer;
   for (const h of holes) region = region.cut(h);
+  if (corner > 0) {
+    try {
+      region = region.fillet(corner);
+    } catch {
+      throw new EdgeTreatmentError(`Ecken mit ${mm(corner)} abrunden geht hier nicht – kleinerer Radius?`);
+    }
+  }
   return region.sketchOnPlane("XY").extrude(height) as Shape3D;
 }
 
@@ -177,7 +210,7 @@ export function buildLocal(f: Feature): Shape3D {
     const b = tools.reduce((acc, t) => acc.fuse(t));
     shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
   } else if (f.type === "extrude") {
-    shape = buildExtrusion(f.profile, f.height);
+    shape = buildExtrusion(f.profile, f.height, f.corner ?? 0);
   } else if (f.type === "text") {
     // On a face the text overlaps the surface by 0.01 mm so the boolean is clean:
     // embossed text starts just below the face, engraved text pokes just above it.

@@ -7,6 +7,7 @@ const TOOLS: { id: SketchTool; icon: IconName; label: string; key: string }[] = 
   { id: "line", icon: "line", label: "Linie", key: "l" },
   { id: "rect", icon: "rect", label: "Rechteck", key: "shift+r" },
   { id: "circle", icon: "sphere", label: "Kreis", key: "c" },
+  { id: "ellipse", icon: "egg", label: "Ellipse", key: "e" },
   { id: "polygon", icon: "polygon", label: "Vieleck", key: "p" },
 ];
 

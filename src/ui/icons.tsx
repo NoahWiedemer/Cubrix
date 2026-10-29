@@ -93,6 +93,7 @@ import {
 } from "lucide-react";
 
 export const ICONS = {
+  spline: Spline,
   globe: Globe,
   capsule: Pill,
   egg: Egg,
