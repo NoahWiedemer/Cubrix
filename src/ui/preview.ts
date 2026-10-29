@@ -10,4 +10,4 @@ export const usePreview = create<{
   /** Section height in mm (CAD Z). */
   sectionZ: number;
   captureAt: number;
-}>(() => ({ turntable: true, background: "studio", section: false, sectionZ: 10, captureAt: 0 }));
+}>(() => ({ turntable: false, background: "studio", section: false, sectionZ: 10, captureAt: 0 }));

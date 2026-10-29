@@ -196,7 +196,8 @@ export function SelectionOutline() {
     gl.autoClear = true;
     gl.render(scene, camera);
 
-    const { selection, hoveredId } = useApp.getState();
+    const { selection, hoveredId, workspace } = useApp.getState();
+    if (workspace === "preview") return; // pure render view
     const meshes = useMeshObjects.getState().meshes;
     const hasHover = !!hoveredId && !selection.includes(hoveredId) && !!meshes[hoveredId];
     if (!selection.some((id) => meshes[id]) && !hasHover) return;

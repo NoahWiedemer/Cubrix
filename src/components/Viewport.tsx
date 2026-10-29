@@ -87,11 +87,13 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
   const t = useTransform(f);
   const selected = useApp((s) => s.selection.includes(f.id));
   const inPrint = useApp((s) => s.workspace === "print");
+  const presenting = useApp((s) => s.workspace === "preview");
   const overhangsOn = usePrintView((s) => s.overhangs);
   const showOverhangs = inPrint && overhangsOn;
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
+    if (presenting) return; // Vorschau: clicks only orbit
     e.stopPropagation();
     if (e.delta > 4) return;
     const multi = e.shiftKey || e.metaKey || e.ctrlKey;
@@ -107,6 +109,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         receiveShadow
         onClick={onClick}
         onPointerOver={(e) => {
+          if (presenting) return;
           e.stopPropagation();
           useApp.setState({ hoveredId: f.id });
         }}
@@ -127,7 +130,7 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
           customProgramCacheKey={() => (showOverhangs ? "overhang" : "plain")}
         />
       </mesh>
-      <lineSegments geometry={entry.edges} raycast={() => null}>
+      <lineSegments geometry={entry.edges} raycast={() => null} visible={!presenting}>
         <lineBasicMaterial color={selected ? ACCENT : "#14181b"} transparent opacity={selected ? 0.8 : 0.55} />
       </lineSegments>
     </group>
@@ -359,6 +362,7 @@ export function Viewport() {
           gl.toneMappingExposure = 0.85;
         }}
         onPointerMissed={(e) => {
+          if (workspace === "preview") return;
           const d = down.current;
           if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) < 4) void execute("selection.clear");
         }}

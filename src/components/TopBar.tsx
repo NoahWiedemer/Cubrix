@@ -3,6 +3,7 @@ import { ChevronDown, Undo2, Redo2, PanelsTopLeft } from "lucide-react";
 import logo1x from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
 import logo2x from "../assets/brand/modelonio-logo-ohne-hintergrund-512.png";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
+import { Icon, type IconName } from "../ui/icons";
 import { QUALITY_LABELS, useSettings } from "../ui/settings";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 import { execute } from "../core/commands";
@@ -10,11 +11,11 @@ import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
 import { CommandItem } from "../ui/CommandItem";
 
-const TABS: { id: Workspace; label: string; key: string }[] = [
-  { id: "model", label: "Modell", key: "1" },
-  { id: "sketch", label: "2D", key: "2" },
-  { id: "print", label: "Druck vorbereiten", key: "3" },
-  { id: "preview", label: "Vorschau", key: "4" },
+const TABS: { id: Workspace; label: string; key: string; icon: IconName }[] = [
+  { id: "model", label: "Modell", key: "1", icon: "box" },
+  { id: "sketch", label: "2D", key: "2", icon: "penTool" },
+  { id: "print", label: "Druck vorbereiten", key: "3", icon: "printer" },
+  { id: "preview", label: "Vorschau", key: "4", icon: "visible" },
 ];
 
 export function TopBar() {
@@ -88,6 +89,7 @@ export function TopBar() {
             data-tip={`Arbeitsbereich ${t.label}`}
             data-kbd={t.key}
           >
+            <Icon name={t.icon} size={16} />
             {t.label}
           </button>
         ))}

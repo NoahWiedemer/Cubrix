@@ -797,3 +797,6 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .model-button:hover { border-color: var(--line); }
 .model-input { flex: 1; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 9px; border-radius: 7px; background: #0f1315; border: 1px solid #2a3136; color: var(--text-2); }
 .model-input input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font-size: 13px; }
+.tab { display: flex; align-items: center; gap: 7px; }
+.tab svg { color: var(--text-3); transition: color var(--fast); }
+.tab.active svg { color: var(--accent); }
