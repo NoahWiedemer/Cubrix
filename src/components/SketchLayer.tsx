@@ -1,5 +1,6 @@
 // 2D sketching on the bed plane: renders sketches and handles the drawing tools
 // (line, rectangle, circle, polygon) with snapping, live dimensions and typed values.
+import { useSpacePan } from "../ui/spacePan";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Html, Line } from "@react-three/drei";
@@ -191,6 +192,8 @@ export function SketchDraw({ sketches }: { sketches: SketchFeature[] }) {
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
+    // Space held = temporary pan: the drag belongs to the camera, the shape stays as is.
+    if (useSpacePan.getState().held) return;
     e.stopPropagation();
     const p = toCad(e);
     // Read through the ref so fast consecutive clicks never see stale state.
@@ -232,6 +235,7 @@ export function SketchDraw({ sketches }: { sketches: SketchFeature[] }) {
         onPointerDown={onDown}
         onDoubleClick={(e) => {
           e.stopPropagation();
+          if (useSpacePan.getState().held) return;
           if (tool === "line" && points.length >= 2) commit({ kind: "poly", points, closed: false });
         }}
       >

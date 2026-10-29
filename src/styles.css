@@ -1154,3 +1154,5 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .side-slide.right.out .side-slide-inner { transform: translateX(24px); }
 .col-resizing .side-slide { transition: none; }
 @media (prefers-reduced-motion: reduce) { .side-slide, .side-slide-inner { transition: none; } }
+body.space-pan .viewport canvas { cursor: grab !important; }
+body.space-pan .viewport canvas:active { cursor: grabbing !important; }

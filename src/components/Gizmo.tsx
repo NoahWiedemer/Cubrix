@@ -1,5 +1,6 @@
 // Minimal transform gizmo: thin axis arrows for moving; rotation rings only in
 // rotate mode (R). Everything is sized in screen pixels and ignores depth.
+import { useSpacePan } from "../ui/spacePan";
 import { useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Html } from "@react-three/drei";
@@ -151,6 +152,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     r.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin), new THREE.Vector3());
 
   const begin = (kind: Drag["kind"], index: number) => (e: ThreeEvent<PointerEvent>) => {
+    if (useSpacePan.getState().held) return; // Space + drag pans instead
     e.stopPropagation();
     const g = group.current!;
     const parent = g.parent!;

@@ -8,6 +8,7 @@ import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useApp } from "../core/store";
+import { useSpacePan } from "../ui/spacePan";
 
 type Controls = { target: THREE.Vector3; update(): void; object: THREE.Camera };
 
@@ -48,6 +49,7 @@ export function CameraRig() {
   // Sketch enter/exit, the projection toggle and the iso preset all use it, and a
   // new request mid-tween simply starts from wherever the camera is.
   const workspace = useApp((s) => s.workspace);
+  const spacePan = useSpacePan((s) => s.held);
   const tween = useRef<{
     q0: THREE.Quaternion; q1: THREE.Quaternion;
     h0: number; h1: number;
@@ -178,6 +180,8 @@ export function CameraRig() {
     <OrbitControls
       makeDefault
       enableRotate={workspace !== "sketch"}
+      // Space held: left-drag pans (the temporary hand tool).
+      mouseButtons={{ LEFT: spacePan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       // Direct camera by default; "Leicht" adds a short glide.
       enableDamping={false}
       dampingFactor={0.3}
