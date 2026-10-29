@@ -28,6 +28,7 @@ import {
   type PrimitiveFeature,
   type PrimitiveParams,
   type PrimitiveType,
+  type Shell,
   type Transform,
   type Vec3,
 } from "./document";
@@ -628,6 +629,35 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
     },
   });
 }
+
+defineCommand({
+  id: "object.shell",
+  kind: "document",
+  label: "Aushöhlen",
+  description:
+    "Höhlt ein Objekt mit der angegebenen Wandstärke aus (0 macht es wieder massiv). open: \"top\" (Standard) entfernt die Oberseite, z. B. für Boxen, Becher, Gehäuse; \"bottom\" die Unterseite; \"none\" lässt einen geschlossenen Hohlraum (spart Material).",
+  icon: "shell",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    thickness: { type: "number", unit: "mm", min: 0, description: "Wandstärke (0 = massiv)" },
+    open: { type: "enum", options: ["top", "bottom", "none"], optional: true, description: "Offene Seite (Standard: bisherige Wahl, sonst oben)" },
+  },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f) throw new Error("Objekt nicht gefunden");
+    if (f.type === "sketch") throw new Error("Flache Skizzen lassen sich nicht aushöhlen – zuerst im Inspektor eine Höhe geben.");
+    const thickness = Math.max(0, p.thickness);
+    const open = (p.open ?? f.shell?.open ?? "top") as Shell["open"];
+    const next: Shell | undefined = thickness > 0 ? { thickness, open } : undefined;
+    if (JSON.stringify(next) === JSON.stringify(f.shell)) return null;
+    const where = { top: "oben offen", bottom: "unten offen", none: "geschlossen" }[open];
+    return {
+      doc: updateFeature(doc, f.id, (x) => ({ ...x, shell: next })),
+      label: next ? `${f.name} aushöhlen (${thickness.toLocaleString("de-DE")} mm, ${where})` : `${f.name}: wieder massiv`,
+    };
+  },
+});
 
 /** Upper bound for fillet/chamfer size on simple primitives (null = let the kernel decide). */
 export function maxEdgeSize(f: Feature): number | null {

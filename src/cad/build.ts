@@ -1,6 +1,6 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, FaceFinder, makeBaseBox, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
@@ -44,6 +44,60 @@ function applyEdgeTreatment(shape: Shape3D, f: Feature): Shape3D {
   let result = shape;
   if (chamfer > 0) result = edgePass(result, f, "chamfer", chamfer);
   if (fillet > 0) result = edgePass(result, f, "fillet", fillet);
+  return result;
+}
+
+/**
+ * Hollows a solid: open at the top/bottom (the flat face there is removed and the walls
+ * grow inward), or closed (an inward offset is cut out, leaving a sealed cavity).
+ */
+function applyShell(shape: Shape3D, f: Feature): Shape3D {
+  const shell = f.shell;
+  if (!shell || shell.thickness <= 0) return shape;
+  const t = shell.thickness;
+  const fail = (why: string) => new EdgeTreatmentError(`${f.name} lässt sich ${why}`);
+  const [lo, hi] = shape.boundingBox.bounds;
+  const smallest = Math.min(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  if (t * 2 >= smallest - 0.05) throw fail(`mit ${mm(t)} Wand nicht aushöhlen – die Wand ist dicker als das halbe Objekt.`);
+  const side = shell.open === "top" ? "oben" : "unten";
+  const z = shell.open === "top" ? hi[2] : lo[2];
+  if (shell.open !== "none" && new FaceFinder().inPlane("XY", z).find(shape).length === 0)
+    throw fail(`nicht ${side} öffnen – dort fehlt eine flache Fläche. Versuche „Zu“ (geschlossener Hohlraum).`);
+  const tooThick = () => fail(`mit ${mm(t)} Wand nicht aushöhlen. Versuche eine dünnere Wand.`);
+  let inner: Shape3D;
+  let closed: Shape3D;
+  try {
+    // On rounded bodies OCC returns the offset as a shell; it must be a solid to cut.
+    const offset = makeOffset(shape as never, -t) as Shape3D;
+    inner = offset.constructor.name === "Shell" ? (makeSolid([offset as never]) as Shape3D) : offset;
+    closed = shape.cut(inner);
+  } catch {
+    throw (f.chamfer ?? 0) > 0 ? fail("mit gefasten Kanten noch nicht aushöhlen. Nimm stattdessen Abrunden.") : tooThick();
+  }
+  const vClosed = measureVolume(closed);
+  if (!(vClosed > 0 && vClosed < measureVolume(shape) - 1e-6)) throw tooThick();
+  if (shell.open === "none") return closed;
+  // An open shell is the closed one minus the wall on that side: it must be smaller and
+  // lie completely inside it. OCC's thick solid sometimes returns junk on rounded
+  // bodies; then the cavity is pushed through the wall with a boolean instead.
+  const valid = (r: Shape3D | null) => {
+    if (!r || r.isNull) return false;
+    const v = measureVolume(r);
+    return v > 0 && v < vClosed - 1e-6 && Math.abs(measureVolume(r.intersect(closed)) - v) < v * 1e-4 + 1e-3;
+  };
+  const attempt = (make: () => Shape3D) => {
+    try {
+      const r = make();
+      return valid(r) ? r : null;
+    } catch {
+      return null;
+    }
+  };
+  const dz = (shell.open === "top" ? 1 : -1) * (t + 0.5);
+  const result =
+    attempt(() => shape.shell(t, (finder) => finder.inPlane("XY", z))) ??
+    attempt(() => shape.cut(inner.fuse(inner.clone().translate(0, 0, dz))));
+  if (!result) throw tooThick();
   return result;
 }
 
@@ -233,7 +287,7 @@ export function buildLocal(f: Feature): Shape3D {
   } else {
     shape = buildPrimitive(f);
   }
-  shape = applyEdgeTreatment(shape, f);
+  shape = applyShell(applyEdgeTreatment(shape, f), f);
   // Mirrored copies: flip the geometry in the feature's own frame.
   if (f.mirror) shape = shape.mirror(f.mirror === "x" ? "YZ" : "XZ", [0, 0, 0]);
   return shape;

@@ -53,6 +53,13 @@ interface FeatureBase {
   color?: string;
   /** Geometry mirrored in its own frame (across its local YZ plane for "x", XZ for "y"). */
   mirror?: "x" | "y";
+  /** Hollowed out with this wall thickness (mm), optionally open at the top or bottom face. */
+  shell?: Shell;
+}
+
+export interface Shell {
+  thickness: number;
+  open: "none" | "top" | "bottom";
 }
 
 export type PrimitiveFeature = {
@@ -422,7 +429,7 @@ export function cloneFeature(f: Feature): Feature {
 /** Geometry-relevant part of a feature, ignoring its own placement. Used as mesh cache key. */
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
-    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, m: x.mirror, t: top ? undefined : x.transform };
+    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "sketch") return { ...base, s: x.shapes };

@@ -412,7 +412,49 @@ function SingleObject({ f }: { f: Feature }) {
           <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
         </div>
       )}
+      {f.type !== "sketch" && <ShellSection f={f} />}
     </>
+  );
+}
+
+/** Aushöhlen: wall thickness plus which side stays open. */
+function ShellSection({ f }: { f: Feature }) {
+  const last = useRef(0);
+  const open = f.shell?.open ?? "top";
+  const preview = (v: number) => {
+    const now = performance.now();
+    if (now - last.current < 120) return; // each preview rebuilds the solid
+    last.current = now;
+    previewCommand("object.shell", { id: f.id, thickness: v, open });
+  };
+  return (
+    <div className="group">
+      <div className="group-label"><span><Icon name="shell" size={15} />Aushöhlen</span></div>
+      <div className="field-row two">
+        <NumberField
+          label="W"
+          value={f.shell?.thickness ?? 0}
+          min={0}
+          step={0.4}
+          onPreview={preview}
+          onCommit={(v) => {
+            clearPreview();
+            void execute("object.shell", { id: f.id, thickness: v, open });
+          }}
+        />
+        <SegmentedControl
+          size="sm"
+          value={open}
+          onChange={(o) => void execute("object.shell", { id: f.id, thickness: f.shell?.thickness ?? 1.6, open: o })}
+          options={[
+            { value: "top", label: "Oben" },
+            { value: "bottom", label: "Unten" },
+            { value: "none", label: "Zu" },
+          ]}
+        />
+      </div>
+      <div className="field-caption two"><span>Wand</span><span>Offen</span></div>
+    </div>
   );
 }
 
