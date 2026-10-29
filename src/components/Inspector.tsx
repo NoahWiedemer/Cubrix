@@ -77,7 +77,20 @@ function Printer() {
           </div>
         ))}
       </div>
+      <VolumeToggles />
     </div>
+  );
+}
+
+/** Build-volume display options; shown in both the Drucker and the Ansicht tab. */
+function VolumeToggles() {
+  const showVolume = useSettings((s) => s.showVolume);
+  const volumeStrong = useSettings((s) => s.volumeStrong);
+  return (
+    <>
+      <Toggle label="Bauraum anzeigen" value={showVolume} onChange={(v) => useSettings.setState({ showVolume: v })} />
+      {showVolume && <Toggle label="Bauraum deutlich" value={volumeStrong} onChange={(v) => useSettings.setState({ volumeStrong: v })} />}
+    </>
   );
 }
 
@@ -105,8 +118,7 @@ function View() {
         <input type="range" min={150} max={1500} step={50} value={s.gridFade} onChange={(e) => useSettings.setState({ gridFade: Number(e.target.value) })} />
         <b>{s.gridFade} mm</b>
       </label>
-      <Toggle label="Bauraum anzeigen" value={s.showVolume} onChange={(showVolume) => useSettings.setState({ showVolume })} />
-      {s.showVolume && <Toggle label="Bauraum deutlich" value={s.volumeStrong} onChange={(volumeStrong) => useSettings.setState({ volumeStrong })} />}
+      <VolumeToggles />
 
       <div className="group-label" style={{ marginTop: 16 }}><span><Icon name="perspective" size={15} />Kamera</span></div>
       <SegmentedControl size="sm" className="block" value={s.projection} onChange={(mode) => execute("view.projection", { mode })}
@@ -121,7 +133,7 @@ export function InspectorTabs() {
   const tab = useInspector((s) => s.tab);
   return (
     <SegmentedControl size="sm" className="block inspector-tabs" value={tab} onChange={(t) => useInspector.setState({ tab: t })}
-      options={[{ value: "props", label: "Eigenschaften" }, { value: "printer", label: "Drucker" }, { value: "view", label: "Ansicht" }]} />
+      options={[{ value: "props", label: "Inspektor" }, { value: "printer", label: "Drucker" }, { value: "view", label: "Ansicht" }]} />
   );
 }
 

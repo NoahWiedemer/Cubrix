@@ -1046,3 +1046,8 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .value-pop { width: 252px; }
 .value-pop-hints { gap: 8px; font-size: 11.5px; white-space: nowrap; }
 .value-pop-hints .keycap { min-width: 16px; padding: 0 3px; font-size: 10.5px; }
+/* Compact value popover: label + ~6-character field, no hint row */
+.value-pop { width: auto; min-width: 0; padding: 8px; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 260px; }
+.value-pop-field { width: 100px; flex: none; }
+.value-pop-field input { min-width: 0; }
+.value-pop-error { flex-basis: 100%; }

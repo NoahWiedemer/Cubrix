@@ -6,7 +6,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { clearPreview, execute, getCommand, previewCommand } from "../core/commands";
 import { Icon } from "../ui/icons";
-import { Kbd } from "../ui/Tooltip";
 
 interface Request {
   command: string;
@@ -127,15 +126,7 @@ function Popover({ req }: { req: Request }) {
         />
         {unit && <span className="unit">{unit}</span>}
       </div>
-      {error ? (
-        <div className="value-pop-error">{error}</div>
-      ) : (
-        <div className="value-pop-hints">
-          <span><Kbd keys={["↵"]} /> Anwenden</span>
-          <span><Kbd keys={["Esc"]} /> Abbrechen</span>
-          <span><Kbd keys={["↑↓"]} /> ±0,5</span>
-        </div>
-      )}
+      {error && <div className="value-pop-error">{error}</div>}
     </div>
   );
 }

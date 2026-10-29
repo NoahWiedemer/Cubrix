@@ -11,6 +11,7 @@ import { useApp } from "../core/store";
 import type { Feature, Transform, Vec3 } from "../core/document";
 import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
+import { gizmoAnchor } from "../ui/gizmoAnchor";
 
 export { useGizmo };
 
@@ -108,6 +109,8 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
 
   const box = worldBox(f, entries, transform);
   const center = useMemo(() => (box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(...transform.position)), [box, transform]);
+
+  const anchor = useMemo(() => (box ? gizmoAnchor(box, f.type, mode) : center), [box, f.type, mode, center]);
 
   // Keep a constant on-screen size: one local unit = one CSS pixel.
   useFrame(() => {
@@ -251,7 +254,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
 
   return (
     <>
-      <group ref={group} position={center}>
+      <group ref={group} position={anchor}>
         {mode === "move" &&
           AXES.map(({ axis, color, hover: hc }, i) => (
             <Arrow key={i} axis={axis} color={color} hover={hc} on={active(i)} dim={anyActive && !active(i)} onDown={begin("move", i)} hoverProps={hoverProps(i)} />

@@ -21,6 +21,10 @@ export function registerMesh(id: string, mesh: THREE.Mesh | null) {
   });
 }
 
+// The mask targets are multisampled, so after resolve each channel holds the pixel's
+// coverage fraction (r sel, g hover, a any body) and b holds depth × coverage. That gives
+// sub-pixel edge positions: the ring is anti-aliased on both sides and meets the
+// (MSAA-smoothed) body edge without stair steps.
 const fragment = /* glsl */ `
   uniform sampler2D mask;
   uniform sampler2D xray;
@@ -29,9 +33,11 @@ const fragment = /* glsl */ `
   uniform vec3 selColor;
   uniform vec3 hovColor;
   varying vec2 vUv;
+  bool insideHov(vec4 m) { return m.g > 0.98; }
+  float depthOf(vec4 m) { return m.a > 0.001 ? m.b / m.a : 1.0; }
   void main() {
     vec4 c = texture2D(mask, vUv);   // depth-tested: r sel, g hover, b depth, a coverage
-    vec4 cx = texture2D(xray, vUv);  // selected only, unoccluded: r sel, b depth
+    vec4 cx = texture2D(xray, vUv);  // selected only, unoccluded
     float dSel = 100.0;
     float dHov = 100.0;
     float zSel = 1.0;
@@ -41,26 +47,33 @@ const fragment = /* glsl */ `
       for (int y = -R; y <= R; y++) {
         vec2 o = vec2(float(x), float(y));
         float d = length(o);
-        if (d > radius + 1.0) continue;
+        if (d > radius + 1.5) continue;
         vec2 uv = vUv + o * texel;
         vec4 m = texture2D(mask, uv);
         vec4 mx = texture2D(xray, uv);
-        if (mx.r > 0.5 && d < dSel) { dSel = d; zSel = mx.b; seen = m.r; }
-        if (m.g > 0.5 && d < dHov) { dHov = d; zHov = m.b; }
+        // Approximate distance to the silhouette edge, shifted by the pixel's coverage.
+        if (mx.r > 0.02) {
+          float e = d + 0.5 - mx.r;
+          if (e < dSel) { dSel = e; zSel = depthOf(mx); seen = m.r / mx.r; }
+        }
+        if (m.g > 0.02) {
+          float e = d + 0.5 - m.g;
+          if (e < dHov) { dHov = e; zHov = depthOf(m); }
+        }
       }
     }
     // Full silhouette of the selection: solid where its edge is visible, dimmed where
     // it is hidden behind or inside another body; occluded areas get a faint ghost fill.
-    bool insideSel = cx.r > 0.5;
-    bool frontOfRing = c.a > 0.5 && c.b < zSel - 1e-5;
-    float ring = insideSel ? 0.0 : clamp(radius + 0.5 - dSel, 0.0, 1.0);
+    float cover = cx.r;
+    bool frontOfRing = c.a > 0.5 && depthOf(c) < zSel - 1e-5;
+    float ring = clamp(radius - dSel, 0.0, 1.0) * (1.0 - cover);
     float aSel = ring * ((seen > 0.5 && !frontOfRing) ? 1.0 : 0.45);
-    float ghost = (insideSel && c.r < 0.5) ? 0.1 : 0.0;
-    bool behindHov = c.a < 0.5 || c.b > zHov + 1e-5;
+    float ghost = cover > 0.5 && c.r < 0.5 * cover ? 0.1 * cover : 0.0;
+    bool behindHov = c.a < 0.5 || depthOf(c) > zHov + 1e-5;
     float hr = max(radius * 0.5, 1.0);
-    float aHov = (c.g > 0.5 || insideSel || !behindHov) ? 0.0 : clamp(hr + 0.5 - dHov, 0.0, 1.0) * 0.5;
+    float aHov = (insideHov(c) || cover > 0.5 || !behindHov) ? 0.0 : clamp(hr - dHov, 0.0, 1.0) * (1.0 - c.g) * 0.5;
     float a = max(aSel, ghost);
-    gl_FragColor = a > 0.0 ? vec4(selColor, a) : vec4(hovColor, aHov);
+    gl_FragColor = a > 0.002 ? vec4(selColor, a) : vec4(hovColor, aHov);
   }
 `;
 
@@ -128,6 +141,7 @@ export function SelectionOutline() {
         magFilter: THREE.NearestFilter,
         type: THREE.FloatType,
         depthBuffer: true,
+        samples: 4,
       }),
     [],
   );
@@ -138,6 +152,7 @@ export function SelectionOutline() {
         magFilter: THREE.NearestFilter,
         type: THREE.FloatType,
         depthBuffer: true,
+        samples: 4,
       }),
     [],
   );
@@ -180,8 +195,8 @@ export function SelectionOutline() {
     xrayTarget.setSize(w, h);
     overlay.material.uniforms.texel.value.set(1 / w, 1 / h);
     overlay.material.uniforms.radius.value = 1.75 * dpr;
-    // Loop bound = ring radius + 1 px (compile-time constant).
-    overlay.material.defines.R = Math.ceil(1.75 * dpr) + 1;
+    // Loop bound = ring radius + 2 px (compile-time constant).
+    overlay.material.defines.R = Math.ceil(1.75 * dpr) + 2;
     overlay.material.needsUpdate = true;
   }, [size, dpr, target, xrayTarget, overlay]);
 
