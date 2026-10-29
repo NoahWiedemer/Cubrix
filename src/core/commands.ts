@@ -117,6 +117,9 @@ export async function execute(
     }
     const res = cmd.apply(ctx.doc, p, ctx);
     if (!res) return false;
+    // AI steps never touch the user's selection (only drop ids that no longer exist).
+    const alive = new Set(res.doc.features.map((f) => f.id));
+    const selection = ctx.source === "ai" ? ctx.selection.filter((id) => alive.has(id)) : (res.selection ?? ctx.selection);
     app.commit({
       commandId: cmd.id,
       label: res.label ?? cmd.label,
@@ -124,7 +127,7 @@ export async function execute(
       source: ctx.source,
       group: opts.group,
       doc: res.doc,
-      selection: res.selection ?? ctx.selection,
+      selection,
     });
     return true;
   } catch (e) {

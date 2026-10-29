@@ -38,8 +38,6 @@ export function Toolbar() {
               <Icon name="sketch" size={18} />In 2D bearbeiten
             </button>
             <CommandTool id="sketch.extrude" label="In 3D ziehen" />
-            <div className="tool-sep" />
-            <CommandTool id="object.delete" />
           </>
         )}
         {mode === "single" && single?.type !== "sketch" && (
@@ -52,10 +50,6 @@ export function Toolbar() {
               </>
             )}
             {single?.type === "boolean" && <CommandTool id="boolean.split" />}
-            <div className="tool-sep" />
-            <CommandTool id="object.duplicate" />
-            <CommandTool id="object.dropToBed" label="Aufs Bett" />
-            <CommandTool id="object.delete" />
           </>
         )}
         {mode === "pair" && (
@@ -63,16 +57,6 @@ export function Toolbar() {
             <CommandTool id="boolean.union" />
             <CommandTool id="boolean.subtract" />
             <CommandTool id="boolean.intersect" />
-            <div className="tool-sep" />
-            <CommandTool id="object.duplicate" />
-            <CommandTool id="object.delete" />
-          </>
-        )}
-        {mode === "many" && (
-          <>
-            <CommandTool id="object.duplicate" />
-            <CommandTool id="object.dropToBed" label="Aufs Bett" />
-            <CommandTool id="object.delete" />
           </>
         )}
       </div>

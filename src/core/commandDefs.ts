@@ -31,6 +31,7 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
+import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { PRINTERS, bestOrientation } from "./printAnalysis";
@@ -132,6 +133,52 @@ definePrimitive("torus", "torus", "Fügt einen liegenden Ring (Torus) hinzu.", {
   diameter: { description: "Außendurchmesser", default: 30 },
   thickness: { description: "Ringdicke", default: 8 },
 }, (p) => p.diameter);
+
+definePrimitive("pyramid", "pyramid", "Fügt eine Pyramide mit quadratischer Grundfläche hinzu.", {
+  width: { description: "Kantenlänge der Grundfläche", default: 24 },
+  height: { description: "Höhe", default: 20 },
+}, (p) => p.width);
+
+definePrimitive("prism", "prism", "Fügt ein Prisma mit regelmäßiger Grundfläche hinzu (3, 6 oder mehr Ecken).", {
+  diameter: { description: "Umkreis-Durchmesser", default: 24 },
+  height: { description: "Höhe", default: 20 },
+  sides: { description: "Anzahl der Ecken", default: 6 },
+}, (p) => p.diameter);
+
+definePrimitive("tube", "tube", "Fügt ein Rohr (Hohlzylinder) hinzu.", {
+  diameter: { description: "Außendurchmesser", default: 24 },
+  inner: { description: "Innendurchmesser", default: 18 },
+  height: { description: "Höhe", default: 20 },
+}, (p) => p.diameter);
+
+definePrimitive("hemisphere", "hemisphere", "Fügt eine Halbkugel hinzu, flache Seite auf dem Bett.", {
+  diameter: { description: "Durchmesser", default: 24 },
+}, (p) => p.diameter);
+
+definePrimitive("wedge", "wedge", "Fügt einen Keil (Rampe) hinzu.", {
+  width: { description: "Länge (X)", default: 30 },
+  depth: { description: "Breite (Y)", default: 20 },
+  height: { description: "Höhe", default: 15 },
+}, (p) => Math.max(p.width, p.depth));
+
+definePrimitive("plate", "plate", "Fügt eine Platte mit abgerundeten Ecken hinzu.", {
+  width: { description: "Breite", default: 50 },
+  depth: { description: "Tiefe", default: 30 },
+  height: { description: "Dicke", default: 3 },
+  radius: { description: "Eckenradius", default: 4 },
+}, (p) => Math.max(p.width, p.depth));
+
+definePrimitive("counterbore", "screw", "Fügt ein Schraubloch mit Senkung als Werkzeugkörper hinzu (zum Abziehen). Standard: M3.", {
+  diameter: { description: "Lochdurchmesser (M3: 3,4)", default: 3.4 },
+  length: { description: "Gesamtlänge", default: 12 },
+  headDiameter: { description: "Kopfdurchmesser (M3: 6,5)", default: 6.5 },
+  headDepth: { description: "Kopftiefe", default: 3.2 },
+}, (p) => p.headDiameter);
+
+definePrimitive("nut", "nut", "Fügt eine Sechskant-Mutterfalle als Werkzeugkörper hinzu (zum Abziehen). Standard: M3.", {
+  acrossFlats: { description: "Schlüsselweite (M3: 5,5 + 0,4 Spiel)", default: 5.9 },
+  height: { description: "Höhe (M3: 2,4 + 0,2)", default: 2.6 },
+}, (p) => p.acrossFlats * 1.2);
 
 // ── Object editing ───────────────────────────────────────────────────────────
 
@@ -504,11 +551,17 @@ defineCommand({
   label: "Drucker wählen",
   description: "Setzt das Druckerprofil (Bauraum) des Projekts.",
   icon: "printer",
-  params: { name: { type: "enum", options: PRINTERS.map((p) => p.name), description: "Druckername" } },
+  params: {
+    name: { type: "string", description: "Druckername aus der Liste oder „Eigener Drucker“" },
+    volume: { type: "vec3", unit: "mm", optional: true, description: "Bauraum B × T × H (für eigene Drucker)" },
+  },
   apply(doc, p) {
-    const printer = PRINTERS.find((x) => x.name === p.name);
-    if (!printer || printer.name === doc.printer.name) return null;
-    return { doc: { ...doc, printer: { ...printer, volume: [...printer.volume] as Vec3 } }, label: `Drucker: ${printer.name}` };
+    const preset = PRINTERS.find((x) => x.name === p.name);
+    const volume = (p.volume ?? preset?.volume) as Vec3 | undefined;
+    if (!volume || volume.some((v) => !(v >= 20 && v <= 2000))) throw new Error("Bauraum muss zwischen 20 und 2000 mm liegen");
+    const name = preset ? preset.name : "Eigener Drucker";
+    if (name === doc.printer.name && volume.every((v, i) => v === doc.printer.volume[i])) return null;
+    return { doc: { ...doc, printer: { name, volume: [...volume] as Vec3 } }, label: `Drucker: ${name}` };
   },
 });
 
@@ -833,8 +886,21 @@ defineCommand({
   params: {},
   perform() {
     const layout = useLayout.getState();
-    if (!layout.panels.chat.open || layout.panels.chat.collapsed) layout.setPanel("chat", { open: true, collapsed: false });
+    layout.open("chat", true);
     setTimeout(() => window.dispatchEvent(new Event("albedo:focus-chat")), 60);
+  },
+});
+
+defineCommand({
+  id: "help.open",
+  kind: "action",
+  label: "Hilfe",
+  description: "Öffnet das Hilfe-Center.",
+  icon: "help",
+  shortcut: "shift+?",
+  params: { topic: { type: "string", optional: true, description: "Themen-ID" } },
+  perform(p) {
+    useHelp.setState({ open: true, ...(p.topic ? { topic: p.topic } : {}) });
   },
 });
 

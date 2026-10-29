@@ -3,6 +3,10 @@ import { useApp } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { usePopover } from "../ui/usePopover";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
+import { Menu, MenuTitle } from "../ui/Menu";
+import { CommandItem } from "../ui/CommandItem";
+import { useHelp } from "../help/HelpCenter";
+import { useLibrary } from "./Library";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -18,67 +22,74 @@ function ClosedPanels() {
   const closed = (Object.keys(panels) as PanelId[]).filter((id) => !panels[id].open);
   if (!closed.length) return null;
   return (
-    <div className="rail-bottom">
+    <>
       {closed.map((id) => (
         <button
           key={id}
           className="rail-btn"
           data-tip={`${PANEL_TITLES[id]} öffnen`}
           data-tip-pos="right"
-          onClick={() => useLayout.getState().setPanel(id, { open: true, collapsed: false })}
+          onClick={() => useLayout.getState().open(id, true)}
         >
           <Icon name={PANEL_ICONS[id]} size={18} />
         </button>
       ))}
-    </div>
+      <div className="rail-sep" />
+    </>
   );
 }
 
+function RailButton({ icon, tip, kbd, active, onClick }: { icon: IconName; tip: string; kbd?: string; active?: boolean; onClick(): void }) {
+  return (
+    <button className={`rail-btn ${active ? "active" : ""}`} data-tip={tip} data-kbd={kbd} data-tip-pos="right" onClick={onClick}>
+      <Icon name={icon} size={18} />
+    </button>
+  );
+}
+
+/** Left tool rail; only tools that exist are shown. */
 export function LeftRail() {
-  const pop = usePopover();
-  const hasSelection = useApp((s) => s.selection.length > 0);
+  const workspace = useApp((s) => s.workspace);
+  const library = useLibrary((s) => s.open);
+  const boolPop = usePopover();
+  const edgePop = usePopover();
+  useApp((s) => s.selection);
 
   return (
-    <aside className="panel rail" ref={pop.ref}>
-      <button
-        className={`rail-btn ${!pop.open ? "active" : ""}`}
-        data-tip="Auswählen" data-tip-pos="right"
-        onClick={() => {
-          pop.setOpen(false);
-          if (hasSelection) void execute("selection.clear");
-        }}
-      >
-        <Icon name="select" size={18} />
-      </button>
-      <button
-        className={`rail-btn ${pop.open ? "active" : ""}`}
-        data-tip={pop.open ? undefined : "Grundkörper"} data-tip-pos="right"
-        onClick={() => pop.setOpen(!pop.open)}
-      >
-        <Icon name="shapes" size={18} />
-      </button>
+    <aside className="panel rail">
+      <RailButton icon="select" tip="Auswählen" active={workspace === "model" && !library} onClick={() => { useLibrary.setState({ open: false }); void execute("workspace.model"); }} />
+      <RailButton icon="shapes" tip="Formen-Bibliothek" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      <div className="rail-sep" />
+      <RailButton icon="sketch" tip="Skizze (2D)" kbd="2" active={workspace === "sketch"} onClick={() => execute("workspace.sketch")} />
+      <div ref={boolPop.ref} style={{ position: "relative" }}>
+        <RailButton icon="boolean" tip="Boolean" active={boolPop.open} onClick={() => boolPop.setOpen(!boolPop.open)} />
+        {boolPop.open && (
+          <Menu style={{ left: 46, top: 0 }}>
+            <MenuTitle>Zwei Körper kombinieren</MenuTitle>
+            <CommandItem id="boolean.union" onDone={() => boolPop.setOpen(false)} />
+            <CommandItem id="boolean.subtract" onDone={() => boolPop.setOpen(false)} />
+            <CommandItem id="boolean.intersect" onDone={() => boolPop.setOpen(false)} />
+            <CommandItem id="boolean.split" onDone={() => boolPop.setOpen(false)} />
+          </Menu>
+        )}
+      </div>
+      <div ref={edgePop.ref} style={{ position: "relative" }}>
+        <RailButton icon="fillet" tip="Abrunden / Fasen" active={edgePop.open} onClick={() => edgePop.setOpen(!edgePop.open)} />
+        {edgePop.open && (
+          <Menu style={{ left: 46, top: 0 }}>
+            <MenuTitle>Kanten des ausgewählten Körpers</MenuTitle>
+            <CommandItem id="object.fillet" onDone={() => edgePop.setOpen(false)} />
+            <CommandItem id="object.chamfer" onDone={() => edgePop.setOpen(false)} />
+          </Menu>
+        )}
+      </div>
+      <div className="rail-sep" />
+      <RailButton icon="ai" tip="KI-Assistent" kbd="mod+k" onClick={() => execute("ai.focus")} />
 
-      <ClosedPanels />
-      {pop.open && (
-        <div className="popover">
-          <div className="menu-title">Grundkörper</div>
-          <div className="prim-grid">
-            {PRIMITIVES.map((p) => (
-              <button
-                key={p.id}
-                className="prim-tile"
-                onClick={() => {
-                  pop.setOpen(false);
-                  void execute(p.id);
-                }}
-              >
-                <Icon name={p.icon} size={22} strokeWidth={1.5} />
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="rail-bottom">
+        <ClosedPanels />
+        <RailButton icon="help" tip="Hilfe" kbd="shift+?" onClick={() => useHelp.setState({ open: true })} />
+      </div>
     </aside>
   );
 }

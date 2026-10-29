@@ -110,7 +110,7 @@ export function TopBar() {
                   icon={PANEL_ICONS[id]}
                   label={PANEL_TITLES[id]}
                   checked={panels[id].open}
-                  onClick={() => useLayout.getState().setPanel(id, panels[id].open ? { open: false } : { open: true, collapsed: false })}
+                  onClick={() => useLayout.getState().open(id, !panels[id].open)}
                 />
               ))}
               <MenuSeparator />

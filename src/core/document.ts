@@ -11,7 +11,9 @@ export interface Transform {
   rotation: Vec3;
 }
 
-export type PrimitiveType = "box" | "cylinder" | "sphere" | "cone" | "torus";
+export type PrimitiveType =
+  | "box" | "cylinder" | "sphere" | "cone" | "torus"
+  | "pyramid" | "prism" | "tube" | "hemisphere" | "wedge" | "plate" | "counterbore" | "nut";
 export type BooleanOp = "union" | "subtract" | "intersect";
 
 export interface PrimitiveParams {
@@ -20,6 +22,16 @@ export interface PrimitiveParams {
   sphere: { diameter: number };
   cone: { bottomDiameter: number; topDiameter: number; height: number };
   torus: { diameter: number; thickness: number };
+  pyramid: { width: number; height: number };
+  prism: { diameter: number; height: number; sides: number };
+  tube: { diameter: number; inner: number; height: number };
+  hemisphere: { diameter: number };
+  wedge: { width: number; depth: number; height: number };
+  plate: { width: number; depth: number; height: number; radius: number };
+  /** Screw hole with counterbore (a tool body to subtract). */
+  counterbore: { diameter: number; length: number; headDiameter: number; headDepth: number };
+  /** Hexagonal nut trap (a tool body to subtract). */
+  nut: { acrossFlats: number; height: number };
 }
 
 interface FeatureBase {
@@ -115,6 +127,14 @@ export const PRIMITIVE_LABELS: Record<PrimitiveType, string> = {
   sphere: "Kugel",
   cone: "Kegel",
   torus: "Torus",
+  pyramid: "Pyramide",
+  prism: "Prisma",
+  tube: "Rohr",
+  hemisphere: "Halbkugel",
+  wedge: "Keil",
+  plate: "Platte",
+  counterbore: "Schraubloch",
+  nut: "Mutterfalle",
 };
 
 export const BOOLEAN_LABELS: Record<BooleanOp, string> = {

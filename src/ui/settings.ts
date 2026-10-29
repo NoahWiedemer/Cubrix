@@ -24,11 +24,14 @@ interface ViewSettings {
   /** Build-volume frame (off by default: only the floor grid). */
   showVolume: boolean;
   volumeStrong: boolean;
+  gridSize: "fine" | "coarse";
+  /** Distance (mm) over which the infinite grid fades out. */
+  gridFade: number;
 }
 
 export const useSettings = create<ViewSettings>()(
   persist(
-    (): ViewSettings => ({ quality: "high", projection: "perspective", inertia: "off", showVolume: false, volumeStrong: false }),
+    (): ViewSettings => ({ quality: "high", projection: "perspective", inertia: "off", showVolume: false, volumeStrong: false, gridSize: "fine", gridFade: 600 }),
     { name: "albedo.settings" },
   ),
 );

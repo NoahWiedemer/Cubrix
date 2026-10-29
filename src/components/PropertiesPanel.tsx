@@ -7,7 +7,6 @@ import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { Icon } from "../ui/icons";
 import { featureIcon } from "./ObjectTree";
-import { useLayout } from "../ui/layout";
 
 const show = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
 const parse = (s: string) => Number(s.trim().replace(",", "."));
@@ -123,6 +122,14 @@ const PARAM_FIELDS: Record<PrimitiveFeature["type"], { key: string; label: strin
   sphere: [{ key: "diameter", label: "Durchmesser" }],
   cone: [{ key: "bottomDiameter", label: "Ø unten" }, { key: "topDiameter", label: "Ø oben" }, { key: "height", label: "Höhe" }],
   torus: [{ key: "diameter", label: "Außen-Ø" }, { key: "thickness", label: "Ringdicke" }],
+  pyramid: [{ key: "width", label: "Grundkante" }, { key: "height", label: "Höhe" }],
+  prism: [{ key: "diameter", label: "Ø" }, { key: "height", label: "Höhe" }, { key: "sides", label: "Ecken" }],
+  tube: [{ key: "diameter", label: "Außen-Ø" }, { key: "inner", label: "Innen-Ø" }, { key: "height", label: "Höhe" }],
+  hemisphere: [{ key: "diameter", label: "Durchmesser" }],
+  wedge: [{ key: "width", label: "Länge" }, { key: "depth", label: "Breite" }, { key: "height", label: "Höhe" }],
+  plate: [{ key: "width", label: "Breite" }, { key: "depth", label: "Tiefe" }, { key: "height", label: "Dicke" }],
+  counterbore: [{ key: "diameter", label: "Loch-Ø" }, { key: "length", label: "Länge" }, { key: "headDiameter", label: "Kopf-Ø" }],
+  nut: [{ key: "acrossFlats", label: "SW" }, { key: "height", label: "Höhe" }],
 };
 
 function cols(n: number) {
@@ -286,28 +293,5 @@ export function PropertiesPanel() {
           </>
         )}
     </div>
-  );
-}
-
-/**
- * Floats over the viewport's right edge so selecting never resizes the canvas.
- * Stays mounted briefly after deselecting to fade out.
- */
-export function PropertiesOverlay() {
-  const hasSelection = useApp((s) => s.selection.length > 0);
-  const enabled = useLayout((s) => s.panels.props.open);
-  const [shown, setShown] = useState(hasSelection);
-  useEffect(() => {
-    if (hasSelection) setShown(true);
-    else {
-      const t = setTimeout(() => setShown(false), 160);
-      return () => clearTimeout(t);
-    }
-  }, [hasSelection]);
-  if (!enabled || !shown) return null;
-  return (
-    <aside className={`props-overlay ${hasSelection ? "in" : "out"}`} onPointerDown={(e) => e.stopPropagation()}>
-      <PropertiesPanel />
-    </aside>
   );
 }

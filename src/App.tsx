@@ -8,6 +8,8 @@ import { Viewport } from "./components/Viewport";
 import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 import { TooltipLayer } from "./ui/Tooltip";
+import { ContextMenu } from "./components/ContextMenu";
+import { HelpCenter } from "./help/HelpCenter";
 
 export function App() {
   const preview = useApp((s) => s.workspace === "preview");
@@ -31,6 +33,8 @@ export function App() {
       <StatusBar />
       <Toasts />
       <TooltipLayer />
+      <ContextMenu />
+      <HelpCenter />
     </div>
   );
 }

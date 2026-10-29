@@ -4,6 +4,7 @@ import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import type { Feature } from "../core/document";
 import { Icon, type IconName } from "../ui/icons";
+import { openContextMenu } from "./ContextMenu";
 
 export function featureIcon(f: Feature): IconName {
   return f.type === "boolean" ? f.op : f.type === "sketch" ? "sketch" : f.type === "extrude" ? "extrude" : f.type;
@@ -24,6 +25,11 @@ function Row({ f }: { f: Feature }) {
           execute("selection.set", { ids: [f.id], mode: e.shiftKey || e.metaKey || e.ctrlKey ? "toggle" : "replace" })
         }
         onDoubleClick={() => setRenaming(true)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (!useApp.getState().selection.includes(f.id)) void execute("selection.set", { ids: [f.id] });
+          openContextMenu(e.clientX, e.clientY);
+        }}
       >
         {f.type === "boolean" ? (
           <button className="tree-chevron" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>

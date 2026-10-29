@@ -47,7 +47,7 @@ export function modelSnapshot() {
   return {
     name: doc.name,
     printer: doc.printer,
-    selection: useApp.getState().selection,
+    userSelection: useApp.getState().selection,
     objects: doc.features.map((f) => {
       const b = isSolid(f) && entries[geometryKey(f)] ? worldBox(f, entries) : null;
       const { id, name, type, visible, transform } = f;
@@ -97,7 +97,9 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   const after = useApp.getState().currentId;
   const node = after !== before ? useApp.getState().nodes[after] : undefined;
   events.onStep({ label: node?.label ?? cmd.label, nodeId: node?.id, ok: true });
-  return { ok: true, command: id, changed: !!node, selection: useApp.getState().selection };
+  // New objects are reported by id so the model can refer to them (the UI selection stays the user's).
+  const created = node && node.parentId ? node.doc.features.filter((f) => !useApp.getState().nodes[node.parentId!].doc.features.some((g) => g.id === f.id)).map((f) => ({ id: f.id, name: f.name })) : [];
+  return { ok: true, command: id, changed: !!node, created };
 }
 
 async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
@@ -121,7 +123,7 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
         const steps = (block.input.steps as { command: string; params?: Record<string, unknown> }[]) ?? [];
         const done = [];
         for (const s of steps) done.push(await runCommand(s.command, s.params ?? {}, group, events));
-        return result({ ok: true, steps: done.length, selection: useApp.getState().selection });
+        return result({ ok: true, steps: done.length, created: done.flatMap((d) => d.created) });
       }
       default:
         return result(await runCommand(commandId(block.name), block.input, group, events));

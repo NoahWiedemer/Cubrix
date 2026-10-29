@@ -172,3 +172,26 @@ describe("Denktiefe und Thinking-Blöcke", () => {
       }
   });
 });
+
+describe("KI und Auswahl", () => {
+  it("lässt die Auswahl des Nutzers bei KI-Schritten unverändert", async () => {
+    const first = getDoc().features[0].id;
+    useApp.setState({ selection: [first] });
+    const t: Transport = {
+      async stream(_p, _body, onChunk) {
+        onChunk(
+          sse([
+            { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "s1", name: "primitive__sphere" } },
+            { type: "content_block_stop", index: 0 },
+            { type: "message_delta", delta: { stop_reason: "end_turn" } },
+          ]),
+        );
+      },
+    };
+    // The single tool call runs; a second turn is not needed because stop_reason is end_turn.
+    await runAgent({ provider: "anthropic", model: "claude-sonnet-5-5", transport: t, history: [], prompt: "Kugel", signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} } });
+    const { execute } = await import("../src/core/commands");
+    await execute("primitive.cylinder", {}, { source: "ai" });
+    expect(useApp.getState().selection).toEqual([first]);
+  });
+});

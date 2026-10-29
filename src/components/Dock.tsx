@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, ArrowLeftToLine, ArrowRightToLine, X } from "lucide-react";
+import { ChevronDown, ChevronRight, X, GripVertical } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
 import { Icon } from "../ui/icons";
-import { clampColumnWidth, resizeColumn } from "../ui/layoutModel";
+import { clampColumnWidth, column, resizeColumn } from "../ui/layoutModel";
+import { ObjectTree } from "./ObjectTree";
+import { HistoryPanel } from "./HistoryPanel";
+import { ChatPanel } from "./ChatPanel";
+import { InspectorBody, InspectorTabs } from "./Inspector";
 
 function useWindowWidth() {
   const [w, setW] = useState(window.innerWidth);
@@ -14,27 +18,32 @@ function useWindowWidth() {
   }, []);
   return w;
 }
-import { ObjectTree } from "./ObjectTree";
-import { HistoryPanel } from "./HistoryPanel";
-import { ChatPanel } from "./ChatPanel";
 
 function PanelBody({ id }: { id: PanelId }) {
-  return id === "tree" ? <ObjectTree /> : id === "chat" ? <ChatPanel /> : <HistoryPanel />;
+  if (id === "tree") return <ObjectTree />;
+  if (id === "history") return <HistoryPanel />;
+  if (id === "chat") return <ChatPanel />;
+  return <InspectorBody />;
 }
 
 function PanelMeta({ id }: { id: PanelId }) {
   const doc = useDoc();
-  const steps = useApp((s) => {
-    let n = 0;
-    for (let x = s.nodes[s.currentId]; x.parentId; x = s.nodes[x.parentId]) n++;
-    return n;
-  });
-  if (id === "tree") return <span className="count">{doc.features.length || ""}</span>;
-  if (id === "history") return <span className="count">{steps || ""}</span>;
+  if (id === "tree" && doc.features.length) return <span className="count">{doc.features.length}</span>;
   return null;
 }
 
-function Panel({ id, side, index, onDrop }: { id: PanelId; side: Side; index: number; onDrop(index: number): void }) {
+/** Drag payload helpers (HTML5 drag and drop between and within sidebars). */
+const startDrag = (id: PanelId) => (e: React.DragEvent) => {
+  e.dataTransfer.setData("text/x-albedo-panel", id);
+  e.dataTransfer.effectAllowed = "move";
+  useLayout.setState({ dragging: id });
+};
+const endDrag = () => useLayout.setState({ dragging: null });
+const draggedPanel = (e: React.DragEvent): PanelId | null =>
+  (e.dataTransfer.getData("text/x-albedo-panel") as PanelId) || useLayout.getState().dragging;
+
+/** A stacked section (stack mode). */
+function StackPanel({ id, side, index }: { id: PanelId; side: Side; index: number }) {
   const state = useLayout((s) => s.panels[id]);
   const setPanel = useLayout((s) => s.setPanel);
   const dragging = useLayout((s) => s.dragging);
@@ -47,47 +56,48 @@ function Panel({ id, side, index, onDrop }: { id: PanelId; side: Side; index: nu
       onDragOver={(e) => {
         if (!dragging || dragging === id) return;
         e.preventDefault();
+        e.stopPropagation();
         const r = e.currentTarget.getBoundingClientRect();
         setOver(e.clientY < r.top + r.height / 2 ? "top" : "bottom");
       }}
       onDragLeave={() => setOver(null)}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
+        const dragged = draggedPanel(e);
+        const at = over === "bottom" ? index + 1 : index;
         setOver(null);
-        onDrop(over === "bottom" ? index + 1 : index);
+        endDrag();
+        if (!dragged) return;
+        const ids = column(useLayout.getState().panels, side);
+        const own = ids.indexOf(dragged);
+        useLayout.getState().drop(dragged, side, own >= 0 && own < at ? at - 1 : at);
       }}
-      data-side={side}
     >
-      <header
-        className="dock-head"
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.setData("text/plain", id);
-          e.dataTransfer.effectAllowed = "move";
-          useLayout.setState({ dragging: id });
-        }}
-        onDragEnd={() => useLayout.setState({ dragging: null })}
-        onDoubleClick={() => setPanel(id, { collapsed: !state.collapsed })}
-      >
-        <button className="dock-toggle" onClick={() => setPanel(id, { collapsed: !state.collapsed })} title={state.collapsed ? "Aufklappen" : "Einklappen"}>
+      {id === "inspector" ? (
+        // The inspector's header is its own tab bar; the grip on the left drags the panel.
+        <header className="dock-head inspector-head">
+          <span className="grip" draggable onDragStart={startDrag(id)} onDragEnd={endDrag} data-tip="Ziehen zum Verschieben" data-tip-pos="bottom">
+            <GripVertical size={14} />
+          </span>
+          <InspectorTabs />
+        </header>
+      ) : (
+      <header className="dock-head" draggable onDragStart={startDrag(id)} onDragEnd={endDrag} onDoubleClick={() => setPanel(id, { collapsed: !state.collapsed })}>
+        <button className="dock-toggle" onClick={() => setPanel(id, { collapsed: !state.collapsed })}>
           {state.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </button>
         <span className="dock-icon"><Icon name={PANEL_ICONS[id]} size={15} /></span>
         <span className="dock-title">{PANEL_TITLES[id]}</span>
         <PanelMeta id={id} />
         <span className="dock-actions">
-          <button
-            data-tip={side === "left" ? "Nach rechts verschieben" : "Nach links verschieben"}
-            onClick={() => useLayout.getState().move(id, side === "left" ? "right" : "left", 99)}
-          >
-            {side === "left" ? <ArrowRightToLine size={13} /> : <ArrowLeftToLine size={13} />}
-          </button>
-          <button data-tip="Schließen (über Ansicht wieder öffnen)" onClick={() => setPanel(id, { open: false })}>
+          <button data-tip="Schließen (über Ansicht wieder öffnen)" data-tip-pos="bottom-end" onClick={() => useLayout.getState().open(id, false)}>
             <X size={13} />
           </button>
         </span>
       </header>
-      {!state.collapsed && <div className="dock-body">{<PanelBody id={id} />}</div>}
+      )}
+      {!state.collapsed && <div className="dock-body"><PanelBody id={id} /></div>}
     </section>
   );
 }
@@ -99,7 +109,6 @@ function SplitHandle({ above, below }: { above: PanelId; below: PanelId }) {
       ref={ref}
       className="split-h"
       onPointerDown={(e) => {
-        const col = ref.current!.parentElement!;
         const { panels, setPanel } = useLayout.getState();
         const total = panels[above].weight + panels[below].weight;
         const a = ref.current!.previousElementSibling as HTMLElement;
@@ -107,15 +116,12 @@ function SplitHandle({ above, below }: { above: PanelId; below: PanelId }) {
         const pxTotal = a.offsetHeight + b.offsetHeight;
         const startY = e.clientY;
         const startA = a.offsetHeight;
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        col.classList.add("resizing");
         const move = (ev: PointerEvent) => {
           const h = Math.max(80, Math.min(pxTotal - 80, startA + ev.clientY - startY));
           setPanel(above, { weight: (total * h) / pxTotal });
           setPanel(below, { weight: (total * (pxTotal - h)) / pxTotal });
         };
         const up = () => {
-          col.classList.remove("resizing");
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", up);
         };
@@ -147,37 +153,58 @@ function WidthHandle({ side }: { side: Side }) {
   );
 }
 
-export function DockColumn({ side }: { side: Side }) {
+export function DockColumn({ side, override }: { side: Side; override?: ReactNode }) {
   const panels = useLayout((s) => s.panels);
   const width = useLayout((s) => s.width[side]);
-  const winWidth = useWindowWidth();
   const dragging = useLayout((s) => s.dragging);
-  const ids = (Object.keys(panels) as PanelId[])
-    .filter((id) => id !== "props" && panels[id].side === side && panels[id].open)
-    .sort((a, b) => panels[a].order - panels[b].order);
+  const winWidth = useWindowWidth();
+  const [bodyOver, setBodyOver] = useState(false);
+  useApp((s) => s.currentId);
+  const ids = column(panels, side);
   const empty = ids.length === 0;
-  const move = (id: PanelId, index: number) => useLayout.getState().move(id, side, index);
+
+  // Dropping anywhere on the column body appends the panel to this side.
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      setBodyOver(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) setBodyOver(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setBodyOver(false);
+      const id = draggedPanel(e);
+      endDrag();
+      if (id) useLayout.getState().drop(id, side, 99);
+    },
+  };
+
+  if (override)
+    return (
+      <div className={`dock-col ${side}`} style={{ width: clampColumnWidth(width, winWidth) }}>
+        <WidthHandle side={side} />
+        <div className="dock-stack">{override}</div>
+      </div>
+    );
+
+  if (empty)
+    return (
+      <div className={`dock-col ${side} empty ${dragging ? "drop-target" : ""} ${bodyOver ? "over" : ""}`} style={{ width: dragging ? 72 : 0 }} {...dropProps} />
+    );
 
   const items: ReactNode[] = [];
   ids.forEach((id, i) => {
-    if (i > 0 && !panels[ids[i - 1]].collapsed && !panels[id].collapsed)
-      items.push(<SplitHandle key={`h-${id}`} above={ids[i - 1]} below={id} />);
-    else if (i > 0) items.push(<div key={`g-${id}`} className="split-gap" />);
-    items.push(<Panel key={id} id={id} side={side} index={i} onDrop={(idx) => dragging && move(dragging, idx)} />);
-  });
+      if (i > 0 && !panels[ids[i - 1]].collapsed && !panels[id].collapsed) items.push(<SplitHandle key={`h-${id}`} above={ids[i - 1]} below={id} />);
+      else if (i > 0) items.push(<div key={`g-${id}`} className="split-gap" />);
+      items.push(<StackPanel key={id} id={id} side={side} index={i} />);
+    });
 
   return (
-    <div
-      className={`dock-col ${side} ${empty ? "empty" : ""} ${empty && dragging ? "drop-target" : ""}`}
-      style={{ width: empty ? (dragging ? 64 : 0) : clampColumnWidth(width, winWidth) }}
-      onDragOver={(e) => empty && dragging && e.preventDefault()}
-      onDrop={(e) => {
-        if (!empty || !dragging) return;
-        e.preventDefault();
-        move(dragging, 0);
-      }}
-    >
-      {!empty && <WidthHandle side={side} />}
+    <div className={`dock-col ${side} ${bodyOver ? "over" : ""}`} style={{ width: clampColumnWidth(width, winWidth) }} {...dropProps}>
+      <WidthHandle side={side} />
       <div className="dock-stack">{items}</div>
     </div>
   );

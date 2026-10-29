@@ -8,6 +8,7 @@ import {
   GizmoHelper,
   Grid,
   Html,
+  Line,
 } from "@react-three/drei";
 import { SelectionOutline, registerMesh } from "./SelectionOutline";
 import { AxisIndicator } from "./AxisIndicator";
@@ -18,6 +19,7 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { openContextMenu } from "./ContextMenu";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
@@ -26,7 +28,6 @@ import { usePreview } from "../ui/preview";
 import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { QUALITY, useSettings } from "../ui/settings";
-import { PropertiesOverlay } from "./PropertiesPanel";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -108,6 +109,13 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
         castShadow
         receiveShadow
         onClick={onClick}
+        onContextMenu={(e) => {
+          if (presenting) return;
+          e.stopPropagation();
+          e.nativeEvent.preventDefault();
+          if (!useApp.getState().selection.includes(f.id)) void execute("selection.set", { ids: [f.id] });
+          openContextMenu(e.nativeEvent.clientX, e.nativeEvent.clientY);
+        }}
         onPointerOver={(e) => {
           if (presenting) return;
           e.stopPropagation();
@@ -241,42 +249,43 @@ function Bed({ volume }: { volume: Vec3 }) {
   const [w, d, h] = volume;
   const showVolume = useSettings((s) => s.showVolume);
   const volumeStrong = useSettings((s) => s.volumeStrong);
-  // Adaptive grid: 1 mm cells when zoomed in close, else 5 mm (major lines every 5 / 10 mm).
-  const [cell, setCell] = useState(5);
-  useFrame(({ camera }) => {
-    const dist = (camera as THREE.OrthographicCamera).isOrthographicCamera ? 600 / (camera as THREE.OrthographicCamera).zoom : camera.position.length();
-    const next = dist < 70 ? 1 : 5;
-    if (next !== cell) setCell(next);
+  const gridSize = useSettings((s) => s.gridSize);
+  const gridFade = useSettings((s) => s.gridFade);
+  // Adaptive levels: fine = 5 mm cells / 10 mm majors, 1 mm cells when zoomed in close.
+  const [close, setClose] = useState(false);
+  useFrame(({ camera, controls }) => {
+    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target ?? new THREE.Vector3();
+    const dist = (camera as THREE.OrthographicCamera).isOrthographicCamera
+      ? 600 / (camera as THREE.OrthographicCamera).zoom
+      : camera.position.distanceTo(target);
+    const next = dist < 70;
+    if (next !== close) setClose(next);
   });
+  const cell = gridSize === "coarse" ? 10 : close ? 1 : 5;
+  const section = gridSize === "coarse" ? 50 : close ? 5 : 10;
+  const outline = useMemo(() => [[-w / 2, 0.02, -d / 2], [w / 2, 0.02, -d / 2], [w / 2, 0.02, d / 2], [-w / 2, 0.02, d / 2], [-w / 2, 0.02, -d / 2]] as [number, number, number][], [w, d]);
   return (
     <group>
+      {/* Infinite ground grid, fading out with distance from the scene centre. */}
       <Grid
-        args={[w, d]}
         position={[0, 0.01, 0]}
         cellSize={cell}
-        cellThickness={0.65}
-        cellColor="#283036"
-        sectionSize={cell * (cell === 1 ? 5 : 2)}
-        sectionThickness={0.85}
-        sectionColor="#3a464e"
-        fadeDistance={900}
-        fadeStrength={1.4}
-        followCamera={false}
-        infiniteGrid={false}
-      />
-      <Grid
-        position={[0, -0.3, 0]}
-        cellSize={25}
-        cellThickness={0.5}
-        cellColor="#181d21"
-        sectionSize={125}
-        sectionThickness={0.7}
-        sectionColor="#1d2327"
-        fadeDistance={700}
-        fadeStrength={2.2}
+        cellThickness={0.6}
+        cellColor="#252c31"
+        sectionSize={section}
+        sectionThickness={0.9}
+        sectionColor="#35414a"
+        fadeDistance={gridFade}
+        fadeStrength={1.6}
+        fadeFrom={0}
         infiniteGrid
       />
-      {showVolume && <BuildVolume w={w} d={d} h={h} strong={volumeStrong} />}
+      {showVolume && (
+        <>
+          <Line points={outline} color={volumeStrong ? "#6f808a" : "#46535b"} lineWidth={1.2} />
+          <BuildVolume w={w} d={d} h={h} strong={volumeStrong} />
+        </>
+      )}
     </group>
   );
 }
@@ -348,6 +357,7 @@ export function Viewport() {
 
   return (
     <div
+      onContextMenu={(e) => e.preventDefault()}
       className={`panel viewport ${workspace === "preview" ? `bg-${background}` : ""}`}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
     >
@@ -412,7 +422,6 @@ export function Viewport() {
 
 
       {workspace === "model" && <Toolbar />}
-      {workspace === "model" && <PropertiesOverlay />}
       {workspace === "print" && <PrintPanel />}
       {workspace === "preview" && <PreviewControls />}
       <ViewControls />

@@ -1,6 +1,6 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawPolysides, drawRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
@@ -66,6 +66,42 @@ export function buildPrimitive(f: Feature): Shape3D {
         .translate(major, minor)
         .sketchOnPlane("XZ")
         .revolve([0, 0, 1]) as Shape3D;
+    }
+    case "pyramid": {
+      const { width, height } = f.params;
+      return drawRectangle(width, width).sketchOnPlane("XY").extrude(height, { extrusionProfile: { profile: "linear", endFactor: 0.01 } }) as Shape3D;
+    }
+    case "prism": {
+      const { diameter, height, sides } = f.params;
+      return drawPolysides(diameter / 2, Math.max(3, Math.round(sides))).sketchOnPlane("XY").extrude(height) as Shape3D;
+    }
+    case "tube": {
+      const { diameter, inner, height } = f.params;
+      return drawCircle(diameter / 2).cut(drawCircle(Math.min(inner, diameter - 0.4) / 2)).sketchOnPlane("XY").extrude(height) as Shape3D;
+    }
+    case "hemisphere": {
+      const r = f.params.diameter / 2;
+      return makeSphere(r).cut(makeBaseBox(4 * r, 4 * r, 2 * r).translateZ(-2 * r));
+    }
+    case "wedge": {
+      const { width, depth, height } = f.params;
+      // Right-angled ramp: full height at -X, sloping down to +X.
+      const profile = draw([-width / 2, 0]).lineTo([width / 2, 0]).lineTo([-width / 2, height]).close();
+      return (profile.sketchOnPlane("XZ").extrude(depth) as Shape3D).translateY(depth / 2);
+    }
+    case "plate": {
+      const { width, depth, height, radius } = f.params;
+      const r = Math.max(0, Math.min(radius, width / 2 - 0.01, depth / 2 - 0.01));
+      return drawRoundedRectangle(width, depth, r).sketchOnPlane("XY").extrude(height) as Shape3D;
+    }
+    case "counterbore": {
+      const { diameter, length, headDiameter, headDepth } = f.params;
+      const head = makeCylinder(headDiameter / 2, headDepth).translateZ(length - headDepth);
+      return makeCylinder(diameter / 2, length).fuse(head);
+    }
+    case "nut": {
+      const { acrossFlats, height } = f.params;
+      return drawPolysides(acrossFlats / Math.sqrt(3), 6).sketchOnPlane("XY").extrude(height) as Shape3D;
     }
     default:
       throw new Error("Unbekannter Typ");
