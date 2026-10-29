@@ -1,6 +1,7 @@
 // Icon names are plain strings in commands and history (so they serialize);
 // this maps them to lucide components.
 import {
+  Focus,
   AlignHorizontalJustifyCenter,
   AlignHorizontalSpaceBetween,
   Ruler as RulerIcon,
@@ -96,6 +97,7 @@ import {
 } from "lucide-react";
 
 export const ICONS = {
+  focus: Focus,
   align: AlignHorizontalJustifyCenter,
   distribute: AlignHorizontalSpaceBetween,
   ruler: RulerIcon,

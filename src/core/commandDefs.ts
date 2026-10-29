@@ -1733,6 +1733,72 @@ defineCommand({
   },
 });
 
+// ── Ansichten ───────────────────────────────────────────────────────────────
+
+/** Bounding box (CAD) of the given features, or of everything visible. */
+function framingBox(doc: ModelDocument, ids: string[]): { min: Vec3; max: Vec3 } | null {
+  const entries = useMeshes.getState().entries;
+  const list = (ids.length ? ids.map((id) => findFeature(doc, id)) : doc.features.filter((f) => f.visible)).filter((f): f is Feature => !!f && isSolid(f));
+  const box = new THREE.Box3();
+  for (const f of list) {
+    const b = worldBox(f, entries);
+    if (b) box.union(b);
+  }
+  return box.isEmpty() ? null : { min: box.min.toArray() as Vec3, max: box.max.toArray() as Vec3 };
+}
+
+defineCommand({
+  id: "view.fit",
+  kind: "action",
+  label: "Auswahl zeigen",
+  description: "Zoomt auf die Auswahl (ohne Auswahl auf alles).",
+  icon: "focus",
+  shortcut: "f",
+  params: {},
+  perform(_p, ctx) {
+    const b = framingBox(ctx.doc, ctx.selection) ?? framingBox(ctx.doc, []);
+    if (b) useViewRequest.setState({ request: { kind: "fit", ...b, at: Date.now() } });
+  },
+});
+
+defineCommand({
+  id: "view.fitAll",
+  kind: "action",
+  label: "Alles zeigen",
+  description: "Zoomt so, dass alle sichtbaren Objekte zu sehen sind.",
+  icon: "focus",
+  shortcut: "shift+f",
+  params: {},
+  perform(_p, ctx) {
+    const b = framingBox(ctx.doc, []);
+    if (b) useViewRequest.setState({ request: { kind: "fit", ...b, at: Date.now() } });
+  },
+});
+
+(
+  [
+    ["front", "Vorne", [0, 1, 0], "1"],
+    ["back", "Hinten", [0, -1, 0], "2"],
+    ["left", "Links", [1, 0, 0], "3"],
+    ["right", "Rechts", [-1, 0, 0], "4"],
+    ["top", "Oben", [0, 0, -1], "5"],
+    ["bottom", "Unten", [0, 0, 1], "6"],
+  ] as const
+).forEach(([id, label, dir, key]) =>
+  defineCommand({
+    id: `view.${id}`,
+    kind: "action",
+    label: `Ansicht ${label}`,
+    description: `Blickt von ${label.toLowerCase()} auf das Modell.`,
+    icon: "iso",
+    shortcut: `shift+${key}`,
+    params: {},
+    perform() {
+      useViewRequest.setState({ request: { kind: "dir", dir: [...dir], at: Date.now() } });
+    },
+  }),
+);
+
 defineCommand({
   id: "workspace.set",
   kind: "action",

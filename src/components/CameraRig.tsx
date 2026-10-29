@@ -71,6 +71,8 @@ export function CameraRig() {
     q0: THREE.Quaternion; q1: THREE.Quaternion;
     h0: number; h1: number;
     f0: number; f1: number;
+    /** Orbit target from → to (fit / zoom to selection). */
+    t0: THREE.Vector3; t1: THREE.Vector3;
     proj: "perspective" | "orthographic";
     start: number;
   } | null>(null);
@@ -86,7 +88,7 @@ export function CameraRig() {
     return new THREE.Quaternion().setFromRotationMatrix(m);
   };
 
-  const startTween = (dir: THREE.Vector3 | null, h: number | null, proj: "perspective" | "orthographic") => {
+  const startTween = (dir: THREE.Vector3 | null, h: number | null, proj: "perspective" | "orthographic", newTarget?: THREE.Vector3) => {
     const c = camera as THREE.PerspectiveCamera & THREE.OrthographicCamera;
     const h0 = visibleHeight();
     const f0 = c.isOrthographicCamera ? ORTHO_FOV : c.fov;
@@ -108,6 +110,8 @@ export function CameraRig() {
       h1: h ?? h0,
       f0,
       f1: proj === "orthographic" ? ORTHO_FOV : BASE_FOV,
+      t0: target.current.clone(),
+      t1: (newTarget ?? target.current).clone(),
       proj,
       start: performance.now(),
     };
@@ -130,6 +134,7 @@ export function CameraRig() {
     const fov = Math.exp(THREE.MathUtils.lerp(Math.log(tw.f0), Math.log(tw.f1), e));
     const h = THREE.MathUtils.lerp(tw.h0, tw.h1, e);
     const d = h / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
+    target.current.lerpVectors(tw.t0, tw.t1, e);
     p.fov = fov;
     p.far = Math.max(5000, d + 5000);
     p.quaternion.copy(q);
@@ -149,6 +154,7 @@ export function CameraRig() {
     }
     const ctl = state.controls as unknown as (Controls & { enabled: boolean }) | null;
     if (ctl) {
+      ctl.target.copy(target.current);
       ctl.enabled = true;
       ctl.update();
     }
@@ -215,9 +221,24 @@ export function CameraRig() {
 
   const request = useViewRequest((s) => s.request);
   useEffect(() => {
-    if (!request || request.kind !== "iso") return;
-    // CAD (1, -1, 1) = front-right-top; the scene is Y-up, so that is (1, 1, 1) here.
-    startTween(new THREE.Vector3(1, 1, 1), null, useSettings.getState().projection);
+    if (!request) return;
+    const proj = useSettings.getState().projection;
+    // CAD (x, y, z) → scene (x, z, −y).
+    const scene = (v: [number, number, number]) => new THREE.Vector3(v[0], v[2], -v[1]);
+    if (request.kind === "iso") {
+      // CAD (1, -1, 1) = front-right-top; the scene is Y-up, so that is (1, 1, 1) here.
+      startTween(new THREE.Vector3(1, 1, 1), null, proj);
+    } else if (request.kind === "dir") {
+      // Camera sits opposite the viewing direction; a hair off the pole keeps "up" stable.
+      const d = scene(request.dir).negate();
+      if (Math.abs(d.y) > 0.999) d.z += 0.0005;
+      startTween(d, null, proj);
+    } else {
+      const a = scene(request.min), b = scene(request.max);
+      const centre = a.clone().add(b).multiplyScalar(0.5);
+      const radius = Math.max(5, a.distanceTo(b) / 2);
+      startTween(null, radius * 3.2, proj, centre);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 

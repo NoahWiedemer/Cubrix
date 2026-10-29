@@ -131,6 +131,15 @@ export function TopBar() {
               <MenuItem icon="perspective" label="Perspektive" shortcut="o" checked={projection === "perspective"} onClick={() => execute("view.projection", { mode: "perspective" })} />
               <MenuItem icon="projection" label="Orthografisch" shortcut="o" checked={projection === "orthographic"} onClick={() => execute("view.projection", { mode: "orthographic" })} />
               <MenuItem icon="iso" label="Isometrisch" shortcut="i" onClick={() => { execute("view.iso"); viewMenu.setOpen(false); }} />
+              <div className="view-grid">
+                {(["front", "back", "left", "right", "top", "bottom"] as const).map((v, i) => (
+                  <button key={v} onClick={() => { void execute(`view.${v}`); viewMenu.setOpen(false); }} data-tip={`⇧${i + 1}`} data-tip-pos="top">
+                    {["Vorne", "Hinten", "Links", "Rechts", "Oben", "Unten"][i]}
+                  </button>
+                ))}
+              </div>
+              <CommandItem id="view.fit" onDone={() => viewMenu.setOpen(false)} />
+              <CommandItem id="view.fitAll" onDone={() => viewMenu.setOpen(false)} />
               <MenuItem icon="grid" label="Raster anzeigen" shortcut="g" checked={showGrid} onClick={() => execute("view.grid")} />
               <MenuItem icon="boxes" label="Bauraum anzeigen" checked={showVolume} onClick={() => useSettings.setState({ showVolume: !showVolume })} />
               {showVolume && (
