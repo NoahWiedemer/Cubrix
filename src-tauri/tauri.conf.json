@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Albedo",
+  "productName": "Cubrix",
   "version": "0.1.0",
-  "identifier": "de.codana.albedo",
+  "identifier": "de.codana.cubrix",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Albedo",
+        "title": "Cubrix",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -39,7 +39,7 @@
         "alwaysOnTop": false,
         "skipTaskbar": true,
         "shadow": true,
-        "title": "Albedo",
+        "title": "Cubrix",
         "visible": true
       }
     ],
@@ -61,5 +61,5 @@
       "icons/icon.ico"
     ]
   },
-  "mainBinaryName": "albedo"
+  "mainBinaryName": "cubrix"
 }

@@ -134,13 +134,13 @@ fn faces() -> &'static Vec<Face> {
         if let Some(path) = cache {
             if let Some(c) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<DiskCache>(&b).ok()) {
                 if c.stamp == stamp {
-                    println!("[albedo] Schriften aus Cache: {} in {:?}", c.faces.len(), t0.elapsed());
+                    println!("[cubrix] Schriften aus Cache: {} in {:?}", c.faces.len(), t0.elapsed());
                     return c.faces;
                 }
             }
         }
         let faces = scan();
-        println!("[albedo] Schriften gescannt: {} in {:?}", faces.len(), t0.elapsed());
+        println!("[cubrix] Schriften gescannt: {} in {:?}", faces.len(), t0.elapsed());
         if let Some(path) = cache {
             if let Ok(b) = serde_json::to_vec(&DiskCache { stamp, faces: faces.clone() }) {
                 let _ = std::fs::write(path, b);

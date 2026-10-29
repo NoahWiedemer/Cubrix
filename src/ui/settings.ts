@@ -26,7 +26,7 @@ export const useSettings = create<ViewSettings>()(
   persist(
     (): ViewSettings => ({ projection: "perspective", showVolume: false, volumeStrong: false, showGrid: true, gridStrength: 45, gridFade: 600, aiAnimations: true, lastColor: null, recentColors: [] }),
     {
-      name: "albedo.settings",
+      name: "cubrix.settings",
       version: 3,
       // v1: camera inertia removed (damping always off). v2: quality and grid size removed
       // (always high quality; grid spacing follows the snap increment).
@@ -49,7 +49,7 @@ export interface AiSettings {
 
 export const useAiSettings = create<AiSettings>()(
   persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium", webSearch: true }), {
-    name: "albedo.ai",
+    name: "cubrix.ai",
     version: 5,
     // v3: GPT-6.1 Terra became the OpenAI default. v4: only the current lineup is offered,
     // so ids outside it (older or list-extended models) fall back to the defaults.

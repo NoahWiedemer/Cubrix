@@ -12,7 +12,7 @@ document.getElementById("splash")!.innerHTML = `
 <div class="card" id="card">
   <img class="backdrop" src="${image}" alt="" />
   <div class="shade"></div>
-  <div class="brand"><img src="${logo}" alt="" /><div><div class="word">Albedo</div><div class="tagline">CAD für den 3D-Druck</div></div></div>
+  <div class="brand"><img src="${logo}" alt="" /><div><div class="word">Cubrix</div><div class="tagline">CAD für den 3D-Druck</div></div></div>
   <div class="corner"><span class="version">${pkg.version}</span><svg class="spinner" viewBox="0 0 20 20" aria-label="Lädt"><circle cx="10" cy="10" r="8"/></svg></div>
 </div>`;
 

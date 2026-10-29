@@ -14,7 +14,7 @@ void import("./components/FontPicker").then((m) => setTimeout(m.preloadSystemFon
 // Dev only: scripted demos (e.g. AI build animations) from the browser console / CDP.
 if (import.meta.env.DEV)
   void Promise.all([import("./ai/run"), import("./core/commands"), import("./core/store")]).then(([run, commands, store]) =>
-    Object.assign(window, { __albedo: { run, execute: commands.execute, useApp: store.useApp } }),
+    Object.assign(window, { __cubrix: { run, execute: commands.execute, useApp: store.useApp } }),
   );
 import { initKernel, useKernel } from "./cad/kernel";
 import { isTauri } from "./core/platform";
@@ -56,9 +56,9 @@ if (new URLSearchParams(location.search).has("beispiel"))
     void execute("selection.set", { ids: [s.nodes[s.currentId].doc.features[0].id] });
   });
 
-// Handy for debugging and scripting: window.albedo.execute("primitive.box", {...})
+// Handy for debugging and scripting: window.cubrix.execute("primitive.box", {...})
 Object.assign(window, {
-  albedo: { execute, commands: () => listCommands().map(toToolDefinition), state: useApp.getState },
+  cubrix: { execute, commands: () => listCommands().map(toToolDefinition), state: useApp.getState },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

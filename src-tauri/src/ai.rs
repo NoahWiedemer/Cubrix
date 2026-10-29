@@ -33,6 +33,33 @@ fn write_private(path: &PathBuf, data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// After a rename (Albedo → Cubrix) the app data folder changes with the bundle id: copy the
+/// API keys (secrets.json + secrets.key, mode 0600) and the error log over once, so
+/// nothing has to be re-entered. Never overwrites data in the new folder.
+pub fn migrate_app_data(app: &AppHandle) {
+    let Ok(new_dir) = app.path().app_data_dir() else { return };
+    let Some(parent) = new_dir.parent() else { return };
+    for old_id in ["de.codana.albedo", "de.codana.modelonio"] {
+        let old = parent.join(old_id);
+        if !old.is_dir() || new_dir.join("secrets.json").exists() {
+            continue;
+        }
+        let _ = fs::create_dir_all(&new_dir);
+        for name in ["secrets.json", "secrets.key"] {
+            if let Ok(data) = fs::read(old.join(name)) {
+                let _ = write_private(&new_dir.join(name), &data);
+            }
+        }
+        let log = old.join("logs").join("errors.jsonl");
+        if log.exists() && !new_dir.join("logs").join("errors.jsonl").exists() {
+            let _ = fs::create_dir_all(new_dir.join("logs"));
+            let _ = fs::copy(&log, new_dir.join("logs").join("errors.jsonl"));
+        }
+        println!("[cubrix] App-Daten aus {old_id} übernommen");
+        break;
+    }
+}
+
 fn install_key(app: &AppHandle) -> Result<Vec<u8>, String> {
     let path = secrets_dir(app)?.join("secrets.key");
     if let Ok(k) = fs::read(&path) {

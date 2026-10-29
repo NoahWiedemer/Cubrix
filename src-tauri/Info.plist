@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Albedo nutzt das Mikrofon, damit du der KI Anweisungen sprechen kannst.</string>
+  <string>Cubrix nutzt das Mikrofon, damit du der KI Anweisungen sprechen kannst.</string>
 </dict>
 </plist>

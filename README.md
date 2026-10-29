@@ -1,8 +1,8 @@
-# Albedo
+# Cubrix
 
 CAD für den 3D-Druck – einfach, ruhig, auf Deutsch. Desktop-App (macOS, später Windows) auf Basis von Tauri 2, React, three.js und dem OpenCascade-Kern (replicad, WASM).
 
-![Albedo](docs/screenshot.png)
+![Cubrix](docs/screenshot.png)
 
 ## Download
 
@@ -32,7 +32,7 @@ Voraussetzungen: Node 20+, Rust (stable).
 - Boolesche Operationen: Vereinen, Abziehen, Schnittmenge (und wieder auflösen)
 - Verlauf wie in Photoshop: jeder Schritt anklickbar, frühere Zweige bleiben wiederherstellbar, ⌘Z / ⇧⌘Z
 - Druckprüfung (geschlossen, auf dem Bett, im Bauraum des Snapmaker Original 125³ mm)
-- Export als STL, 3MF, OBJ und STEP; Projekte als `.albedo` (JSON) speichern/öffnen (ältere `.modelonio`-Dateien werden weiterhin geöffnet)
+- Export als STL, 3MF, OBJ und STEP; Projekte als `.cubrix` (JSON) speichern/öffnen (ältere `.albedo`- und `.modelonio`-Dateien werden weiterhin geöffnet)
 
 ## Architektur
 
@@ -43,6 +43,6 @@ Voraussetzungen: Node 20+, Rust (stable).
 - `src/cad/worker.ts` – CAD-Kern im Web Worker (Meshing, STL/3MF-Export)
 - `src/components/` – Oberfläche
 
-In der Entwicklerkonsole: `albedo.execute("primitive.box", { width: 40 })`, `albedo.commands()`.
+In der Entwicklerkonsole: `cubrix.execute("primitive.box", { width: 40 })`, `cubrix.commands()`.
 
 Hinweis: Ordner, Repository und Rust-Crate heißen aus technischen Gründen noch `modelonio`.

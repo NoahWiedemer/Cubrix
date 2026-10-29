@@ -68,13 +68,14 @@ fn splash_finished(app: tauri::AppHandle) {
 /// Lets the frontend write short status lines to the terminal running the app.
 #[tauri::command]
 fn log_status(message: String) {
-    println!("[albedo] {message}");
+    println!("[cubrix] {message}");
 }
 
 /// One-time copy of the webview storage (layout, settings) from the old app
-/// identifier after the rename Modelonio → Albedo. Never overwrites new data.
+/// identifier after the renames Modelonio → Albedo → Cubrix. Never overwrites new data.
 fn migrate_webview_data() {
-    let pairs = [("de.codana.modelonio", "de.codana.albedo"), ("modelonio", "albedo")];
+    // Newest name first: an existing Albedo store wins over an older Modelonio one.
+    let pairs = [("de.codana.albedo", "de.codana.cubrix"), ("albedo", "cubrix"), ("de.codana.modelonio", "de.codana.cubrix"), ("modelonio", "cubrix")];
     let bases: Vec<std::path::PathBuf> = if cfg!(target_os = "macos") {
         std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/WebKit")).into_iter().collect()
     } else if cfg!(target_os = "windows") {
@@ -115,6 +116,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ai::AiState::default())
         .setup(|app| {
+            ai::migrate_app_data(app.handle());
             if let Ok(dir) = app.path().app_cache_dir() {
                 fonts::warm_up(dir);
             }
@@ -145,5 +147,5 @@ pub fn run() {
             e2e_audio
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Albedo");
+        .expect("error while running Cubrix");
 }

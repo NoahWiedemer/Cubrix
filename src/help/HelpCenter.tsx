@@ -46,7 +46,7 @@ export function HelpCenter() {
             <img src={logo} alt="" />
             <div>
               <div className="help-title">Hilfe</div>
-              <div className="help-sub">Albedo Schritt für Schritt</div>
+              <div className="help-sub">Cubrix Schritt für Schritt</div>
             </div>
           </div>
           <div className="help-search">

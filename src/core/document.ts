@@ -1,6 +1,6 @@
 import { SHAPE_DEFAULTS, type ExtraType } from "./shapeDefs";
 
-// The Albedo document: a plain, serializable JSON list of features.
+// The Cubrix document: a plain, serializable JSON list of features.
 // Everything the user builds lives here, so it can be saved, diffed, replayed
 // and (later) read and written by the AI assistant.
 
@@ -129,7 +129,7 @@ export interface PrinterProfile {
 }
 
 export interface ModelDocument {
-  format: "albedo";
+  format: "cubrix";
   version: 1;
   name: string;
   units: "mm";
@@ -145,7 +145,7 @@ export const DEFAULT_PRINTER: PrinterProfile = {
 /** New projects start with the printer used last (remembered per machine). */
 function lastPrinter(): PrinterProfile {
   try {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem("albedo.lastPrinter") : null;
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem("cubrix.lastPrinter") : null;
     const p = raw ? (JSON.parse(raw) as PrinterProfile) : null;
     if (p && typeof p.name === "string" && Array.isArray(p.volume) && p.volume.length === 3) return p;
   } catch {
@@ -156,7 +156,7 @@ function lastPrinter(): PrinterProfile {
 
 export function rememberPrinter(p: PrinterProfile) {
   try {
-    localStorage.setItem("albedo.lastPrinter", JSON.stringify(p));
+    localStorage.setItem("cubrix.lastPrinter", JSON.stringify(p));
   } catch {
     /* ignore */
   }
@@ -164,7 +164,7 @@ export function rememberPrinter(p: PrinterProfile) {
 
 export function createDocument(name = "Unbenanntes Projekt", { starter = true } = {}): ModelDocument {
   return {
-    format: "albedo",
+    format: "cubrix",
     version: 1,
     name,
     units: "mm",
@@ -415,5 +415,6 @@ export function geometryKey(f: Feature): string {
 export function isModelDocument(x: unknown): x is ModelDocument {
   const d = x as ModelDocument;
   // Files from before the rename (format "modelonio") are still accepted.
-  return !!d && (d.format === "albedo" || (d.format as string) === "modelonio") && Array.isArray(d.features);
+  // Files from before the renames (format "albedo" / "modelonio") are still accepted.
+  return !!d && ["cubrix", "albedo", "modelonio"].includes(d.format as string) && Array.isArray(d.features);
 }

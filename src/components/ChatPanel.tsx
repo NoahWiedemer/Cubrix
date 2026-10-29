@@ -234,8 +234,8 @@ export function ChatPanel() {
 
   useEffect(() => {
     const focus = () => inputRef.current?.focus();
-    window.addEventListener("albedo:focus-chat", focus);
-    return () => window.removeEventListener("albedo:focus-chat", focus);
+    window.addEventListener("cubrix:focus-chat", focus);
+    return () => window.removeEventListener("cubrix:focus-chat", focus);
   }, []);
 
   useEffect(() => {

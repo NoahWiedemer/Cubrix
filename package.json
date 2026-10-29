@@ -1,7 +1,7 @@
 {
-  "name": "albedo",
+  "name": "cubrix",
   "version": "0.1.0",
-  "description": "Albedo – CAD für den 3D-Druck",
+  "description": "Cubrix – CAD für den 3D-Druck",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

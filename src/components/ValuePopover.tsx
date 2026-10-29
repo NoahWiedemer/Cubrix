@@ -28,7 +28,7 @@ export const openValuePopover = (req: Request) => useValuePopover.setState({ req
 
 /** Last value used per command, offered as the next default. */
 const useLastValues = create<{ values: Record<string, number> }>()(
-  persist(() => ({ values: {} as Record<string, number> }), { name: "albedo.lastValues" }),
+  persist(() => ({ values: {} as Record<string, number> }), { name: "cubrix.lastValues" }),
 );
 
 const fmt = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");

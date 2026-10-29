@@ -42,17 +42,17 @@ jobs:
       - run: npm ci
 
       # Unsigned builds. Assets are named by tauri-action from productName and version:
-      # Albedo_X.Y.Z_universal.dmg, Albedo_X.Y.Z_x64-setup.exe, Albedo_X.Y.Z_x64_en-US.msi
+      # Cubrix_X.Y.Z_universal.dmg, Cubrix_X.Y.Z_x64-setup.exe, Cubrix_X.Y.Z_x64_en-US.msi
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: Albedo v__VERSION__
+          releaseName: Cubrix v__VERSION__
           releaseBody: |
-            Albedo v__VERSION__ – CAD für den 3D-Druck.
+            Cubrix v__VERSION__ – CAD für den 3D-Druck.
 
-            - macOS (Apple Silicon und Intel): `.dmg` herunterladen, öffnen, Albedo in „Programme“ ziehen.
+            - macOS (Apple Silicon und Intel): `.dmg` herunterladen, öffnen, Cubrix in „Programme“ ziehen.
               Die App ist noch nicht signiert: beim ersten Start Rechtsklick → „Öffnen“.
             - Windows: `-setup.exe` (empfohlen) oder `.msi`. SmartScreen kann warnen („Trotzdem ausführen“).
           releaseDraft: false

@@ -37,6 +37,6 @@ if (fs.existsSync(lockPath))
 
 sh("npm install --package-lock-only --ignore-scripts");
 sh(`git add package.json package-lock.json ${confPath} ${cargoPath} ${lockPath}`);
-sh(`git commit -m "Albedo v${next}"`);
-sh(`git tag -a v${next} -m "Albedo v${next}"`);
+sh(`git commit -m "Cubrix v${next}"`);
+sh(`git tag -a v${next} -m "Cubrix v${next}"`);
 console.log(`Version ${next} committet und als v${next} getaggt.\nVeröffentlichen mit:\n  git push && git push origin v${next}`);

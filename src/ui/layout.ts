@@ -59,7 +59,7 @@ export const useLayout = create<LayoutState>()(
       reset: () => set(defaultLayout()),
     }),
     {
-      name: "albedo.layout",
+      name: "cubrix.layout",
       version: 4,
       partialize: (s) => data(s),
       // Older layouts (floating properties, no inspector) are replaced by the new default once.

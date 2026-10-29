@@ -94,7 +94,7 @@ function exportStl(shapes: Shape3D[]): ArrayBuffer {
   const triCount = meshes.reduce((n, m) => n + m.triangles.length / 3, 0);
   const buf = new ArrayBuffer(84 + triCount * 50);
   const view = new DataView(buf);
-  const header = strToU8("Albedo STL export");
+  const header = strToU8("Cubrix STL export");
   new Uint8Array(buf).set(header.subarray(0, 80));
   view.setUint32(80, triCount, true);
   let o = 84;
@@ -140,7 +140,7 @@ function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefin
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="de-DE" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-<metadata name="Application">Albedo</metadata>
+<metadata name="Application">Cubrix</metadata>
 <resources>${palette.length ? `<basematerials id="${MAT}">${palette.map((c, i) => `<base name="Farbe ${i + 1}" displaycolor="${c.toUpperCase()}FF"/>`).join("")}</basematerials>` : ""}${objects.join("")}</resources>
 <build>${items.join("")}</build>
 </model>`;
@@ -159,7 +159,7 @@ function export3mf(shapes: Shape3D[], names: string[], colors: (string | undefin
 /** OBJ plus a matching MTL with one material per colour (referenced as <name>.mtl). */
 function exportObj(shapes: Shape3D[], names: string[], colors: (string | undefined)[], mtlName: string): { obj: ArrayBuffer; mtl: string | null } {
   const palette = [...new Set(colors.filter((c): c is string => !!c))];
-  const out: string[] = ["# Albedo OBJ export (mm)"];
+  const out: string[] = ["# Cubrix OBJ export (mm)"];
   if (palette.length) out.push(`mtllib ${mtlName}`);
   let offset = 1;
   shapes.forEach((s, idx) => {

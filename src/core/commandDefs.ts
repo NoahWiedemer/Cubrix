@@ -1731,7 +1731,7 @@ defineCommand({
   perform() {
     const layout = useLayout.getState();
     layout.open("chat", true);
-    setTimeout(() => window.dispatchEvent(new Event("albedo:focus-chat")), 60);
+    setTimeout(() => window.dispatchEvent(new Event("cubrix:focus-chat")), 60);
   },
 });
 
@@ -1788,9 +1788,9 @@ defineCommand({
 
 // ── Files ────────────────────────────────────────────────────────────────────
 
-const PROJECT_FILTER = { name: "Albedo-Projekt", extensions: ["albedo"] };
+const PROJECT_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix"] };
 /** Opening also accepts project files saved before the rename. */
-const OPEN_FILTER = { name: "Albedo-Projekt", extensions: ["albedo", "modelonio"] };
+const OPEN_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix", "albedo", "modelonio"] };
 
 async function confirmDiscard(): Promise<boolean> {
   const s = useApp.getState();
@@ -1798,7 +1798,7 @@ async function confirmDiscard(): Promise<boolean> {
   const text = "Ungespeicherte Änderungen gehen verloren. Fortfahren?";
   if (isTauri) {
     const { ask } = await import("@tauri-apps/plugin-dialog");
-    return ask(text, { title: "Albedo", kind: "warning", okLabel: "Verwerfen", cancelLabel: "Abbrechen" });
+    return ask(text, { title: "Cubrix", kind: "warning", okLabel: "Verwerfen", cancelLabel: "Abbrechen" });
   }
   return window.confirm(text);
 }
@@ -1809,7 +1809,7 @@ async function saveProject(forceDialog: boolean) {
   const s = useApp.getState();
   const doc = s.nodes[s.currentId].doc;
   const path = await saveFile(
-    `${fileSafe(doc.name)}.albedo`,
+    `${fileSafe(doc.name)}.cubrix`,
     PROJECT_FILTER,
     JSON.stringify(doc, null, 2),
     forceDialog ? null : s.filePath,
@@ -1837,7 +1837,7 @@ defineCommand({
   id: "file.open",
   kind: "action",
   label: "Öffnen …",
-  description: "Öffnet eine Albedo-Projektdatei (.albedo, auch ältere .modelonio-Dateien).",
+  description: "Öffnet eine Cubrix-Projektdatei (.cubrix, auch ältere .albedo- und .modelonio-Dateien).",
   icon: "open",
   shortcut: "mod+o",
   params: {},
@@ -1846,8 +1846,8 @@ defineCommand({
     const file = await openTextFile(OPEN_FILTER);
     if (!file) return;
     const doc = JSON.parse(file.text);
-    if (!isModelDocument(doc)) throw new Error("Keine gültige Albedo-Datei");
-    doc.format = "albedo";
+    if (!isModelDocument(doc)) throw new Error("Keine gültige Cubrix-Datei");
+    doc.format = "cubrix";
     useApp.getState().reset(doc, `${baseName(file.path)} geöffnet`, isTauri ? file.path : null);
   },
 });
@@ -1856,7 +1856,7 @@ defineCommand({
   id: "file.save",
   kind: "action",
   label: "Speichern",
-  description: "Speichert das Projekt als .albedo-Datei.",
+  description: "Speichert das Projekt als .cubrix-Datei.",
   icon: "save",
   shortcut: "mod+s",
   params: {},

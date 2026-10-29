@@ -3,7 +3,7 @@
   "wait": 1500
  },
  {
-  "js": "localStorage.removeItem('albedo.layout'); localStorage.removeItem('albedo.settings'); setTimeout(()=>location.reload(),10); 1"
+  "js": "localStorage.removeItem('cubrix.layout'); localStorage.removeItem('cubrix.settings'); setTimeout(()=>location.reload(),10); 1"
  },
  {
   "wait": 8000

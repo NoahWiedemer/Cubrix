@@ -1,12 +1,12 @@
-# Albedo veröffentlichen
+# Cubrix veröffentlichen
 
 Releases entstehen automatisch auf GitHub, sobald ein Versions-Tag (`v…`) gepusht wird.
 Der Workflow `.github/workflows/release.yml` baut dann:
 
-- **macOS:** `Albedo_X.Y.Z_universal.dmg` (Apple Silicon + Intel)
-- **Windows:** `Albedo_X.Y.Z_x64-setup.exe` und `Albedo_X.Y.Z_x64_en-US.msi`
+- **macOS:** `Cubrix_X.Y.Z_universal.dmg` (Apple Silicon + Intel)
+- **Windows:** `Cubrix_X.Y.Z_x64-setup.exe` und `Cubrix_X.Y.Z_x64_en-US.msi`
 
-und veröffentlicht sie als GitHub-Release „Albedo vX.Y.Z“ mit automatisch erzeugten Notizen.
+und veröffentlicht sie als GitHub-Release „Cubrix vX.Y.Z“ mit automatisch erzeugten Notizen.
 Die Builds sind noch **nicht signiert** (macOS: beim ersten Start Rechtsklick → „Öffnen“;
 Windows: SmartScreen „Trotzdem ausführen“).
 
