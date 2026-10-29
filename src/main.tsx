@@ -22,14 +22,19 @@ if (isTauri && isMac) {
 }
 initKernel();
 
-// In the desktop shell, mirror the kernel status to the terminal (useful when launching via `tauri dev`).
+// In the desktop shell: mirror the kernel status to the terminal and drive the splash screen.
 if (isTauri) {
+  const boot = (step: string) => void import("@tauri-apps/api/core").then(({ invoke }) => invoke("boot_progress", { step }));
   useKernel.subscribe((k, prev) => {
-    if (k.status !== prev.status)
-      void import("@tauri-apps/api/core").then(({ invoke }) =>
-        invoke("log_status", { message: k.status === "ready" ? "CAD-Kern bereit" : `CAD-Kern: ${k.status} ${k.error ?? ""}` }),
-      );
+    if (k.status === prev.status) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke("log_status", { message: k.status === "ready" ? "CAD-Kern bereit" : `CAD-Kern: ${k.status} ${k.error ?? ""}` }),
+    );
+    // Never keep the window hidden: an error also ends the splash.
+    if (k.status === "ready") boot("kernel");
+    boot("ready");
   });
+  requestAnimationFrame(() => boot("ui"));
 }
 
 // `?beispiel` opens the example project (handy for demos and screenshots).

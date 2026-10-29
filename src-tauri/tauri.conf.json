@@ -23,12 +23,30 @@
         "trafficLightPosition": {
           "x": 20,
           "y": 22
-        }
+        },
+        "label": "main",
+        "visible": false
+      },
+      {
+        "label": "splashscreen",
+        "url": "splash.html",
+        "width": 640,
+        "height": 400,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "shadow": true,
+        "title": "Albedo",
+        "visible": true
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

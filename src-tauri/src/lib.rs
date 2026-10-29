@@ -1,5 +1,46 @@
 mod ai;
 
+use tauri::{Emitter, Manager};
+
+/// Shows the main window and closes the splash (idempotent).
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        if !main.is_visible().unwrap_or(false) {
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
+    }
+    if let Some(splash) = app.get_webview_window("splashscreen") {
+        let _ = splash.close();
+    }
+}
+
+/// Startup steps from the main window ("ui", "kernel", "ready"), forwarded to the splash.
+#[tauri::command]
+fn boot_progress(app: tauri::AppHandle, step: String) {
+    if app.get_webview_window("splashscreen").is_none() {
+        if step == "ready" {
+            show_main(&app);
+        }
+        return;
+    }
+    let _ = app.emit_to("splashscreen", "boot-progress", step.clone());
+    if step == "ready" {
+        // Safety net in case the splash never reports back.
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            show_main(&handle);
+        });
+    }
+}
+
+/// The splash finished its animation after the app was ready.
+#[tauri::command]
+fn splash_finished(app: tauri::AppHandle) {
+    show_main(&app);
+}
+
 /// Lets the frontend write short status lines to the terminal running the app.
 #[tauri::command]
 fn log_status(message: String) {
@@ -51,6 +92,8 @@ pub fn run() {
         .manage(ai::AiState::default())
         .invoke_handler(tauri::generate_handler![
             log_status,
+            boot_progress,
+            splash_finished,
             ai::ai_set_key,
             ai::ai_has_key,
             ai::ai_stream,

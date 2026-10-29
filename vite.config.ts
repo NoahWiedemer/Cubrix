@@ -17,6 +17,7 @@ export default defineConfig({
   optimizeDeps: { exclude: ["replicad-opencascadejs"] },
   build: {
     target: "safari15",
+    rollupOptions: { input: { main: "index.html", splash: "splash.html" } },
     chunkSizeWarningLimit: 4000,
   },
 });
