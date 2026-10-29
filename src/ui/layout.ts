@@ -2,6 +2,7 @@
 // Persisted in localStorage (survives restarts in the Tauri webview too).
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { IconName } from "./icons";
 
 export type PanelId = "tree" | "history" | "props";
 export type Side = "left" | "right";
@@ -31,6 +32,8 @@ const DEFAULT_PANELS: Record<PanelId, PanelState> = {
   props: { side: "right", order: 0, collapsed: false, open: true, weight: 1 },
 };
 const DEFAULT_WIDTH: Record<Side, number> = { left: 260, right: 300 };
+
+export const PANEL_ICONS: Record<PanelId, IconName> = { tree: "boxes", history: "history", props: "sliders" };
 
 export const PANEL_TITLES: Record<PanelId, string> = { tree: "Objekte", history: "Verlauf", props: "Eigenschaften" };
 

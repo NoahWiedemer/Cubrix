@@ -124,7 +124,7 @@ function Dimensions({ f }: { f: Feature }) {
     const size = b ? [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z] : [0, 0, 0];
     return (
       <div className="group">
-        <div className="group-label">Abmessungen</div>
+        <div className="group-label"><span><Icon name="measure" size={15} />Abmessungen</span></div>
         <div className="field-row">
           {size.map((v, i) => <NumberField key={i} value={v} readOnly onCommit={() => {}} />)}
         </div>
@@ -148,7 +148,7 @@ function Dimensions({ f }: { f: Feature }) {
   return (
     <div className="group">
       <div className="group-label">
-        Maße
+        <span><Icon name="measure" size={15} />Maße</span>
         {fields.length > 1 && (
           <button className={`lock ${locked ? "on" : ""}`} onClick={() => setLocked(!locked)} title={locked ? "Proportionen gesperrt" : "Proportionen sperren"}>
             {locked ? <Link2 size={14} /> : <Link2Off size={14} />}
@@ -178,7 +178,9 @@ function TransformFields({ f, kind }: { f: Feature; kind: "position" | "rotation
   };
   return (
     <div className="group">
-      <div className="group-label">{kind === "position" ? "Position" : "Drehung"}</div>
+      <div className="group-label">
+        <span><Icon name={kind === "position" ? "position" : "rotateCw"} size={15} />{kind === "position" ? "Position" : "Drehung"}</span>
+      </div>
       <div className="field-row">
         {(["x", "y", "z"] as const).map((axis, i) => (
           <NumberField
@@ -215,7 +217,7 @@ function SingleObject({ f }: { f: Feature }) {
       <TransformFields f={f} kind="rotation" />
       {f.type !== "sphere" && f.type !== "torus" && (
         <div className="group">
-          <div className="group-label">Kanten</div>
+          <div className="group-label"><span><Icon name="fillet" size={15} />Kanten</span></div>
           <div className="field-row two">
             <NumberField value={f.fillet ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.fillet", { id: f.id, radius: v })} />
             <NumberField value={f.chamfer ?? 0} min={0} step={0.5} onCommit={(v) => execute("object.chamfer", { id: f.id, radius: v })} />

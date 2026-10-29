@@ -2,7 +2,7 @@ import { execute } from "../core/commands";
 import { useApp } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { usePopover } from "../ui/usePopover";
-import { PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
+import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -11,8 +11,6 @@ export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.cone", icon: "cone", label: "Kegel" },
   { id: "primitive.torus", icon: "torus", label: "Torus" },
 ];
-
-const PANEL_ICONS: Record<PanelId, IconName> = { tree: "layers", history: "history", props: "resize" };
 
 /** Closed panels stay reachable: one icon each at the bottom of the rail. */
 function ClosedPanels() {
@@ -63,7 +61,7 @@ export function LeftRail() {
       <ClosedPanels />
       {pop.open && (
         <div className="popover">
-          <div className="menu-title">Grundkörper hinzufügen</div>
+          <div className="menu-title">Grundkörper</div>
           <div className="prim-grid">
             {PRIMITIVES.map((p) => (
               <button

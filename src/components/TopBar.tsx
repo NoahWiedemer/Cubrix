@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ChevronDown, Undo2, Redo2, PanelsTopLeft, Check } from "lucide-react";
-import { PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
+import { ChevronDown, Undo2, Redo2, PanelsTopLeft } from "lucide-react";
+import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
+import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 import { execute, formatShortcut } from "../core/commands";
 import { useApp, useDoc, type Workspace } from "../core/store";
 import { usePopover } from "../ui/usePopover";
@@ -40,14 +41,14 @@ export function TopBar() {
             <ChevronDown size={13} color="var(--text-3)" />
           </button>
           {fileMenu.open && (
-            <div className="popover" style={{ top: 36, left: 0 }}>
+            <Menu style={{ top: 36, left: 0 }}>
               {["file.new", "file.open", "file.save", "file.saveAs"].map((id) => (
                 <CommandItem key={id} id={id} onDone={() => fileMenu.setOpen(false)} />
               ))}
-              <div className="menu-sep" />
+              <MenuSeparator />
               <CommandItem id="export.stl" onDone={() => fileMenu.setOpen(false)} />
               <CommandItem id="export.3mf" onDone={() => fileMenu.setOpen(false)} />
-            </div>
+            </Menu>
           )}
         </div>
         <div className="divider-v" />
@@ -96,27 +97,20 @@ export function TopBar() {
             <PanelsTopLeft size={16} strokeWidth={1.75} />
           </button>
           {viewMenu.open && (
-            <div className="popover" style={{ top: 38, right: 0 }}>
-              <div className="menu-title">Ansicht</div>
+            <Menu style={{ top: 38, right: 0 }}>
+              <MenuTitle>Panels</MenuTitle>
               {(Object.keys(PANEL_TITLES) as PanelId[]).map((id) => (
-                <button
+                <MenuItem
                   key={id}
-                  className="menu-item"
-                  onClick={() => {
-                    const p = panels[id];
-                    useLayout.getState().setPanel(id, p.open ? { open: false } : { open: true, collapsed: false });
-                  }}
-                >
-                  <span className="check">{panels[id].open && <Check size={14} />}</span>
-                  {PANEL_TITLES[id]}
-                </button>
+                  icon={PANEL_ICONS[id]}
+                  label={PANEL_TITLES[id]}
+                  checked={panels[id].open}
+                  onClick={() => useLayout.getState().setPanel(id, panels[id].open ? { open: false } : { open: true, collapsed: false })}
+                />
               ))}
-              <div className="menu-sep" />
-              <button className="menu-item" onClick={() => { useLayout.getState().reset(); viewMenu.setOpen(false); }}>
-                <span className="check" />
-                Layout zurücksetzen
-              </button>
-            </div>
+              <MenuSeparator />
+              <MenuItem icon="reset" label="Layout zurücksetzen" onClick={() => { useLayout.getState().reset(); viewMenu.setOpen(false); }} />
+            </Menu>
           )}
         </div>
         <div ref={exportMenu.ref} style={{ position: "relative" }}>
@@ -126,13 +120,13 @@ export function TopBar() {
             <ChevronDown size={14} />
           </button>
           {exportMenu.open && (
-            <div className="popover" style={{ top: 38, right: 0 }}>
-              <div className="menu-title">Für den Slicer</div>
+            <Menu style={{ top: 38, right: 0 }}>
+              <MenuTitle>Für den Slicer</MenuTitle>
               <CommandItem id="export.stl" label="STL (.stl)" onDone={() => exportMenu.setOpen(false)} />
               <CommandItem id="export.3mf" label="3MF (.3mf)" onDone={() => exportMenu.setOpen(false)} />
-              <div className="menu-sep" />
+              <MenuSeparator />
               <CommandItem id="file.save" label="Projekt speichern" onDone={() => exportMenu.setOpen(false)} />
-            </div>
+            </Menu>
           )}
         </div>
       </div>

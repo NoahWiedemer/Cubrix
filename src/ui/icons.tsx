@@ -36,6 +36,14 @@ import {
   ArrowDownToLine,
   Crosshair,
   Layers,
+  Boxes,
+  SlidersHorizontal,
+  RotateCcw,
+  RotateCw,
+  Magnet,
+  CircleSlash,
+  CircleHelp,
+  Move,
   History,
   type LucideIcon,
 } from "lucide-react";
@@ -78,6 +86,14 @@ export const ICONS = {
   ai: Sparkles,
   layers: Layers,
   history: History,
+  boxes: Boxes,
+  sliders: SlidersHorizontal,
+  reset: RotateCcw,
+  rotateCw: RotateCw,
+  snap: Magnet,
+  snapOff: CircleSlash,
+  help: CircleHelp,
+  position: Move,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -2,6 +2,7 @@ import { Magnet } from "lucide-react";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { usePopover } from "../ui/usePopover";
+import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
 const SNAPS = [0, 0.1, 0.5, 1, 5, 10];
 const snapLabel = (s: number) => (s === 0 ? "Aus" : `${s.toLocaleString("de-DE")} mm`);
@@ -19,15 +20,12 @@ export function StatusBar() {
           <Magnet size={12} /> Einrasten: <b>{snapLabel(snap)}</b>
         </button>
         {pop.open && (
-          <div className="popover" style={{ minWidth: 150 }}>
-            <div className="menu-title">Einrasten beim Verschieben</div>
+          <Menu style={{ bottom: 28, minWidth: 200 }}>
+            <MenuTitle>Einrasten beim Verschieben</MenuTitle>
             {SNAPS.map((s) => (
-              <button key={s} className="menu-item" onClick={() => { pop.setOpen(false); void execute("view.snap", { mm: s }); }}>
-                {snapLabel(s)}
-                {s === snap && <span className="hint">✓</span>}
-              </button>
+              <MenuItem key={s} icon={s === 0 ? "snapOff" : "snap"} label={snapLabel(s)} checked={s === snap} onClick={() => { pop.setOpen(false); void execute("view.snap", { mm: s }); }} />
             ))}
-          </div>
+          </Menu>
         )}
       </div>
       <span className="status-item">

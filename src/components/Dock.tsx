@@ -1,7 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ArrowLeftRight, X } from "lucide-react";
 import { useApp, useDoc } from "../core/store";
-import { PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
+import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from "../ui/layout";
+import { Icon } from "../ui/icons";
 import { ObjectTree } from "./ObjectTree";
 import { HistoryPanel } from "./HistoryPanel";
 
@@ -59,6 +60,7 @@ function Panel({ id, side, index, onDrop }: { id: PanelId; side: Side; index: nu
         <button className="dock-toggle" onClick={() => setPanel(id, { collapsed: !state.collapsed })} title={state.collapsed ? "Aufklappen" : "Einklappen"}>
           {state.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </button>
+        <span className="dock-icon"><Icon name={PANEL_ICONS[id]} size={15} /></span>
         <span className="dock-title">{PANEL_TITLES[id]}</span>
         <PanelMeta id={id} />
         <span className="dock-actions">
