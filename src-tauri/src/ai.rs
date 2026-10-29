@@ -184,3 +184,34 @@ pub async fn ai_models(app: AppHandle, provider: String) -> Result<serde_json::V
     }
     res.json().await.map_err(|e| e.to_string())
 }
+
+/// Speech to text with the stored OpenAI key (model gpt-transcribe, language auto-detected).
+/// `audio` is base64; `mime` e.g. "audio/webm" or "audio/mp4".
+#[tauri::command]
+pub async fn ai_transcribe(app: AppHandle, audio: String, mime: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(audio).map_err(|e| e.to_string())?;
+    let ext = if mime.contains("webm") { "webm" } else if mime.contains("wav") { "wav" } else { "m4a" };
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name(format!("sprache.{ext}"))
+        .mime_str(&mime)
+        .map_err(|e| e.to_string())?;
+    let form = reqwest::multipart::Form::new()
+        .text("model", "gpt-transcribe")
+        .text("response_format", "text")
+        .part("file", part);
+    let res = reqwest::Client::new()
+        .post("https://api.openai.com/v1/audio/transcriptions")
+        .bearer_auth(key(&app, "openai")?)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let text = res.text().await.map_err(|e| e.to_string())?;
+    if status.is_success() {
+        Ok(text.trim().to_string())
+    } else {
+        Err(format!("{status}: {text}"))
+    }
+}

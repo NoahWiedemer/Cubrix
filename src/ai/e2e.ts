@@ -8,6 +8,15 @@ import { useApp } from "../core/store";
 const log = (message: string) => invoke("log_status", { message: `E2E ${message}` });
 
 export async function runE2E() {
+  const audio = await invoke<string | null>("e2e_audio");
+  if (audio) {
+    try {
+      const text = await invoke<string>("ai_transcribe", { audio, mime: "audio/mp4" });
+      await log(`TRANSKRIPTION: ${text}`);
+    } catch (e) {
+      await log(`TRANSKRIPTION FEHLER: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
   const cfg = await invoke<string | null>("e2e_config");
   if (!cfg) return;
   for (const job of cfg.split(";;")) {

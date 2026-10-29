@@ -46,6 +46,17 @@ fn e2e_config() -> Option<String> {
     }
 }
 
+/// Dev-only: base64 of the audio file in `ALBEDO_E2E_AUDIO` (tests transcription without a microphone).
+#[tauri::command]
+fn e2e_audio() -> Option<String> {
+    use base64::Engine;
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let path = std::env::var("ALBEDO_E2E_AUDIO").ok()?;
+    std::fs::read(path).ok().map(|b| base64::engine::general_purpose::STANDARD.encode(b))
+}
+
 /// The splash finished its animation after the app was ready.
 #[tauri::command]
 fn splash_finished(app: tauri::AppHandle) {
@@ -111,7 +122,9 @@ pub fn run() {
             ai::ai_stream,
             ai::ai_cancel,
             ai::ai_test,
-            ai::ai_models
+            ai::ai_models,
+            ai::ai_transcribe,
+            e2e_audio
         ])
         .run(tauri::generate_context!())
         .expect("error while running Albedo");

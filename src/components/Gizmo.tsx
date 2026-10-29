@@ -42,6 +42,60 @@ interface Drag {
   from: THREE.Vector3; // world point or direction at drag start
 }
 
+/** Hit areas always win against bodies (the gizmo sits inside the selected body). */
+function priorityRaycast(this: THREE.Mesh, rc: THREE.Raycaster, hits: THREE.Intersection[]) {
+  const n = hits.length;
+  THREE.Mesh.prototype.raycast.call(this, rc, hits);
+  for (let i = n; i < hits.length; i++) hits[i].distance -= 1e6;
+}
+
+/** Eases a group's scale toward `target` (~100 ms). */
+function useEasedScale(target: number) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    const g = ref.current;
+    if (!g) return;
+    const k = Math.min(1, dt / 0.035);
+    const v = g.scale.x + (target - g.scale.x) * k;
+    g.scale.set(v, v, v);
+  });
+  return ref;
+}
+
+function Arrow({ axis, color, hover, on, dim, onDown, hoverProps }: {
+  axis: THREE.Vector3; color: string; hover: string; on: boolean; dim: boolean;
+  onDown: (e: ThreeEvent<PointerEvent>) => void; hoverProps: Record<string, unknown>;
+}) {
+  const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis), [axis]);
+  const tip = useEasedScale(on ? 1.15 : 1);
+  const shaft = useEasedScale(on ? 1.15 : 1);
+  const c = on ? hover : color;
+  const opacity = dim ? 0.45 : 1;
+  return (
+    <group quaternion={quat}>
+      <group ref={shaft}>
+        <mesh position={[0, (ARROW - 4) / 2, 0]} renderOrder={20} scale={[on ? 1.5 : 1, 1, on ? 1.5 : 1]}>
+          <cylinderGeometry args={[0.85, 0.85, ARROW - 4, 8]} />
+          <meshBasicMaterial color={c} depthTest={false} transparent opacity={opacity} toneMapped={false} />
+        </mesh>
+      </group>
+      <group position={[0, ARROW + 6, 0]}>
+        <group ref={tip}>
+          <mesh renderOrder={20}>
+            <coneGeometry args={[3.2, 18, 24]} />
+            <meshBasicMaterial color={c} depthTest={false} transparent opacity={opacity} toneMapped={false} />
+          </mesh>
+        </group>
+      </group>
+      {/* Generous invisible hit target */}
+      <mesh position={[0, PLANE_SIZE + (ARROW - PLANE_SIZE + 16) / 2, 0]} raycast={priorityRaycast} onPointerDown={onDown} {...hoverProps}>
+        <cylinderGeometry args={[9, 9, ARROW - PLANE_SIZE + 22, 8]} />
+        <meshBasicMaterial visible={false} />
+      </mesh>
+    </group>
+  );
+}
+
 export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
   const { camera, gl, size } = useThree();
   const controls = useThree((s) => s.controls) as unknown as { enabled: boolean } | null;
@@ -106,6 +160,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from };
     if (controls) controls.enabled = false;
     useGizmo.setState({ dragging: true });
+    gl.domElement.style.cursor = "grabbing";
 
     const move = (ev: PointerEvent) => {
       const d = drag.current!;
@@ -165,6 +220,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       window.removeEventListener("pointerup", up);
       drag.current = null;
       setLabel(null);
+      gl.domElement.style.cursor = "";
       if (controls) controls.enabled = true;
       useGizmo.setState({ dragging: false });
       const p = useApp.getState().preview;
@@ -185,10 +241,11 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     },
     onPointerOut: () => {
       setHover(null);
-      gl.domElement.style.cursor = "";
+      if (!drag.current) gl.domElement.style.cursor = "";
     },
   });
 
+  const anyActive = hover !== null || !!drag.current;
   const active = (i: number) =>
     hover === i || (!!drag.current && (drag.current.kind === "plane" ? drag.current.index + 10 : drag.current.index) === i);
 
@@ -196,28 +253,9 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     <>
       <group ref={group} position={center}>
         {mode === "move" &&
-          AXES.map(({ axis, color, hover: hc }, i) => {
-            const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
-            const on = active(i);
-            const c = on ? hc : color;
-            return (
-              <group key={i} quaternion={quat}>
-                <mesh position={[0, (ARROW - 4) / 2, 0]} renderOrder={20}>
-                  <cylinderGeometry args={[on ? 1.3 : 0.85, on ? 1.3 : 0.85, ARROW - 4, 8]} />
-                  <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
-                </mesh>
-                <mesh position={[0, ARROW + 6, 0]} renderOrder={20}>
-                  <coneGeometry args={[on ? 3.8 : 3.2, 18, 24]} />
-                  <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
-                </mesh>
-                {/* Generous invisible hit target */}
-                <mesh position={[0, PLANE_SIZE + (ARROW - PLANE_SIZE + 16) / 2, 0]} onPointerDown={begin("move", i)} {...hoverProps(i)}>
-                  <cylinderGeometry args={[8, 8, ARROW - PLANE_SIZE + 16, 8]} />
-                  <meshBasicMaterial visible={false} />
-                </mesh>
-              </group>
-            );
-          })}
+          AXES.map(({ axis, color, hover: hc }, i) => (
+            <Arrow key={i} axis={axis} color={color} hover={hc} on={active(i)} dim={anyActive && !active(i)} onDown={begin("move", i)} hoverProps={hoverProps(i)} />
+          ))}
         {mode === "move" &&
           PLANES.map(([a, b], i) => {
             const id = 10 + i;
@@ -229,13 +267,13 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
             const color = on ? mix(AXES[a].hover, AXES[b].hover) : mix(AXES[a].color, AXES[b].color);
             return (
               <group key={`p${i}`} position={u.add(v)} quaternion={quat}>
-                <mesh renderOrder={19} onPointerDown={begin("plane", i)} {...hoverProps(id)}>
+                <mesh renderOrder={19} raycast={priorityRaycast} onPointerDown={begin("plane", i)} {...hoverProps(id)}>
                   <planeGeometry args={[PLANE_SIZE, PLANE_SIZE]} />
-                  <meshBasicMaterial color={color} depthTest={false} transparent opacity={on ? 0.5 : 0.22} side={THREE.DoubleSide} toneMapped={false} />
+                  <meshBasicMaterial color={color} depthTest={false} transparent opacity={on ? 0.55 : anyActive ? 0.1 : 0.22} side={THREE.DoubleSide} toneMapped={false} />
                 </mesh>
                 <lineSegments renderOrder={20} raycast={() => null}>
                   <edgesGeometry args={[new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE)]} />
-                  <lineBasicMaterial color={color} depthTest={false} transparent opacity={0.9} toneMapped={false} />
+                  <lineBasicMaterial color={color} depthTest={false} transparent opacity={on ? 1 : anyActive ? 0.4 : 0.85} toneMapped={false} />
                 </lineSegments>
               </group>
             );
@@ -250,7 +288,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
                   <torusGeometry args={[RING, active(i) ? 1.4 : 0.9, 6, 96]} />
                   <meshBasicMaterial color={c} depthTest={false} transparent toneMapped={false} />
                 </mesh>
-                <mesh onPointerDown={begin("rotate", i)} {...hoverProps(i)}>
+                <mesh raycast={priorityRaycast} onPointerDown={begin("rotate", i)} {...hoverProps(i)}>
                   <torusGeometry args={[RING, 7, 6, 64]} />
                   <meshBasicMaterial visible={false} />
                 </mesh>

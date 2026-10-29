@@ -56,13 +56,12 @@ export function HistoryPanel() {
         <button
           className={`hist-row ${n.id === currentId ? "current" : ""} ${isFuture ? "future" : ""} ${inGroup ? "in-group" : ""}`}
           onClick={() => execute("history.goto", { nodeId: n.id })}
-          title={n.source === "ai" ? "Von der KI ausgeführt" : undefined}
+          title={`${time(n.time)}${n.source === "ai" ? " · von der KI ausgeführt" : ""}`}
         >
           <span className={`hist-icon ${n.source === "ai" ? "ai" : ""}`}>
             <Icon name={n.source === "ai" && !inGroup ? "ai" : n.icon} size={13} />
           </span>
           <span className="hist-label">{n.label}</span>
-          <span className="hist-time">{time(n.time)}</span>
         </button>
         {branches.map((b) => {
           const { tip, steps } = branchTip(nodes, b);

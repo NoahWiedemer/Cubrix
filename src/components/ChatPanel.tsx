@@ -10,6 +10,7 @@ import { usePopover } from "../ui/usePopover";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
+import { VoiceButton } from "./VoiceButton";
 import { friendlyError, type FriendlyError } from "../ai/errors";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
 import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, extraModels, modelInfo, type Effort, type ModelInfo } from "../ai/models";
@@ -379,6 +380,7 @@ export function ChatPanel() {
             }
           }}
         />
+        <div className="chat-actions">
         {running ? (
           <button className="chat-send stop" onClick={() => controller?.abort()} data-tip="Stopp" data-tip-pos="top">
             <Icon name="stop" size={13} />
@@ -388,6 +390,12 @@ export function ChatPanel() {
             <Icon name="send" size={14} />
           </button>
         )}
+        <VoiceButton
+          disabled={running}
+          onText={(t) => void send(t)}
+          onError={(err) => useChat.setState((st) => ({ entries: [...st.entries, { role: "assistant", text: "", steps: [], error: err }] }))}
+        />
+        </div>
       </div>
     </div>
   );
