@@ -114,6 +114,12 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(ai::AiState::default())
+        .setup(|app| {
+            if let Ok(dir) = app.path().app_cache_dir() {
+                fonts::warm_up(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             errorlog::log_error,
             errorlog::errors_read,

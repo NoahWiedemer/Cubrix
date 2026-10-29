@@ -8,6 +8,8 @@ import { App } from "./App";
 import { installErrorHooks } from "./core/errorLog";
 
 installErrorHooks();
+// Font list warmed in the background so the text font dropdown opens instantly.
+void import("./components/FontPicker").then((m) => setTimeout(m.preloadSystemFonts, 2500));
 
 // Dev only: scripted demos (e.g. AI build animations) from the browser console / CDP.
 if (import.meta.env.DEV)

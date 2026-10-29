@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Face {
     family: String,
     path: PathBuf,
@@ -22,6 +22,29 @@ pub struct FontFamily {
 }
 
 static FACES: OnceLock<Vec<Face>> = OnceLock::new();
+/// Disk cache location (set at startup), keyed by the font folders' modification times.
+static CACHE_FILE: OnceLock<PathBuf> = OnceLock::new();
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct DiskCache {
+    stamp: Vec<(String, u64)>,
+    faces: Vec<Face>,
+}
+
+/// Modification times of the font folders (a new or removed font changes them).
+fn folder_stamp() -> Vec<(String, u64)> {
+    font_dirs()
+        .into_iter()
+        .map(|d| {
+            let t = std::fs::metadata(&d)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            (d.to_string_lossy().into_owned(), t)
+        })
+        .collect()
+}
 
 fn font_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
@@ -104,7 +127,38 @@ fn scan() -> Vec<Face> {
 }
 
 fn faces() -> &'static Vec<Face> {
-    FACES.get_or_init(scan)
+    FACES.get_or_init(|| {
+        let t0 = std::time::Instant::now();
+        let stamp = folder_stamp();
+        let cache = CACHE_FILE.get();
+        if let Some(path) = cache {
+            if let Some(c) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<DiskCache>(&b).ok()) {
+                if c.stamp == stamp {
+                    println!("[albedo] Schriften aus Cache: {} in {:?}", c.faces.len(), t0.elapsed());
+                    return c.faces;
+                }
+            }
+        }
+        let faces = scan();
+        println!("[albedo] Schriften gescannt: {} in {:?}", faces.len(), t0.elapsed());
+        if let Some(path) = cache {
+            if let Ok(b) = serde_json::to_vec(&DiskCache { stamp, faces: faces.clone() }) {
+                let _ = std::fs::write(path, b);
+            }
+        }
+        faces
+    })
+}
+
+/// Warms the font list in the background shortly after start (low priority: it waits
+/// until the UI is up, and the scan itself runs on its own thread).
+pub fn warm_up(cache_dir: PathBuf) {
+    let _ = std::fs::create_dir_all(&cache_dir);
+    let _ = CACHE_FILE.set(cache_dir.join("fonts-cache.json"));
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let _ = faces();
+    });
 }
 
 /// Installed font families (upright faces only), alphabetical, with their weights.

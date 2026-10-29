@@ -1,6 +1,6 @@
 // Searchable font dropdown: the bundled fonts first (always available), then every
 // installed family (from the Rust side), each name previewed in its own typeface.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { create } from "zustand";
 import { ChevronDown } from "lucide-react";
 import { FONTS, fontLabel, type FontId } from "../cad/fontKeys";
@@ -9,6 +9,13 @@ import { usePopover } from "../ui/usePopover";
 import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
 const useSystemFonts = create<{ families: string[] | null }>(() => ({ families: null }));
+
+/** Called once the UI is idle after start, so the dropdown opens instantly. */
+export function preloadSystemFonts() {
+  const go = () => void loadSystemFonts();
+  if ("requestIdleCallback" in window) (window as unknown as { requestIdleCallback(f: () => void, o: object): void }).requestIdleCallback(go, { timeout: 4000 });
+  else setTimeout(go, 2000);
+}
 
 async function loadSystemFonts() {
   if (useSystemFonts.getState().families) return;
@@ -67,7 +74,7 @@ export function FontPicker({ value, onChange }: { value: string; onChange(font: 
           ))}
           {system.length > 0 && <MenuTitle>Installiert</MenuTitle>}
           {system.map((f) => (
-            <MenuItem key={f} label={<span style={{ fontFamily: `"${f}"` }}>{f}</span>} checked={value === f} onClick={() => pick(f)} />
+            <MenuItem key={f} label={<LazyFontName family={f} />} checked={value === f} onClick={() => pick(f)} />
           ))}
           {families === null && <div className="menu-note">Schriften werden geladen …</div>}
           {families !== null && !bundled.length && !system.length && <div className="menu-note">Keine Schrift gefunden.</div>}
@@ -75,4 +82,27 @@ export function FontPicker({ value, onChange }: { value: string; onChange(font: 
       )}
     </div>
   );
+}
+
+/** Families whose preview font was already shown (stay styled when the list reopens). */
+const warm = new Set<string>();
+
+/** The family name in its own typeface, applied only once the row scrolls into view. */
+function LazyFontName({ family }: { family: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [on, setOn] = useState(warm.has(family));
+  useEffect(() => {
+    if (on || !ref.current) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        warm.add(family);
+        setOn(true);
+        io.disconnect();
+      }
+    });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [on, family]);
+  // Plain CSS: the webview renders installed fonts natively; unknown names fall back to the UI font.
+  return <span ref={ref} style={on ? { fontFamily: `"${family}", Inter, system-ui` } : undefined}>{family}</span>;
 }
