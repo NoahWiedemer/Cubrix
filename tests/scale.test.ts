@@ -28,3 +28,18 @@ describe("Skalieren", () => {
     expect(s.children[1].type === "box" && s.children[1].params.height).toBe(60);
   });
 });
+
+describe("Verkleinern", () => {
+  it("Faktor 0,5 proportional hält die Ankerecke fest", () => {
+    const s = scaleFeature(box, [0.5, 0.5, 0.5], [0, 0, 0]);
+    expect(s.type === "box" && s.params).toEqual({ width: 10, depth: 5, height: 15 });
+    expect(s.transform.position).toEqual([5, 2.5, 0]);
+  });
+  it("object.scale nimmt Faktoren unter 1 an (50 % aus dem Größenfeld)", async () => {
+    const { getCommand } = await import("../src/core/commands");
+    await import("../src/core/commandDefs");
+    const doc = { ...(await import("../src/core/document")).createDocument("T", { starter: false }), features: [box] };
+    const res = (getCommand("object.scale") as any).apply(doc, { id: "b", factor: [0.5, 0.5, 0.5] }, { doc, selection: ["b"], source: "user" });
+    expect(res.doc.features[0].params).toEqual({ width: 10, depth: 5, height: 15 });
+  });
+});

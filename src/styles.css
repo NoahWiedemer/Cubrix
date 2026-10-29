@@ -1322,3 +1322,13 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .color-custom .field input { padding: 0 10px; font-family: ui-monospace, monospace; font-size: 13px; text-align: left; }
 .menu-swatches { padding: 4px 10px 6px; max-width: 230px; }
 .menu-swatches .swatch { width: 20px; height: 20px; }
+/* Library header: fixed block (title, search, tabs); only the grid scrolls. */
+.library { overflow: visible; }
+.lib-head, .lib-search, .lib-cats { flex-shrink: 0; }
+.lib-search { margin: 0 14px 12px; }
+.lib-cats { padding: 2px 14px 8px; gap: 4px; min-height: 40px; box-sizing: border-box; align-items: center; scrollbar-width: none;
+  -webkit-mask: linear-gradient(to right, #000 calc(100% - 18px), transparent); mask: linear-gradient(to right, #000 calc(100% - 18px), transparent); }
+.lib-cats::-webkit-scrollbar { display: none; }
+.lib-cats button { height: 30px; padding: 0 10px; font-size: 12.5px; line-height: 30px; }
+.lib-body { border-top: 1px solid var(--line-soft); padding-top: 4px; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+.lib-body h4 { margin-top: 12px; }

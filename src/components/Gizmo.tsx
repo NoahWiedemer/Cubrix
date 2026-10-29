@@ -40,6 +40,8 @@ interface Drag {
   /** Scale: extents at drag start (CAD X/Y/Z) and whether X/Y grow on both sides. */
   size?: Vec3;
   symmetric?: boolean;
+  /** Pointer position at drag start (screen-space handles). */
+  screen?: [number, number];
   index: number;
   start: Transform;
   center: THREE.Vector3; // CAD frame
@@ -185,7 +187,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
       kind === "move" || kind === "scale" ? onAxis(r, centerWorld, axisWorld) : kind === "plane" ? onPlane(r, centerWorld, axisWorld) : onPlane(r, centerWorld, axisWorld)?.sub(centerWorld);
     if (!from) return;
     const size = box ? (box.getSize(new THREE.Vector3()).toArray() as Vec3) : undefined;
-    drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from, size, symmetric: ROUND_TYPES.has(f.type) };
+    drag.current = { kind, index, start: transform, center: center.clone(), axisWorld, centerWorld, from, size, symmetric: ROUND_TYPES.has(f.type), screen: [e.nativeEvent.clientX, e.nativeEvent.clientY] };
     if (controls) controls.enabled = false;
     useGizmo.setState({ dragging: true });
     gl.domElement.style.cursor = "grabbing";
@@ -193,7 +195,8 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
     const move = (ev: PointerEvent) => {
       const d = drag.current!;
       const r = ray(ev);
-      const a = AXES[d.kind === "plane" ? PLANES[d.index][2] : d.index].axis;
+      // (Uniform scale handles 3/4 have no single axis: only read it for the other kinds.)
+      const a = d.kind === "scale" ? new THREE.Vector3() : AXES[d.kind === "plane" ? PLANES[d.index][2] : d.index].axis;
       let next: Transform;
       if (d.kind === "scale") {
         const delta = onAxis(r, d.centerWorld, d.axisWorld).sub(d.from).dot(d.axisWorld);
@@ -205,9 +208,10 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           const diag = Math.hypot(...size);
           k = (diag + delta) / diag;
         } else if (d.index === 3) {
-          // Centre handle: proportional, driven along the screen-facing diagonal.
-          const diag = Math.hypot(...size);
-          k = (diag + delta * 2) / diag;
+          // Centre handle: screen-space drag, right/up grows, left/down shrinks
+          // (exponential, so it never flips: −125 px ≈ 50 %, +125 px ≈ 200 %).
+          const px = ev.clientX - d.screen![0] - (ev.clientY - d.screen![1]);
+          k = Math.exp(px / 180);
         } else {
           const L0 = size[d.index];
           // Round bodies scale around their centre in X/Y, so both sides move.
@@ -216,7 +220,8 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
           if (snap > 0) L = Math.max(snap, Math.round(L / snap) * snap);
           k = L / L0;
         }
-        k = Math.max(0.02, k);
+        // Never below 5 % (or 0.1 mm on the smallest side).
+        k = Math.max(0.05, 0.1 / Math.max(0.1, Math.min(...size)), k);
         const uniform = d.index >= 3 || ev.shiftKey || scalesUniformly(f);
         const factor: Vec3 = uniform ? [k, k, k] : (size.map((_, i) => (i === d.index ? k : 1)) as Vec3);
         scaleFactor.current = factor;
