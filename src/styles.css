@@ -1358,3 +1358,14 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .md th { background: var(--panel-2); font-weight: 600; }
 .md input[type="checkbox"] { accent-color: var(--accent); margin-right: 5px; }
 .msg-text .md { white-space: normal; } .md pre { white-space: pre; }
+/* Compact colour row + popover */
+.color-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px 4px; flex-direction: row; gap: 8px; }
+.color-row-label { font-size: 13px; font-weight: 550; color: var(--text-2); }
+.color-chip { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 8px 0 4px; border-radius: 7px; color: var(--text-3); font-size: 12.5px; }
+.color-chip:hover { background: var(--panel-2); color: var(--text-2); }
+.color-dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2); }
+.color-pop { position: fixed; z-index: 520; width: 214px; padding: 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 9px; animation: pop-in 120ms var(--ease); }
+.color-pop .swatches { gap: 6px; }
+.color-pop .swatches.recent { padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.color-pop .color-well { width: 32px; height: 32px; }
+.color-pop .field { height: 32px; }

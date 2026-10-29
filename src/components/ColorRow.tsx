@@ -1,8 +1,9 @@
-// "Farbe": filament-like swatches, recent custom colours and a custom picker (hex).
-// Applies to every selected object as one history entry; the pick becomes the colour
-// for new objects too.
-import { useState } from "react";
-import { execute } from "../core/commands";
+// "Farbe": one compact Inspektor row (swatch + name). Clicking opens a small popover
+// (also used from the right-click menu) with filament-like swatches, a custom picker /
+// hex field and recent colours. Picks preview live; closing writes ONE history entry.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { create } from "zustand";
+import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useSettings } from "../ui/settings";
 
 export const SWATCHES: { hex: string; name: string }[] = [
@@ -20,55 +21,123 @@ export const SWATCHES: { hex: string; name: string }[] = [
   { hex: "#d7e2e3", name: "Natur (PETG)" },
 ];
 
-/** Applies a colour to objects and remembers it for new ones. */
-export function applyColor(ids: string[], hex: string | null) {
-  void execute("object.setColor", { ids, color: hex ?? "" });
-  useSettings.setState((s) => ({
-    lastColor: hex,
-    recentColors: hex && !SWATCHES.some((w) => w.hex === hex) ? [hex, ...s.recentColors.filter((c) => c !== hex)].slice(0, 6) : s.recentColors,
-  }));
-}
+const NEUTRAL = "#99a1a8";
+export const colorName = (hex?: string) => (!hex ? "Neutral" : (SWATCHES.find((s) => s.hex === hex)?.name ?? hex.toUpperCase()));
 
-export function ColorSwatches({ ids, current, onPicked }: { ids: string[]; current?: string; onPicked?: () => void }) {
-  const recent = useSettings((s) => s.recentColors);
-  const pick = (hex: string | null) => {
-    applyColor(ids, hex);
-    onPicked?.();
-  };
+interface Request {
+  ids: string[];
+  current?: string;
+  at: { x: number; y: number };
+}
+const useColorPopover = create<{ req: Request | null }>(() => ({ req: null }));
+export const openColorPopover = (req: Request) => useColorPopover.setState({ req });
+
+/** Compact row in the Inspektor. */
+export function ColorRow({ ids, current }: { ids: string[]; current?: string }) {
   return (
-    <div className="swatches">
-      <button className={`swatch none ${!current ? "on" : ""}`} data-tip="Neutral" data-tip-pos="top" onClick={() => pick(null)} />
-      {SWATCHES.map((w) => (
-        <button key={w.hex} className={`swatch ${current === w.hex ? "on" : ""}`} style={{ background: w.hex }} data-tip={w.name} data-tip-pos="top" onClick={() => pick(w.hex)} />
-      ))}
-      {recent.map((hex) => (
-        <button key={hex} className={`swatch ${current === hex ? "on" : ""}`} style={{ background: hex }} data-tip={hex} data-tip-pos="top" onClick={() => pick(hex)} />
-      ))}
+    <div className="color-row">
+      <span className="color-row-label">Farbe</span>
+      <button
+        className="color-chip"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          openColorPopover({ ids, current, at: { x: r.left, y: r.bottom + 6 } });
+        }}
+      >
+        <span className="color-dot" style={{ background: current ?? NEUTRAL }} />
+        <span className="color-name">{colorName(current)}</span>
+      </button>
     </div>
   );
 }
 
-export function ColorRow({ ids, current }: { ids: string[]; current?: string }) {
-  const [hex, setHex] = useState(current ?? "");
+export function ColorPopover() {
+  const req = useColorPopover((s) => s.req);
+  return req ? <Popover key={`${req.ids.join()}-${req.at.x}-${req.at.y}`} req={req} /> : null;
+}
+
+function Popover({ req }: { req: Request }) {
+  const recent = useSettings((s) => s.recentColors);
+  const [picked, setPicked] = useState<string | null | undefined>(undefined); // undefined = nothing picked yet
+  const [hex, setHex] = useState(req.current ?? "");
+  const box = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: req.at.x, top: req.at.y });
+  const shown = picked === undefined ? req.current : (picked ?? undefined);
+
+  // Keep the popover inside the window.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    setPos({ left: Math.max(8, Math.min(req.at.x, window.innerWidth - 8 - w)), top: req.at.y + h > window.innerHeight - 8 ? Math.max(8, req.at.y - h - 40) : req.at.y });
+  }, [req.at.x, req.at.y]);
+
+  const pick = (c: string | null) => {
+    setPicked(c);
+    if (c) setHex(c);
+    previewCommand("object.setColor", { ids: req.ids, color: c ?? "" });
+  };
+  const close = (apply: boolean) => {
+    clearPreview();
+    if (apply && picked !== undefined && (picked ?? undefined) !== req.current) {
+      void execute("object.setColor", { ids: req.ids, color: picked ?? "" });
+      useSettings.setState((s) => ({
+        lastColor: picked,
+        recentColors: picked && !SWATCHES.some((w) => w.hex === picked) ? [picked, ...s.recentColors.filter((c) => c !== picked)].slice(0, 6) : s.recentColors,
+      }));
+    }
+    useColorPopover.setState({ req: null });
+  };
+
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) close(true);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close(false);
+      if (e.key === "Enter") close(true);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  });
+
   const valid = /^#[0-9a-f]{6}$/i.test(hex);
   return (
-    <div className="group color-row">
-      <div className="group-label"><span>Farbe</span></div>
-      <ColorSwatches ids={ids} current={current} />
+    <div ref={box} className="color-pop" style={pos} data-floating>
+      <div className="swatches">
+        <button className={`swatch none ${!shown ? "on" : ""}`} data-tip="Neutral" data-tip-pos="top" onClick={() => pick(null)} />
+        {SWATCHES.map((w) => (
+          <button key={w.hex} className={`swatch ${shown === w.hex ? "on" : ""}`} style={{ background: w.hex }} data-tip={w.name} data-tip-pos="top" onClick={() => pick(w.hex)} />
+        ))}
+      </div>
+      {recent.length > 0 && (
+        <div className="swatches recent">
+          {recent.map((c) => (
+            <button key={c} className={`swatch ${shown === c ? "on" : ""}`} style={{ background: c }} data-tip={c.toUpperCase()} data-tip-pos="top" onClick={() => pick(c)} />
+          ))}
+        </div>
+      )}
       <div className="color-custom">
-        <label className="color-well" style={{ background: valid ? hex : current ?? "#99a1a8" }} data-tip="Eigene Farbe" data-tip-pos="top">
-          <input type="color" value={valid ? hex : current ?? "#99a1a8"} onChange={(e) => setHex(e.target.value)} onBlur={(e) => applyColor(ids, e.target.value.toLowerCase())} />
+        <label className="color-well" style={{ background: valid ? hex : (shown ?? NEUTRAL) }} data-tip="Eigene Farbe" data-tip-pos="top">
+          <input type="color" value={valid ? hex : (shown ?? NEUTRAL)} onChange={(e) => pick(e.target.value.toLowerCase())} />
         </label>
         <div className="field">
           <input
             value={hex}
             placeholder="#rrggbb"
-            onChange={(e) => setHex(e.target.value)}
+            onChange={(e) => {
+              setHex(e.target.value);
+              if (/^#[0-9a-f]{6}$/i.test(e.target.value)) pick(e.target.value.toLowerCase());
+            }}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Enter" && valid) applyColor(ids, hex.toLowerCase());
+              if (e.key === "Enter") close(true);
+              if (e.key === "Escape") close(false);
             }}
-            onBlur={() => valid && hex.toLowerCase() !== current && applyColor(ids, hex.toLowerCase())}
           />
         </div>
       </div>

@@ -10,6 +10,7 @@ import { Toasts } from "./components/Toasts";
 import { TooltipLayer } from "./ui/Tooltip";
 import { ValuePopover } from "./components/ValuePopover";
 import { RotatePopover } from "./components/RotatePopover";
+import { ColorPopover } from "./components/ColorRow";
 import { ContextMenu } from "./components/ContextMenu";
 import { HelpCenter } from "./help/HelpCenter";
 import { useViewportFrame } from "./ui/viewportFrame";
@@ -91,6 +92,7 @@ export function App() {
       <ContextMenu />
       <ValuePopover />
       <RotatePopover />
+      <ColorPopover />
       <Library />
       <HelpCenter />
       <SettingsDialog />
