@@ -1,7 +1,7 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Shape3D } from "replicad";
-import type { Feature } from "../core/document";
+import { drawCircle, drawPolysides, drawRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
 export class EdgeTreatmentError extends Error {}
@@ -72,11 +72,58 @@ export function buildPrimitive(f: Feature): Shape3D {
   }
 }
 
+function drawingOf(s: SketchShape): Drawing {
+  switch (s.kind) {
+    case "rect":
+      return drawRectangle(Math.abs(s.w), Math.abs(s.h)).translate(s.x + s.w / 2, s.y + s.h / 2);
+    case "circle":
+      return drawCircle(s.r).translate(s.cx, s.cy);
+    case "polygon":
+      return drawPolysides(s.r, s.sides).rotate(90).translate(s.cx, s.cy);
+    case "poly": {
+      const [first, ...rest] = s.points;
+      let pen = draw(first);
+      for (const p of rest) pen = pen.lineTo(p);
+      return pen.close();
+    }
+  }
+}
+
+function bbox(s: SketchShape) {
+  const pts = shapePoints(s, 32);
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+/** Closed profiles fused; a profile lying fully inside another one becomes a hole. */
+function buildExtrusion(profile: SketchShape[], height: number): Shape3D {
+  const closed = profile.filter(isClosed);
+  if (!closed.length) throw new Error("Die Skizze enthält keine geschlossene Form.");
+  const boxes = closed.map(bbox);
+  const inside = (i: number) =>
+    boxes.some((o, j) => j !== i && o.minX <= boxes[i].minX && o.maxX >= boxes[i].maxX && o.minY <= boxes[i].minY && o.maxY >= boxes[i].maxY &&
+      (o.maxX - o.minX) * (o.maxY - o.minY) > (boxes[i].maxX - boxes[i].minX) * (boxes[i].maxY - boxes[i].minY));
+  let outer: Drawing | null = null;
+  const holes: Drawing[] = [];
+  closed.forEach((s, i) => {
+    const d = drawingOf(s);
+    if (inside(i)) holes.push(d);
+    else outer = outer ? outer.fuse(d) : d;
+  });
+  if (!outer) throw new Error("Die Skizze enthält keine äußere Form.");
+  let region: Drawing = outer;
+  for (const h of holes) region = region.cut(h);
+  return region.sketchOnPlane("XY").extrude(height) as Shape3D;
+}
+
 export function buildLocal(f: Feature): Shape3D {
+  if (f.type === "sketch") throw new Error("Skizzen sind keine Körper.");
   let shape: Shape3D;
   if (f.type === "boolean") {
     const [a, b] = f.children.map((c) => buildPlaced(c));
     shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
+  } else if (f.type === "extrude") {
+    shape = buildExtrusion(f.profile, f.height);
   } else {
     shape = buildPrimitive(f);
   }

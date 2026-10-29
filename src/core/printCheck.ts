@@ -15,7 +15,7 @@ export function usePrintCheck(): PrintCheckResult {
   const doc = useApp((s) => s.nodes[s.currentId].doc);
   const preview = useApp((s) => s.preview);
   const entries = useMeshes((s) => s.entries);
-  const visible = doc.features.filter((f) => f.visible);
+  const visible = doc.features.filter((f) => f.visible && f.type !== "sketch");
   if (!visible.length) return { state: "idle", title: "Noch nichts zu prüfen", issues: [] };
   if (visible.some((f) => !entries[geometryKey(f)])) return { state: "idle", title: "Wird geprüft …", issues: [] };
 

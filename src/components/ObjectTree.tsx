@@ -6,7 +6,7 @@ import type { Feature } from "../core/document";
 import { Icon, type IconName } from "../ui/icons";
 
 export function featureIcon(f: Feature): IconName {
-  return f.type === "boolean" ? f.op : f.type;
+  return f.type === "boolean" ? f.op : f.type === "sketch" ? "sketch" : f.type === "extrude" ? "extrude" : f.type;
 }
 
 function Row({ f }: { f: Feature }) {

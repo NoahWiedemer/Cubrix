@@ -107,7 +107,8 @@ export async function execute(
     return false;
   }
   const ctx = context(opts.source ?? "user");
-  if (cmd.isEnabled && !cmd.isEnabled(ctx)) return false;
+  // isEnabled describes the selection-driven UI state; explicit params (AI, scripts) bypass it.
+  if (cmd.isEnabled && Object.keys(params).length === 0 && !cmd.isEnabled(ctx)) return false;
   try {
     const p = withDefaults(cmd.params, params);
     if (cmd.kind === "action") {

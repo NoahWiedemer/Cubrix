@@ -147,8 +147,9 @@ function Dimensions({ f }: { f: Feature }) {
     );
   }
 
-  const fields = PARAM_FIELDS[f.type];
-  const params = f.params as Record<string, number>;
+  if (f.type === "sketch") return null;
+  const fields = f.type === "extrude" ? [{ key: "height", label: "Höhe" }] : PARAM_FIELDS[f.type];
+  const params = (f.type === "extrude" ? { height: f.height } : f.params) as Record<string, number>;
   const set = (key: string, v: number) => {
     let patch: Record<string, number> = { [key]: v };
     if (locked && params[key] > 0) {

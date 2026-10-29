@@ -58,6 +58,37 @@ export function CameraRig() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection]);
 
+  // 2D workspace: glide to a top view (orthographic) and back to the previous view afterwards.
+  const workspace = useApp((s) => s.workspace);
+  const saved = useRef<{ position: THREE.Vector3; projection: "perspective" | "orthographic" } | null>(null);
+  const tween = useRef<{ from: THREE.Vector3; to: THREE.Vector3; start: number } | null>(null);
+  useEffect(() => {
+    const t = target.current;
+    if (workspace === "sketch" && !saved.current) {
+      saved.current = { position: camera.position.clone(), projection: useSettings.getState().projection };
+      useSettings.setState({ projection: "orthographic" });
+      const dist = Math.max(150, camera.position.distanceTo(t));
+      // A hair towards +Z (CAD front) so CAD +Y points up on screen.
+      tween.current = { from: camera.position.clone(), to: t.clone().add(new THREE.Vector3(0, dist, 0.001)), start: performance.now() };
+    } else if (workspace !== "sketch" && saved.current) {
+      const back = saved.current;
+      saved.current = null;
+      useSettings.setState({ projection: back.projection });
+      tween.current = { from: camera.position.clone(), to: back.position, start: performance.now() };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace]);
+  useFrame((state) => {
+    const tw = tween.current;
+    if (!tw) return;
+    const k = Math.min(1, (performance.now() - tw.start) / 320);
+    const e = 1 - Math.pow(1 - k, 3);
+    state.camera.position.lerpVectors(tw.from, tw.to, e);
+    state.camera.lookAt(target.current);
+    if (k >= 1) tween.current = null;
+    (state.controls as unknown as Controls | null)?.update();
+  });
+
   const request = useViewRequest((s) => s.request);
   useEffect(() => {
     if (!request || request.kind !== "iso") return;
@@ -75,6 +106,7 @@ export function CameraRig() {
     <OrbitControls
       key={projection}
       makeDefault
+      enableRotate={workspace !== "sketch"}
       enableDamping
       autoRotate={turntable}
       autoRotateSpeed={0.8}

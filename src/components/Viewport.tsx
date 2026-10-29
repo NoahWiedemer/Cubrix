@@ -13,11 +13,13 @@ import { SelectionOutline, registerMesh } from "./SelectionOutline";
 import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { type Feature, type Transform, type Vec3 } from "../core/document";
+import { type Feature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { SketchDraw, SketchObject } from "./SketchLayer";
+import { SketchToolbar } from "./SketchToolbar";
 import { useLayout } from "../ui/layout";
 import { useAnimatedNumber } from "../ui/useAnimatedNumber";
 import { PreviewControls, PreviewEffects } from "./PreviewControls";
@@ -328,10 +330,11 @@ export function Viewport() {
         )}
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>
-          {doc.features.map((f, i) => (
-            <FeatureObject key={f.id} f={f} order={i} />
-          ))}
-          {single && workspace !== "preview" && (
+          {doc.features.map((f, i) =>
+            f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
+          )}
+          {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
+          {single && single.type !== "sketch" && (workspace === "model" || workspace === "print") && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -384,26 +387,7 @@ export function Viewport() {
       {workspace === "preview" && <PreviewControls />}
       <ViewControls shift={clusterShift} />
 
-      {workspace === "sketch" && (
-        <div className="soon">
-          <div className="soon-card">
-            <Icon name={workspace === "sketch" ? "sketch" : workspace === "print" ? "export" : "visible"} size={22} />
-            <h2>
-              {workspace === "sketch" ? "2D-Skizzen" : workspace === "print" ? "Druck vorbereiten" : "Vorschau"} kommt bald
-            </h2>
-            <p>
-              {workspace === "sketch"
-                ? "Hier zeichnest du bald Formen in 2D und ziehst sie in die Höhe."
-                : workspace === "print"
-                  ? "Hier richtest du bald dein Modell auf dem Druckbett aus und prüfst Überhänge."
-                  : "Hier siehst du bald eine Schicht-Vorschau deines Drucks."}
-            </p>
-            <button className="chip" style={{ margin: "0 auto" }} onClick={() => useApp.setState({ workspace: "model" })}>
-              Zurück zum Modell
-            </button>
-          </div>
-        </div>
-      )}
+      {workspace === "sketch" && <SketchToolbar />}
     </div>
   );
 }

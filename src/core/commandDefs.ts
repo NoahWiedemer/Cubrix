@@ -14,6 +14,10 @@ import {
   type BooleanOp,
   type Feature,
   type ModelDocument,
+  type SketchFeature,
+  type SketchShape,
+  isClosed,
+  isSolid,
   type PrimitiveFeature,
   type PrimitiveParams,
   type PrimitiveType,
@@ -25,6 +29,7 @@ import { useGizmo } from "../ui/gizmo";
 import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
+import { useSketch } from "../ui/sketch";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { PRINTERS, bestOrientation } from "./printAnalysis";
@@ -196,8 +201,14 @@ defineCommand({
   },
   apply(doc, p) {
     const f = findFeature(doc, p.id);
-    if (!f || f.type === "boolean") throw new Error("Nur Grundkörper haben Maße");
+    if (!f || f.type === "boolean" || f.type === "sketch") throw new Error("Nur Grundkörper haben Maße");
     const patch = typeof p.params === "string" ? JSON.parse(p.params) : p.params;
+    if (f.type === "extrude") {
+      const h = Number(patch.height);
+      if (!Number.isFinite(h) || h < 0.1) throw new Error("Die Höhe muss mindestens 0,1 mm sein");
+      if (round(h) === f.height) return null;
+      return { doc: updateFeature(doc, f.id, (x) => ({ ...x, height: round(h) }) as Feature), label: `${f.name}: Höhe ${round(h)} mm` };
+    }
     const next = { ...f.params } as Record<string, number>;
     let changed = false;
     for (const [k, v] of Object.entries(patch)) {
@@ -236,6 +247,7 @@ function defineEdgeCommand(kind: "fillet" | "chamfer") {
     apply(doc, p, ctx) {
       const f = findFeature(doc, p.id ?? ctx.selection[0]);
       if (!f) throw new Error("Objekt nicht gefunden");
+      if (f.type === "sketch") throw new Error("Skizzen haben keine Kanten – erst in 3D ziehen.");
       if (f.type === "sphere" || f.type === "torus")
         throw new Error(`${PRIMITIVE_LABELS[f.type]} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
       const current = (fillet ? f.fillet : f.chamfer) ?? 0;
@@ -390,6 +402,99 @@ defineCommand({
   },
 });
 
+// ── Sketches ─────────────────────────────────────────────────────────────────
+
+const shapeLabels: Record<SketchShape["kind"], string> = { rect: "Rechteck", circle: "Kreis", polygon: "Vieleck", poly: "Linienzug" };
+
+defineCommand({
+  id: "sketch.addShape",
+  kind: "document",
+  label: "Form zeichnen",
+  description:
+    "Fügt einer Skizze eine 2D-Form hinzu (mm auf dem Druckbett). shape: {kind:'rect',x,y,w,h} | {kind:'circle',cx,cy,r} | {kind:'polygon',cx,cy,r,sides} | {kind:'poly',points:[[x,y],…],closed}. Ohne sketchId wird eine neue Skizze angelegt.",
+  icon: "sketch",
+  params: {
+    sketchId: { type: "id", optional: true, description: "Ziel-Skizze; ohne Angabe eine neue" },
+    shape: { type: "string", description: "Form als JSON-Objekt" },
+  },
+  apply(doc, p) {
+    const shape: SketchShape = typeof p.shape === "string" ? JSON.parse(p.shape) : p.shape;
+    const existing = p.sketchId ? findFeature(doc, p.sketchId) : undefined;
+    if (existing && existing.type !== "sketch") throw new Error("Das ist keine Skizze");
+    if (existing) {
+      return {
+        doc: updateFeature(doc, existing.id, (x) => ({ ...(x as SketchFeature), shapes: [...(x as SketchFeature).shapes, shape] })),
+        selection: [existing.id],
+        label: `${shapeLabels[shape.kind]} zeichnen`,
+      };
+    }
+    const sketch: SketchFeature = {
+      id: newId(),
+      type: "sketch",
+      name: uniqueName(doc, "Skizze"),
+      visible: true,
+      transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+      shapes: [shape],
+    };
+    return { doc: { ...doc, features: [...doc.features, sketch] }, selection: [sketch.id], label: `${shapeLabels[shape.kind]} zeichnen` };
+  },
+});
+
+defineCommand({
+  id: "sketch.extrude",
+  kind: "document",
+  label: "In 3D ziehen",
+  description: "Zieht die geschlossenen Formen einer Skizze um die angegebene Höhe in die Höhe (Extrusion). Innenliegende Formen werden zu Löchern.",
+  icon: "extrude",
+  shortcut: "e",
+  params: {
+    id: { type: "id", optional: true, description: "Skizzen-ID (Standard: Auswahl)" },
+    height: { type: "number", unit: "mm", min: 0.1, default: 10, description: "Höhe" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 1 && findFeature(ctx.doc, ctx.selection[0])?.type === "sketch",
+  apply(doc, p, ctx) {
+    const sketch = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!sketch || sketch.type !== "sketch") throw new Error("Bitte eine Skizze auswählen");
+    const profile = sketch.shapes.filter(isClosed);
+    if (!profile.length) throw new Error("Die Skizze enthält keine geschlossene Form. Schließe den Linienzug am Startpunkt.");
+    const body: Feature = {
+      id: newId(),
+      type: "extrude",
+      name: uniqueName(doc, "Körper"),
+      visible: true,
+      transform: structuredClone(sketch.transform),
+      profile,
+      height: round(p.height),
+    };
+    const features = doc.features.map((f) => (f.id === sketch.id ? { ...f, visible: false } : f));
+    return { doc: { ...doc, features: [...features, body] }, selection: [body.id], label: `${sketch.name} ${round(p.height)} mm hochziehen` };
+  },
+});
+
+(
+  [
+    ["select", "Auswählen", "v", "select"],
+    ["line", "Linie", "l", "line"],
+    ["rect", "Rechteck", "shift+r", "rect"],
+    ["circle", "Kreis", "c", "sphere"],
+    ["polygon", "Vieleck", "p", "polygon"],
+  ] as const
+).forEach(([tool, label, key, icon]) =>
+  defineCommand({
+    id: `sketch.tool.${tool}`,
+    kind: "action",
+    label,
+    description: `2D-Werkzeug ${label}.`,
+    icon,
+    shortcut: key,
+    params: {},
+    isEnabled: () => useApp.getState().workspace === "sketch",
+    perform() {
+      useSketch.setState({ tool });
+    },
+  }),
+);
+
 // ── Print preparation ───────────────────────────────────────────────────────
 
 defineCommand({
@@ -453,6 +558,7 @@ function defineBoolean(op: BooleanOp, icon: IconName, label: string, description
       const target = findFeature(doc, p.targetId ?? ctx.selection[0]);
       const tool = findFeature(doc, p.toolId ?? ctx.selection[1]);
       if (!target || !tool || target.id === tool.id) throw new Error("Bitte genau zwei Objekte auswählen");
+      if (!isSolid(target) || !isSolid(tool)) throw new Error("Skizzen erst mit „In 3D ziehen“ zu Körpern machen");
       const origin = target.transform.position;
       const rel = (f: Feature): Feature => ({
         ...f,
@@ -822,9 +928,10 @@ function defineExport(format: ExportFormat, description: string, shortcut?: stri
     icon: "export",
     shortcut,
     params: {},
-    isEnabled: (ctx) => ctx.doc.features.some((f) => f.visible),
+    isEnabled: (ctx) => ctx.doc.features.some((f) => f.visible && isSolid(f)),
     async perform(_p, ctx) {
-      const visible = ctx.doc.features.filter((f) => f.visible);
+      const visible = ctx.doc.features.filter((f) => f.visible && isSolid(f));
+      if (!visible.length) throw new Error("Es gibt keine sichtbaren Körper zum Exportieren.");
       const data = await exportFeatures(visible, format, ctx.doc.name);
       const path = await saveFile(
         `${fileSafe(ctx.doc.name)}.${format}`,

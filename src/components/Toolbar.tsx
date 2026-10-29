@@ -3,6 +3,7 @@ import { useApp, useDoc } from "../core/store";
 import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
+import { useSketch } from "../ui/sketch";
 
 function CommandTool({ id, icon, label, active }: { id: string; icon?: IconName; label?: string; active?: boolean }) {
   const cmd = getCommand(id)!;
@@ -31,7 +32,17 @@ export function Toolbar() {
       <div className="toolbar-set" key={mode}>
         {mode === "create" &&
           PRIMITIVES.map((p) => <CommandTool key={p.id} id={p.id} icon={p.icon} label={p.label} />)}
-        {mode === "single" && (
+        {mode === "single" && single?.type === "sketch" && (
+          <>
+            <button className="tool" onClick={() => { useSketch.setState({ activeId: single.id }); void execute("workspace.sketch"); }} data-tip="Skizze im 2D-Modus bearbeiten" data-tip-pos="top">
+              <Icon name="sketch" size={18} />In 2D bearbeiten
+            </button>
+            <CommandTool id="sketch.extrude" label="In 3D ziehen" />
+            <div className="tool-sep" />
+            <CommandTool id="object.delete" />
+          </>
+        )}
+        {mode === "single" && single?.type !== "sketch" && (
           <>
             <CommandTool id="tool.rotate" active={rotate} />
             {single && single.type !== "sphere" && single.type !== "torus" && (

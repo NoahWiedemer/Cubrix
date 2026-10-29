@@ -44,7 +44,27 @@ export interface BooleanFeature extends FeatureBase {
   children: [Feature, Feature];
 }
 
-export type Feature = PrimitiveFeature | BooleanFeature;
+/** 2D shapes on the bed plane (mm, CAD X/Y). */
+export type SketchShape =
+  | { kind: "rect"; x: number; y: number; w: number; h: number }
+  | { kind: "circle"; cx: number; cy: number; r: number }
+  | { kind: "polygon"; cx: number; cy: number; r: number; sides: number }
+  | { kind: "poly"; points: [number, number][]; closed: boolean };
+
+export interface SketchFeature extends FeatureBase {
+  type: "sketch";
+  shapes: SketchShape[];
+}
+
+export interface ExtrudeFeature extends FeatureBase {
+  type: "extrude";
+  /** Closed profiles; shapes lying inside another become holes. */
+  profile: SketchShape[];
+  height: number;
+}
+
+export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature;
+export type Feature = SolidFeature | SketchFeature;
 
 export interface PrinterProfile {
   name: string;
@@ -104,7 +124,36 @@ export const BOOLEAN_LABELS: Record<BooleanOp, string> = {
 };
 
 export function featureTypeLabel(f: Feature): string {
-  return f.type === "boolean" ? BOOLEAN_LABELS[f.op] : PRIMITIVE_LABELS[f.type];
+  if (f.type === "boolean") return BOOLEAN_LABELS[f.op];
+  if (f.type === "sketch") return "Skizze";
+  if (f.type === "extrude") return "Extrusion";
+  return PRIMITIVE_LABELS[f.type];
+}
+
+export const isSolid = (f: Feature): f is SolidFeature => f.type !== "sketch";
+
+export function isClosed(s: SketchShape): boolean {
+  return s.kind !== "poly" || (s.closed && s.points.length >= 3);
+}
+
+/** Outline points of a sketch shape (closed shapes repeat no point). */
+export function shapePoints(s: SketchShape, segments = 96): [number, number][] {
+  switch (s.kind) {
+    case "rect":
+      return [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]];
+    case "circle":
+      return Array.from({ length: segments }, (_, i) => {
+        const a = (i / segments) * Math.PI * 2;
+        return [s.cx + Math.cos(a) * s.r, s.cy + Math.sin(a) * s.r] as [number, number];
+      });
+    case "polygon":
+      return Array.from({ length: s.sides }, (_, i) => {
+        const a = (i / s.sides) * Math.PI * 2 + Math.PI / 2;
+        return [s.cx + Math.cos(a) * s.r, s.cy + Math.sin(a) * s.r] as [number, number];
+      });
+    case "poly":
+      return s.points;
+  }
 }
 
 export function newId(): string {
@@ -149,6 +198,8 @@ export function geometryKey(f: Feature): string {
     const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => strip(c, false)) };
+    if (x.type === "sketch") return { ...base, s: x.shapes };
+    if (x.type === "extrude") return { ...base, pr: x.profile, h: x.height };
     return { ...base, p: x.params };
   };
   return JSON.stringify(strip(f, true));

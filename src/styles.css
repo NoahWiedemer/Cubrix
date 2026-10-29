@@ -707,3 +707,11 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .group-unit { color: var(--text-3); font-weight: 500; font-size: 12px; }
 .field input { padding: 0 7px 0 2px; letter-spacing: -0.01em; }
 .field .unit + input, .field input:has(+ .unit) { padding-right: 2px; }
+
+.tool.cta:not(:disabled) { color: var(--accent); }
+.tool.cta:not(:disabled) svg { color: var(--accent); }
+.sides { display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 13px; color: var(--text-2); }
+.sides input { width: 46px; height: 28px; border-radius: 6px; background: #0f1315; border: 1px solid #2a3136; color: var(--text); padding: 0 6px; }
+.extrude-pop { bottom: calc(100% + 8px); padding: 10px; min-width: 200px; }
+.typed.active { text-decoration: underline; text-underline-offset: 3px; }
+.typed.set { color: #fff; }
