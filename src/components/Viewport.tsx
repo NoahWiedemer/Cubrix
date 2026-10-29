@@ -27,7 +27,6 @@ import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { QUALITY, useSettings } from "../ui/settings";
 import { PropertiesOverlay } from "./PropertiesPanel";
-import { PRIMITIVES } from "./LeftRail";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -192,7 +191,7 @@ function DepthRange() {
  * nearest to the camera, and the two top edges meeting above it, fade out so no
  * frame line ever sits in front of the model.
  */
-function BuildVolume({ w, d, h }: { w: number; d: number; h: number }) {
+function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; strong: boolean }) {
   const edges = useMemo(() => {
     const x = w / 2, z = d / 2;
     const corners: [number, number][] = [[-x, -z], [x, -z], [x, z], [-x, z]];
@@ -218,7 +217,7 @@ function BuildVolume({ w, d, h }: { w: number; d: number; h: number }) {
     edges.list.forEach((e, i) => {
       const m = mats.current[i];
       if (!m) return;
-      const target = e.corners.includes(nearest) ? 0 : 0.35;
+      const target = e.corners.includes(nearest) ? 0 : strong ? 0.7 : 0.3;
       // ~120 ms exponential fade
       m.opacity += (target - m.opacity) * Math.min(1, dt / 0.04);
       m.visible = m.opacity > 0.01;
@@ -229,7 +228,7 @@ function BuildVolume({ w, d, h }: { w: number; d: number; h: number }) {
       {edges.list.map((e, i) => (
         <lineSegments key={i} raycast={() => null}>
           <bufferGeometry onUpdate={(g) => g.setFromPoints([e.a, e.b])} />
-          <lineBasicMaterial ref={(m) => { if (m) mats.current[i] = m; }} color="#3a454c" transparent opacity={0.35} />
+          <lineBasicMaterial ref={(m) => { if (m) mats.current[i] = m; }} color={strong ? "#56646d" : "#3a454c"} transparent opacity={0.35} />
         </lineSegments>
       ))}
     </group>
@@ -240,17 +239,26 @@ function BuildVolume({ w, d, h }: { w: number; d: number; h: number }) {
 
 function Bed({ volume }: { volume: Vec3 }) {
   const [w, d, h] = volume;
+  const showVolume = useSettings((s) => s.showVolume);
+  const volumeStrong = useSettings((s) => s.volumeStrong);
+  // Adaptive grid: 1 mm cells when zoomed in close, else 5 mm (major lines every 5 / 10 mm).
+  const [cell, setCell] = useState(5);
+  useFrame(({ camera }) => {
+    const dist = (camera as THREE.OrthographicCamera).isOrthographicCamera ? 600 / (camera as THREE.OrthographicCamera).zoom : camera.position.length();
+    const next = dist < 70 ? 1 : 5;
+    if (next !== cell) setCell(next);
+  });
   return (
     <group>
       <Grid
         args={[w, d]}
         position={[0, 0.01, 0]}
-        cellSize={5}
-        cellThickness={0.7}
-        cellColor="#262e33"
-        sectionSize={25}
-        sectionThickness={0.9}
-        sectionColor="#36414a"
+        cellSize={cell}
+        cellThickness={0.65}
+        cellColor="#283036"
+        sectionSize={cell * (cell === 1 ? 5 : 2)}
+        sectionThickness={0.85}
+        sectionColor="#3a464e"
         fadeDistance={900}
         fadeStrength={1.4}
         followCamera={false}
@@ -268,7 +276,7 @@ function Bed({ volume }: { volume: Vec3 }) {
         fadeStrength={2.2}
         infiniteGrid
       />
-      <BuildVolume w={w} d={d} h={h} />
+      {showVolume && <BuildVolume w={w} d={d} h={h} strong={volumeStrong} />}
     </group>
   );
 }
@@ -402,24 +410,6 @@ export function Viewport() {
         </div>
       ) : null}
 
-      {doc.features.length === 0 && kernel.status === "ready" && workspace === "model" && (
-        <div className="empty-state">
-          <h2>Leeres Druckbett</h2>
-          <p>Beginne mit einem Grundkörper – du kannst ihn danach frei verändern.</p>
-          <div className="empty-actions">
-            <button className="chip" onClick={() => execute("file.example")}>
-              <Icon name="shapes" size={15} />
-              Beispiel
-            </button>
-            {PRIMITIVES.slice(0, 3).map((p) => (
-              <button key={p.id} className="chip" onClick={() => execute(p.id)}>
-                <Icon name={p.icon} size={15} />
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {workspace === "model" && <Toolbar />}
       {workspace === "model" && <PropertiesOverlay />}

@@ -876,3 +876,18 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .err-actions button { padding: 4px 9px; border-radius: 6px; font-size: 12px; color: var(--text-2); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
 .err-actions button:hover { color: var(--text); }
 .err-details { margin: 8px 0 0; padding: 8px; border-radius: 6px; background: #0c0f11; color: var(--text-3); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: auto; user-select: text; }
+
+/* AI panel: consistent 42 px controls */
+.chat-setup .segmented.sm > button { height: 36px; font-size: 14px; }
+.chat-setup .segmented { padding: 3px; }
+.chat-key { height: 42px; }
+.chat-key input { font-size: 14px; }
+.chat-setup .btn-primary { height: 42px; font-size: 14px; }
+.model-button { height: 40px; font-size: 14px; padding: 0 10px; }
+.chat-input textarea { min-height: 44px; height: 44px; padding: 12px 46px 12px 13px; font-size: 14px; }
+.chat-send { bottom: 18px; width: 30px; height: 30px; }
+.chat-input textarea::placeholder { color: #5d676f; }
+/* Action bar: quieter labels, icons stay brighter */
+.toolbar .tool { font-size: 12px; color: #8d979f; }
+.toolbar .tool:hover:not(:disabled), .toolbar .tool.active { color: var(--text); }
+.toolbar .tool.active { color: var(--accent); }

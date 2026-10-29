@@ -17,8 +17,20 @@ export type Projection = "perspective" | "orthographic";
 
 export type Inertia = "off" | "light";
 
-export const useSettings = create<{ quality: Quality; projection: Projection; inertia: Inertia }>()(
-  persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection, inertia: "off" as Inertia }), { name: "albedo.settings" }),
+interface ViewSettings {
+  quality: Quality;
+  projection: Projection;
+  inertia: Inertia;
+  /** Build-volume frame (off by default: only the floor grid). */
+  showVolume: boolean;
+  volumeStrong: boolean;
+}
+
+export const useSettings = create<ViewSettings>()(
+  persist(
+    (): ViewSettings => ({ quality: "high", projection: "perspective", inertia: "off", showVolume: false, volumeStrong: false }),
+    { name: "albedo.settings" },
+  ),
 );
 
 export interface AiSettings {

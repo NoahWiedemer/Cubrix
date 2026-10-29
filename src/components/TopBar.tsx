@@ -33,6 +33,8 @@ export function TopBar() {
   const projection = useSettings((s) => s.projection);
   const quality = useSettings((s) => s.quality);
   const inertia = useSettings((s) => s.inertia);
+  const showVolume = useSettings((s) => s.showVolume);
+  const volumeStrong = useSettings((s) => s.volumeStrong);
 
   const commitName = (value: string) => {
     setEditing(false);
@@ -116,6 +118,10 @@ export function TopBar() {
               <MenuItem icon="perspective" label="Perspektive" shortcut="o" checked={projection === "perspective"} onClick={() => execute("view.projection", { mode: "perspective" })} />
               <MenuItem icon="projection" label="Orthografisch" shortcut="o" checked={projection === "orthographic"} onClick={() => execute("view.projection", { mode: "orthographic" })} />
               <MenuItem icon="iso" label="Isometrisch" shortcut="i" onClick={() => { execute("view.iso"); viewMenu.setOpen(false); }} />
+              <MenuItem icon="boxes" label="Bauraum anzeigen" checked={showVolume} onClick={() => useSettings.setState({ showVolume: !showVolume })} />
+              {showVolume && (
+                <MenuItem icon="sparkle" label="Bauraum deutlich" checked={volumeStrong} onClick={() => useSettings.setState({ volumeStrong: !volumeStrong })} />
+              )}
               <MenuItem icon="orient" label="Kamera-Trägheit" checked={inertia === "light"} onClick={() => useSettings.setState({ inertia: inertia === "light" ? "off" : "light" })} />
               <MenuSeparator />
               <MenuTitle>Darstellungsqualität</MenuTitle>

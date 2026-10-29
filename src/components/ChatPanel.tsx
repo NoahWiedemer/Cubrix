@@ -127,7 +127,6 @@ function ModelMenu() {
       <button className="model-button" onClick={() => pop.setOpen(!pop.open)}>
         <ProviderLogo mark={markFor(provider)} />
         <span className="model-name">{current.name}</span>
-        {current.effort && <EffortDots effort={effort} />}
         <ChevronDown size={14} />
       </button>
       {pop.open && (
@@ -171,15 +170,6 @@ function ModelLabel({ m }: { m: ModelInfo }) {
     <span className="model-label">
       {m.name}
       {m.hint && <span className="model-hint">{m.hint}</span>}
-    </span>
-  );
-}
-
-function EffortDots({ effort }: { effort: Effort }) {
-  const n = effort === "low" ? 1 : effort === "medium" ? 2 : 3;
-  return (
-    <span className="effort-dots" title={`Denktiefe: ${EFFORT_LABELS[effort]}`}>
-      {[1, 2, 3].map((i) => <i key={i} className={i <= n ? "on" : ""} />)}
     </span>
   );
 }
