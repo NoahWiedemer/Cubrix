@@ -48,16 +48,15 @@ export interface AiSettings {
   provider: "anthropic" | "openai";
   model: { anthropic: string; openai: string };
   effort: "low" | "medium" | "high";
-  /** Let the model use the provider's web search. */
-  webSearch: boolean;
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium", webSearch: true }), {
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium" }), {
     name: "cubrix.ai",
-    version: 5,
+    version: 6,
     // v3: GPT-6.1 Terra became the OpenAI default. v4: only the current lineup is offered,
     // so ids outside it (older or list-extended models) fall back to the defaults.
+    // v6: web search/fetch is always available (the model uses it only when needed), the toggle is gone.
     migrate: (s, version) => {
       const old = s as Partial<AiSettings>;
       const ANTHROPIC = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
@@ -70,7 +69,6 @@ export const useAiSettings = create<AiSettings>()(
           openai: OPENAI.includes(openai ?? "") ? openai! : "gpt-6.1-terra",
         },
         effort: old.effort ?? "medium",
-        webSearch: old.webSearch ?? true,
       };
     },
   }),

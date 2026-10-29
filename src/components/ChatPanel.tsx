@@ -78,8 +78,6 @@ function ModelMenu() {
               </div>
             </>
           )}
-          <MenuSeparator />
-          <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { pop.setOpen(false); useProviderDialog.setState({ open: true }); }} />
         </Menu>
       )}
     </div>
@@ -172,7 +170,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
 
 export function ChatPanel() {
   const { entries, running } = useChat();
-  const { provider, model, effort, webSearch } = useAiSettings();
+  const { provider, model, effort } = useAiSettings();
   const keys = useKeys((s) => s.keys);
   const keysLoaded = useKeys((s) => s.loaded);
   const [demo, setDemo] = useState(false);
@@ -241,7 +239,8 @@ export function ChatPanel() {
     try {
       const api = await runAgent({
         groupId,
-        webSearch: useAiSettings.getState().webSearch,
+        // Always offered; the system prompt keeps the model from searching without need.
+        webSearch: true,
         provider,
         model: info.id,
         effort: info.effort ? effort : null,
@@ -297,7 +296,6 @@ export function ChatPanel() {
             <Menu style={{ top: 34, right: 0 }}>
               <MenuItem icon="file" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
               <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
-              <MenuItem icon="globe" label="Websuche erlauben (nur bei Bedarf)" checked={webSearch} onClick={() => useAiSettings.setState({ webSearch: !webSearch })} />
             </Menu>
           )}
         </div>
