@@ -1,7 +1,9 @@
 // Right-click menu for bodies (viewport and object tree); the action bar stays minimal.
 import { useEffect } from "react";
 import { create } from "zustand";
-import { Menu, MenuSeparator } from "../ui/Menu";
+import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
+import { getCommand, isEnabled } from "../core/commands";
+import { openValuePopover } from "./ValuePopover";
 import { CommandItem } from "../ui/CommandItem";
 
 export const useContextMenu = create<{ at: { x: number; y: number } | null }>(() => ({ at: null }));
@@ -32,8 +34,19 @@ export function ContextMenu() {
         <CommandItem id="object.dropToBed" onDone={done} />
         <CommandItem id="object.setVisibility" label="Ein-/Ausblenden" onDone={done} />
         <MenuSeparator />
-        <CommandItem id="object.fillet" onDone={done} />
-        <CommandItem id="object.chamfer" onDone={done} />
+        {["object.fillet", "object.chamfer"].map((id) => (
+          <MenuItem
+            key={id}
+            icon={getCommand(id)!.icon}
+            label={`${getCommand(id)!.label} …`}
+            disabled={!isEnabled(id)}
+            onClick={() => {
+              done();
+              // The same spot turns into a compact value input with live preview.
+              openValuePopover({ command: id, param: "radius", at });
+            }}
+          />
+        ))}
         <MenuSeparator />
         <CommandItem id="object.delete" onDone={done} />
       </Menu>

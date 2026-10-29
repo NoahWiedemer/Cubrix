@@ -137,6 +137,25 @@ export async function execute(
   }
 }
 
+/**
+ * Live preview of a document command: shows its result as an uncommitted draft.
+ * Returns an error message (e.g. value too large) instead of throwing; the draft is then cleared.
+ */
+export function previewCommand(id: string, params: Record<string, any>): string | null {
+  const cmd = registry.get(id);
+  if (!cmd || cmd.kind !== "document") return null;
+  try {
+    const res = cmd.apply(getDoc(), withDefaults(cmd.params, params), context("user"));
+    useApp.setState({ draft: res?.doc ?? null });
+    return null;
+  } catch (e) {
+    useApp.setState({ draft: null });
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+export const clearPreview = () => useApp.setState({ draft: null });
+
 /** JSON-Schema view of a command, ready to be handed to an LLM as a tool definition. */
 export function toToolDefinition(cmd: Command) {
   const properties: Record<string, unknown> = {};

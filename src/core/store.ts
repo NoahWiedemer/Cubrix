@@ -38,6 +38,8 @@ interface AppState {
   selection: string[];
   /** Live transform while dragging the gizmo, committed on release. */
   preview: { id: string; transform: Transform } | null;
+  /** Uncommitted document shown while a value is being typed (live preview); never in history. */
+  draft: ModelDocument | null;
   savedNodeId: string | null;
   filePath: string | null;
   workspace: Workspace;
@@ -77,6 +79,7 @@ export const useApp = create<AppState>((set, get) => ({
   currentId: initialRoot.id,
   selection: [],
   preview: null,
+  draft: null,
   savedNodeId: initialRoot.id,
   filePath: null,
   workspace: "model",
@@ -105,6 +108,7 @@ export const useApp = create<AppState>((set, get) => ({
       currentId: node.id,
       selection: entry.selection,
       preview: null,
+      draft: null,
     });
   },
 
@@ -126,6 +130,7 @@ export const useApp = create<AppState>((set, get) => ({
       currentId: id,
       selection: target.selection.filter((s) => existing.has(s)),
       preview: null,
+      draft: null,
     });
   },
 
@@ -137,6 +142,7 @@ export const useApp = create<AppState>((set, get) => ({
       currentId: root.id,
       selection: [],
       preview: null,
+      draft: null,
       savedNodeId: root.id,
       filePath,
     });
@@ -149,7 +155,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 }));
 
-export const useDoc = () => useApp((s) => s.nodes[s.currentId].doc);
+/** The document on screen: the live draft while previewing, else the current history state. */
+export const useDoc = () => useApp((s) => s.draft ?? s.nodes[s.currentId].doc);
 export const getDoc = () => {
   const s = useApp.getState();
   return s.nodes[s.currentId].doc;

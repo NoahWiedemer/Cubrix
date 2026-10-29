@@ -1032,3 +1032,17 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .toggle .kbd-row { margin-left: 8px; vertical-align: 1px; }
 .field-label { margin-top: 6px; font-size: 13px; color: var(--text-3); }
 .slider-row b { white-space: nowrap; min-width: 56px; text-align: right; }
+/* Inline value popover (context menu → Abrunden/Fasen …) */
+.value-pop { position: fixed; z-index: 310; width: 232px; padding: 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 8px; animation: pop-in 120ms var(--ease); }
+.value-pop-label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 550; color: var(--text-2); }
+.value-pop-label svg { color: var(--accent); }
+.value-pop-field { height: 34px; }
+.value-pop-field input { font-size: 14px; text-align: right; }
+.value-pop-field.invalid, .value-pop-field.invalid:focus-within { border-color: #e5866f; box-shadow: 0 0 0 3px rgba(229, 134, 111, 0.15); }
+.value-pop-hints { display: flex; gap: 10px; font-size: 12px; color: var(--text-3); }
+.value-pop-hints span { display: inline-flex; align-items: center; gap: 4px; }
+.value-pop-error { font-size: 12.5px; line-height: 1.35; color: #eba08f; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } to { opacity: 1; transform: none; } }
+.value-pop { width: 252px; }
+.value-pop-hints { gap: 8px; font-size: 11.5px; white-space: nowrap; }
+.value-pop-hints .keycap { min-width: 16px; padding: 0 3px; font-size: 10.5px; }

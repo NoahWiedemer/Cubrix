@@ -8,6 +8,7 @@ import { Viewport } from "./components/Viewport";
 import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 import { TooltipLayer } from "./ui/Tooltip";
+import { ValuePopover } from "./components/ValuePopover";
 import { ContextMenu } from "./components/ContextMenu";
 import { HelpCenter } from "./help/HelpCenter";
 
@@ -34,6 +35,7 @@ export function App() {
       <Toasts />
       <TooltipLayer />
       <ContextMenu />
+      <ValuePopover />
       <HelpCenter />
     </div>
   );
