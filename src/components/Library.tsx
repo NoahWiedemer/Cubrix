@@ -189,7 +189,6 @@ export function Library() {
           </section>
         ))}
         {!sections.length && <div className="menu-note">Keine Form gefunden.</div>}
-        <p className="lib-foot">Klicken setzt die Form frei aufs Bett, Ziehen legt sie genau dort ab – auch oben auf einen Körper.</p>
       </div>
     </div>
   );

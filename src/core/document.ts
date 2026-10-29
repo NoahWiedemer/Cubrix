@@ -52,8 +52,8 @@ export type PrimitiveFeature = {
 export interface BooleanFeature extends FeatureBase {
   type: "boolean";
   op: BooleanOp;
-  /** [target, tool]. Child transforms are relative to this feature. */
-  children: [Feature, Feature];
+  /** [target, ...tools] (one or more tools). Child transforms are relative to this feature. */
+  children: [Feature, ...Feature[]];
 }
 
 /** 2D shapes on the bed plane (mm, CAD X/Y). */

@@ -221,7 +221,6 @@ function Dimensions({ f }: { f: Feature }) {
       <div className={`field-caption ${cols(fields.length)}`} style={fields.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
         {fields.map(({ key, label }) => <span key={key}>{label}</span>)}
       </div>
-      <p className="subtle-hint">Tipp: „150%“ in ein Feld tippen skaliert das ganze Objekt.</p>
     </div>
   );
 }

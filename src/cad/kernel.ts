@@ -109,7 +109,7 @@ export function ensureFont(font: string, bold: boolean): Promise<boolean> {
 /** Loads the system fonts a feature uses; unavailable ones are swapped for Inter. */
 async function withFonts(f: Feature): Promise<Feature> {
   if (f.type === "text") return (await ensureFont(f.params.font, f.params.bold)) ? f : { ...f, params: { ...f.params, font: "inter" } };
-  if (f.type === "boolean") return { ...f, children: (await Promise.all(f.children.map(withFonts))) as [Feature, Feature] };
+  if (f.type === "boolean") return { ...f, children: (await Promise.all(f.children.map(withFonts))) as [Feature, ...Feature[]] };
   return f;
 }
 

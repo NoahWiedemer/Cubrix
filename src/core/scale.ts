@@ -76,7 +76,7 @@ export function scaleDimensions(f: Feature, s: Vec3): Feature {
         children: f.children.map((c) => ({
           ...scaleDimensions(c, s),
           transform: { ...c.transform, position: c.transform.position.map((v, i) => r2(v * s[i])) as Vec3 },
-        })) as [Feature, Feature],
+        })) as [Feature, ...Feature[]],
       };
   }
 }

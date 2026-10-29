@@ -61,6 +61,23 @@ export function modelSnapshot() {
   };
 }
 
+/** One short line per object (id, type, name, base position, size) for every request. */
+export function sceneSummary(): string {
+  const doc = getDoc();
+  const entries = useMeshes.getState().entries;
+  const r = (n: number) => Math.round(n * 10) / 10;
+  const lines = doc.features.map((f) => {
+    const b = isSolid(f) && entries[geometryKey(f)] ? worldBox(f, entries) : null;
+    const size = b ? ` size=${r(b.max.x - b.min.x)}×${r(b.max.y - b.min.y)}×${r(b.max.z - b.min.z)}` : "";
+    const rot = f.transform.rotation.some((v) => v) ? ` rot=[${f.transform.rotation.map(r).join(",")}]` : "";
+    const hidden = f.visible ? "" : " (ausgeblendet)";
+    const kind = f.type === "boolean" ? `boolean:${f.op}` : f.type;
+    return `${f.id} ${kind} "${f.name}" pos=[${f.transform.position.map(r).join(",")}]${size}${rot}${hidden}`;
+  });
+  const sel = useApp.getState().selection;
+  return `${lines.length ? lines.join("\n") : "(leer)"}${sel.length ? `\nAuswahl des Nutzers: ${sel.join(", ")}` : ""}`.slice(0, 6000);
+}
+
 export function systemPrompt(): string {
   const doc = getDoc();
   const help = HELP_TOPICS.map((t) => `- ${t.title}${t.status === "soon" ? " (kommt bald)" : ""}: ${t.summary}`).join("\n");
@@ -68,15 +85,18 @@ export function systemPrompt(): string {
 
 Koordinaten: Millimeter, Z zeigt nach oben, das Druckbett liegt bei Z = 0 und ist um den Ursprung zentriert (${doc.printer.name}, ${doc.printer.volume.join(" × ")} mm, also X/Y von −${doc.printer.volume[0] / 2} bis +${doc.printer.volume[0] / 2}). Die Position eines Grundkörpers ist die Mitte seiner Unterseite; neue Körper stehen auf dem Bett. Kugeln liegen auf dem Bett auf.
 
-Arbeitsweise:
-- Ändere das Modell ausschließlich über die Werkzeuge (Befehle). Jede Änderung landet im Verlauf und kann rückgängig gemacht werden.
-- Bei mehrteiligen Aufgaben: plane kurz, baue Schritt für Schritt, prüfe mit get_model (und bei Bedarf get_screenshot) und korrigiere.
-- Löcher und Aussparungen: Werkzeugkörper anlegen, dann boolean.subtract mit targetId und toolId. Verbinden: boolean.union.
+Arbeitsweise (schnell und mit wenigen Aufrufen):
+- Ändere das Modell ausschließlich über die Werkzeuge. Jede Änderung landet im Verlauf.
+- Plane zuerst die ganze Aufgabe, dann setze sie mit möglichst WENIGEN Aufrufen um. Du kannst mehrere Werkzeuge in einer Antwort aufrufen.
+- Nutze Sammelbefehle, nie Schleifen über Einzelaufrufe: shapes__createMany (viele Körper auf einmal), object__pattern (linear/grid/circular/mirror), objects__transformMany, object__delete mit ids, boolean__subtract/union/intersect mit targetId und toolIds (alle Werkzeuge in einem Schnitt).
+- Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
+- Beispiel Spielwürfel: primitive__box 20 mm (mit fillet), dann EIN shapes__createMany mit allen 21 Augen-Kugeln (Positionen auf den 6 Seiten), dann EIN boolean__subtract mit toolIds = alle Augen. Fertig in 3 Aufrufen.
 - Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
 - Fragen zur App beantwortest du anhand dieser Hilfe-Themen:
 ${help}
 
-Aktuelles Modell (gekürzt): ${JSON.stringify(modelSnapshot()).slice(0, 4000)}`;
+Aktuelles Modell (id typ "name" pos=Fußpunkt size=B×T×H in mm):
+${sceneSummary()}`;
 }
 
 export interface AgentEvents {
@@ -100,7 +120,8 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   events.onStep({ label: node?.label ?? cmd.label, nodeId: node?.id, ok: true });
   // New objects are reported by id so the model can refer to them (the UI selection stays the user's).
   const created = node && node.parentId ? node.doc.features.filter((f) => !useApp.getState().nodes[node.parentId!].doc.features.some((g) => g.id === f.id)).map((f) => ({ id: f.id, name: f.name })) : [];
-  return { ok: true, command: id, changed: !!node, created };
+  // Compact on purpose: the model already gets the scene summary each turn.
+  return created.length ? { ok: true, created } : { ok: true, changed: !!node };
 }
 
 async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
@@ -124,7 +145,7 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
         const steps = (block.input.steps as { command: string; params?: Record<string, unknown> }[]) ?? [];
         const done = [];
         for (const s of steps) done.push(await runCommand(s.command, s.params ?? {}, group, events));
-        return result({ ok: true, steps: done.length, created: done.flatMap((d) => d.created) });
+        return result({ ok: true, steps: done.length, created: done.flatMap((d) => ("created" in d ? d.created : [])) });
       }
       default:
         return result(await runCommand(commandId(block.name), block.input, group, events));

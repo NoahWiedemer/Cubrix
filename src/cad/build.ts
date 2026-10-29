@@ -167,7 +167,10 @@ export function buildLocal(f: Feature): Shape3D {
   if (f.type === "sketch") throw new Error("Skizzen sind keine Körper.");
   let shape: Shape3D;
   if (f.type === "boolean") {
-    const [a, b] = f.children.map((c) => buildPlaced(c));
+    // Many tools: fuse them first, then one boolean against the target (much faster
+    // than one cut per tool).
+    const [a, ...tools] = f.children.map((c) => buildPlaced(c));
+    const b = tools.reduce((acc, t) => acc.fuse(t));
     shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
   } else if (f.type === "extrude") {
     shape = buildExtrusion(f.profile, f.height);

@@ -222,6 +222,129 @@ defineCommand({
   },
 });
 
+/** Places one primitive spec (as `primitive.<type>` would) on a document; returns the new doc + id. */
+function addPrimitive(doc: ModelDocument, spec: Record<string, any>, ctx: CommandContext) {
+  const cmd = getCommand(`primitive.${spec.type}`) as DocumentCommand | undefined;
+  if (!cmd) throw new Error(`Unbekannte Form „${spec.type}“`);
+  const params: Record<string, unknown> = { ...(spec.params ?? {}) };
+  if (spec.position) params.position = spec.position;
+  if (spec.name) params.name = spec.name;
+  // Fill defaults like execute() would.
+  for (const [k, sp] of Object.entries(cmd.params)) if (params[k] === undefined && "default" in sp && sp.default !== undefined) params[k] = sp.default;
+  const res = cmd.apply(doc, params, { ...ctx, doc })!;
+  let next = res.doc;
+  const id = res.selection![0];
+  if (spec.rotation) next = updateFeature(next, id, (f) => ({ ...f, transform: { ...f.transform, rotation: (spec.rotation as Vec3).map(round) as Vec3 } }));
+  return { doc: next, id };
+}
+
+defineCommand({
+  id: "shapes.createMany",
+  kind: "document",
+  label: "Formen erstellen",
+  description:
+    "Erstellt viele Grundkörper in EINEM Schritt. shapes: [{type: 'box'|'cylinder'|'sphere'|…, params: {…mm}, position: [x,y,z], rotation?: [rx,ry,rz], name?}]. Gibt die neuen IDs zurück.",
+  icon: "shapes",
+  params: { shapes: { type: "list", description: "Liste der Formen [{type, params, position, rotation?, name?}]" } },
+  apply(doc, p, ctx) {
+    const specs = (typeof p.shapes === "string" ? JSON.parse(p.shapes) : p.shapes) as Record<string, any>[];
+    if (!Array.isArray(specs) || !specs.length) throw new Error("shapes muss eine Liste sein");
+    if (specs.length > 500) throw new Error("Höchstens 500 Formen auf einmal");
+    let next = doc;
+    const ids: string[] = [];
+    for (const spec of specs) {
+      const r = addPrimitive(next, spec, ctx);
+      next = r.doc;
+      ids.push(r.id);
+    }
+    return { doc: next, selection: ids, label: `${specs.length} Formen erstellen` };
+  },
+});
+
+defineCommand({
+  id: "object.pattern",
+  kind: "document",
+  label: "Muster",
+  description:
+    "Vervielfältigt ein Objekt in EINEM Schritt: kind 'linear' (count, step [dx,dy,dz]), 'grid' (count [nx,ny], step [dx,dy]), 'circular' (count, center [x,y], angle° gesamt, Standard 360) oder 'mirror' (axis 'x'|'y', plane-Koordinate at). Das Original bleibt; Kopien werden hinzugefügt.",
+  icon: "duplicate",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    kind: { type: "enum", options: ["linear", "grid", "circular", "mirror"], description: "Musterart" },
+    count: { type: "number", optional: true, description: "Anzahl inkl. Original (linear/circular; grid: Anzahl je Richtung, oder countY für Y)" },
+    countY: { type: "number", optional: true, description: "grid: Anzahl in Y (Standard = count)" },
+    step: { type: "vec3", unit: "mm", optional: true, description: "Abstand [dx, dy, dz] (linear/grid)" },
+    center: { type: "vec3", unit: "mm", optional: true, description: "Drehzentrum (circular), Standard: Bettmitte" },
+    angle: { type: "number", unit: "°", optional: true, description: "Gesamtwinkel (circular), Standard 360" },
+    axis: { type: "enum", options: ["x", "y"], optional: true, description: "Spiegelachse (mirror)" },
+    at: { type: "number", unit: "mm", optional: true, description: "Lage der Spiegelebene (mirror), Standard 0" },
+  },
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f) throw new Error("Objekt nicht gefunden");
+    const count = p.count;
+    const step = (p.step ?? [10, 0, 0]) as number[];
+    const [x0, y0, z0] = f.transform.position;
+    const places: { pos: Vec3; rotZ?: number }[] = [];
+    if (p.kind === "linear") {
+      const n = Number(count ?? 2);
+      for (let i = 1; i < n; i++) places.push({ pos: [x0 + step[0] * i, y0 + (step[1] ?? 0) * i, z0 + (step[2] ?? 0) * i] });
+    } else if (p.kind === "grid") {
+      const nx = Number(count ?? 2);
+      const ny = Number(p.countY ?? count ?? 2);
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) places.push({ pos: [x0 + step[0] * i, y0 + (step[1] ?? step[0]) * j, z0] });
+    } else if (p.kind === "circular") {
+      const n = Number(count ?? 6);
+      const [cx, cy] = (p.center ?? [0, 0, 0]) as number[];
+      const total = p.angle ?? 360;
+      const da = (total >= 360 ? total / n : total / Math.max(1, n - 1)) * (Math.PI / 180);
+      const rx = x0 - cx, ry = y0 - cy;
+      for (let i = 1; i < n; i++) {
+        const a = da * i;
+        places.push({ pos: [cx + rx * Math.cos(a) - ry * Math.sin(a), cy + rx * Math.sin(a) + ry * Math.cos(a), z0], rotZ: (a * 180) / Math.PI });
+      }
+    } else {
+      const at = p.at ?? 0;
+      places.push({ pos: p.axis === "y" ? [x0, 2 * at - y0, z0] : [2 * at - x0, y0, z0] });
+    }
+    if (!places.length) return null;
+    if (places.length > 500) throw new Error("Höchstens 500 Kopien auf einmal");
+    const copies = places.map(({ pos, rotZ }) => {
+      const c = cloneFeature(f);
+      const [rx, ry, rz] = c.transform.rotation;
+      return { ...c, name: uniqueName(doc, f.name.replace(/\s\d+$/, "")), transform: { position: pos.map(round) as Vec3, rotation: [rx, ry, round(rz + (rotZ ?? 0))] as Vec3 } };
+    });
+    // Unique names in order.
+    let named = doc;
+    for (const c of copies) {
+      c.name = uniqueName(named, f.name.replace(/\s\d+$/, ""));
+      named = { ...named, features: [...named.features, c] };
+    }
+    return { doc: named, selection: [f.id, ...copies.map((c) => c.id)], label: `${f.name}: Muster (${copies.length + 1}×)` };
+  },
+});
+
+defineCommand({
+  id: "objects.transformMany",
+  kind: "document",
+  label: "Mehrere transformieren",
+  description: "Setzt Position und/oder Drehung vieler Objekte in EINEM Schritt. items: [{id, position?: [x,y,z], rotation?: [rx,ry,rz]}].",
+  icon: "move",
+  params: { items: { type: "list", description: "Liste [{id, position?, rotation?}]" } },
+  apply(doc, p) {
+    const items = (typeof p.items === "string" ? JSON.parse(p.items) : p.items) as { id: string; position?: Vec3; rotation?: Vec3 }[];
+    let next = doc;
+    for (const it of items) {
+      if (!findFeature(next, it.id)) throw new Error(`Objekt ${it.id} nicht gefunden`);
+      next = updateFeature(next, it.id, (f) => ({
+        ...f,
+        transform: { position: (it.position ?? f.transform.position).map(round) as Vec3, rotation: (it.rotation ?? f.transform.rotation).map(round) as Vec3 },
+      }));
+    }
+    return next === doc ? null : { doc: next, label: `${items.length} Objekte transformieren` };
+  },
+});
+
 defineCommand({
   id: "object.move",
   kind: "document",
@@ -448,7 +571,7 @@ defineCommand({
 export function textOf(f: Feature | undefined): TextFeature | undefined {
   if (!f) return undefined;
   if (f.type === "text") return f;
-  if (f.type === "boolean" && f.children[1].type === "text" && f.children[1].params.onFace) return f.children[1];
+  if (f.type === "boolean" && f.children.length === 2 && f.children[1].type === "text" && f.children[1].params.onFace) return f.children[1];
   return undefined;
 }
 
@@ -799,14 +922,18 @@ function defineBoolean(op: BooleanOp, icon: IconName, label: string, description
     icon,
     params: {
       targetId: { type: "id", optional: true, description: "Zielkörper (Standard: zuerst ausgewähltes Objekt)" },
-      toolId: { type: "id", optional: true, description: "Werkzeugkörper (Standard: als zweites ausgewähltes Objekt)" },
+      toolId: { type: "id", optional: true, description: "Ein Werkzeugkörper" },
+      toolIds: { type: "ids", optional: true, description: "Mehrere Werkzeugkörper auf einmal (ein Schritt, schneller als einzeln)" },
     },
-    isEnabled: (ctx) => ctx.selection.length === 2,
+    isEnabled: (ctx) => ctx.selection.length >= 2,
     apply(doc, p, ctx): DocumentResult {
       const target = findFeature(doc, p.targetId ?? ctx.selection[0]);
-      const tool = findFeature(doc, p.toolId ?? ctx.selection[1]);
-      if (!target || !tool || target.id === tool.id) throw new Error("Bitte genau zwei Objekte auswählen");
-      if (!isSolid(target) || !isSolid(tool)) throw new Error("Skizzen erst mit „In 3D ziehen“ zu Körpern machen");
+      const toolIdList: string[] = p.toolIds ?? (p.toolId ? [p.toolId] : ctx.selection.filter((id) => id !== (p.targetId ?? ctx.selection[0])));
+      const tools = toolIdList.map((id) => findFeature(doc, id)).filter((t): t is Feature => !!t && t.id !== target?.id);
+      if (!target || !tools.length) throw new Error("Bitte einen Zielkörper und mindestens ein Werkzeug angeben");
+      if (tools.length !== toolIdList.length) throw new Error("Ein Werkzeugkörper wurde nicht gefunden");
+      if (!isSolid(target) || tools.some((t) => !isSolid(t))) throw new Error("Skizzen erst über die Höhe zu Körpern machen");
+      const tool = tools[0];
       const origin = target.transform.position;
       const rel = (f: Feature): Feature => ({
         ...f,
@@ -820,16 +947,18 @@ function defineBoolean(op: BooleanOp, icon: IconName, label: string, description
         name: target.name,
         visible: true,
         transform: { position: [...origin], rotation: [0, 0, 0] },
-        children: [rel(target), rel(tool)],
+        children: [rel(target), ...tools.map(rel)],
       };
+      const used = new Set([target.id, ...tools.map((t) => t.id)]);
       const idx = doc.features.findIndex((f) => f.id === target.id);
-      const features = doc.features.filter((f) => f.id !== target.id && f.id !== tool.id);
+      const features = doc.features.filter((f) => !used.has(f.id));
       features.splice(Math.min(idx, features.length), 0, result);
       const sign = op === "union" ? "+" : op === "subtract" ? "−" : "∩";
+      const toolNames = tools.length === 1 ? tool.name : `${tools.length} Körper`;
       return {
         doc: { ...doc, features },
         selection: [result.id],
-        label: `${BOOLEAN_LABELS[op]}: ${target.name} ${sign} ${tool.name}`,
+        label: `${BOOLEAN_LABELS[op]}: ${target.name} ${sign} ${toolNames}`,
       };
     },
   });

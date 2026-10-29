@@ -67,7 +67,7 @@ export function Toolbar() {
             <CommandTool id="tool.text" active={textTool} tip="Text prägen: auf den Körper klicken" />
           </>
         )}
-        {mode === "pair" && (
+        {(mode === "pair" || mode === "many") && (
           <>
             <CommandTool id="boolean.union" />
             <CommandTool id="boolean.subtract" />

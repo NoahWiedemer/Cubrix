@@ -13,6 +13,8 @@ export type ParamSpec =
   | { type: "vec3"; description: string; unit?: "mm" | "°"; default?: [number, number, number]; optional?: boolean }
   | { type: "id"; description: string; optional?: boolean }
   | { type: "ids"; description: string; optional?: boolean }
+  /** A list of objects (batch specs); passed through as-is. */
+  | { type: "list"; description: string; optional?: boolean }
   | { type: "enum"; description: string; options: readonly string[]; default?: string; optional?: boolean };
 
 export type ParamSchema = Record<string, ParamSpec>;
@@ -169,6 +171,8 @@ export function toToolDefinition(cmd: Command) {
         ? { ...base, type: "array", items: { type: "number" }, minItems: 3, maxItems: 3 }
         : spec.type === "ids"
           ? { ...base, type: "array", items: { type: "string" } }
+          : spec.type === "list"
+            ? { ...base, type: "array", items: { type: "object" } }
           : spec.type === "id"
             ? { ...base, type: "string" }
             : spec.type === "enum"

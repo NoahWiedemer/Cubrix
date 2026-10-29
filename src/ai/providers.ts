@@ -205,6 +205,7 @@ async function openaiTurn(
       instructions: system,
       input: openaiInput(messages),
       tools: tools.map((x) => ({ type: "function", name: x.name, description: x.description, parameters: x.input_schema })),
+      parallel_tool_calls: true,
       ...(effort ? { reasoning: { effort } } : {}),
     },
     parse,
