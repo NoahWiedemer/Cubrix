@@ -107,6 +107,11 @@ export interface ExtrudeFeature extends FeatureBase {
   height: number;
   /** 2D corner rounding of the profile in mm (rounded outline, not 3D edge fillets). */
   corner?: number;
+  /**
+   * Turned instead of extruded: the profile spins once around a vertical axis left of it
+   * (`offset` mm from its left edge; 0 = solid, > 0 = ring/tube). `height` is unused then.
+   */
+  revolve?: { offset: number };
 }
 
 export interface TextFeatureParams {
@@ -433,7 +438,7 @@ export function geometryKey(f: Feature): string {
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "sketch") return { ...base, s: x.shapes };
-    if (x.type === "extrude") return { ...base, pr: x.profile, h: x.height };
+    if (x.type === "extrude") return { ...base, pr: x.profile, h: x.revolve ? 0 : x.height, rv: x.revolve, co: x.corner };
     if (x.type === "import") return { ...base, a: x.assetId, s: x.scale };
     return { ...base, p: x.params };
   };

@@ -1,6 +1,6 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, FaceFinder, makeBaseBox, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
@@ -70,6 +70,14 @@ function applyShell(shape: Shape3D, f: Feature): Shape3D {
     // On rounded bodies OCC returns the offset as a shell; it must be a solid to cut.
     const offset = makeOffset(shape as never, -t) as Shape3D;
     inner = offset.constructor.name === "Shell" ? (makeSolid([offset as never]) as Shape3D) : offset;
+    // A turned body whose profile touches the axis: OCC's offset leaves a thin core of
+    // radius t along the axis. Fill it so the cavity is clean.
+    if (f.type === "extrude" && f.revolve && f.revolve.offset === 0) {
+      const [ilo, ihi] = inner.boundingBox.bounds;
+      const cx = (lo[0] + hi[0]) / 2;
+      const cy = (lo[1] + hi[1]) / 2;
+      inner = inner.fuse(makeCylinder(t + 0.05, ihi[2] - ilo[2], [cx, cy, ilo[2]])).simplify();
+    }
     closed = shape.cut(inner);
   } catch {
     throw (f.chamfer ?? 0) > 0 ? fail("mit gefasten Kanten noch nicht aushöhlen. Nimm stattdessen Abrunden.") : tooThick();
@@ -77,9 +85,10 @@ function applyShell(shape: Shape3D, f: Feature): Shape3D {
   const vClosed = measureVolume(closed);
   if (!(vClosed > 0 && vClosed < measureVolume(shape) - 1e-6)) throw tooThick();
   if (shell.open === "none") return closed;
-  // An open shell is the closed one minus the wall on that side: it must be smaller and
-  // lie completely inside it. OCC's thick solid sometimes returns junk on rounded
-  // bodies; then the cavity is pushed through the wall with a boolean instead.
+  // An open shell is the closed one minus the wall on that side: the cavity's flat face
+  // there is pushed out through the wall. OCC's thick solid is the fallback; it sometimes
+  // returns junk on curved bodies, so every result must be smaller than the closed shell
+  // and lie completely inside it.
   const valid = (r: Shape3D | null) => {
     if (!r || r.isNull) return false;
     const v = measureVolume(r);
@@ -93,10 +102,15 @@ function applyShell(shape: Shape3D, f: Feature): Shape3D {
       return null;
     }
   };
-  const dz = (shell.open === "top" ? 1 : -1) * (t + 0.5);
-  const result =
-    attempt(() => shape.shell(t, (finder) => finder.inPlane("XY", z))) ??
-    attempt(() => shape.cut(inner.fuse(inner.clone().translate(0, 0, dz))));
+  const up = shell.open === "top" ? 1 : -1;
+  const pushThrough = () => {
+    const [ilo, ihi] = inner.boundingBox.bounds;
+    // The cavity face may come in several pieces (e.g. around a turned body's axis).
+    const faces = new FaceFinder().inPlane("XY", up > 0 ? ihi[2] : ilo[2]).find(inner);
+    if (!faces.length) throw new Error("no flat cavity face");
+    return faces.reduce((acc, face) => acc.cut(basicFaceExtrusion(face, new Vector([0, 0, up * (t + 1)])).translate(0, 0, -up * 0.01)), closed);
+  };
+  const result = attempt(pushThrough) ?? attempt(() => shape.shell(t, (finder) => finder.inPlane("XY", z)));
   if (!result) throw tooThick();
   return result;
 }
@@ -227,7 +241,8 @@ function bbox(s: SketchShape) {
 }
 
 /** Closed profiles fused; a profile lying fully inside another one becomes a hole. */
-function buildExtrusion(profile: SketchShape[], height: number, corner = 0): Shape3D {
+/** The closed region of a profile (inner shapes become holes), with optional 2D corner rounding. */
+function profileRegion(profile: SketchShape[], corner = 0): Drawing {
   const closed = profile.filter(isClosed);
   if (!closed.length) throw new Error("Die Skizze enthält keine geschlossene Form.");
   const boxes = closed.map(bbox);
@@ -251,7 +266,25 @@ function buildExtrusion(profile: SketchShape[], height: number, corner = 0): Sha
       throw new EdgeTreatmentError(`Ecken mit ${mm(corner)} abrunden geht hier nicht – kleinerer Radius?`);
     }
   }
-  return region.sketchOnPlane("XY").extrude(height) as Shape3D;
+  return region;
+}
+
+function buildExtrusion(profile: SketchShape[], height: number, corner = 0): Shape3D {
+  return profileRegion(profile, corner).sketchOnPlane("XY").extrude(height) as Shape3D;
+}
+
+/**
+ * Turned body: the profile's Y becomes the height and it spins around a vertical axis
+ * `offset` mm left of its left edge. The axis sits where that edge was, so the body
+ * appears where the profile was drawn.
+ */
+function buildRevolve(profile: SketchShape[], offset: number, corner = 0): Shape3D {
+  const region = profileRegion(profile, corner);
+  const [[minX, minY], [maxX, maxY]] = region.boundingBox.bounds;
+  if (!(maxX > minX && maxY > minY)) throw new Error("Das Profil ist zu klein zum Drehen.");
+  const placed = region.translate([offset - minX, -minY]);
+  const solid = placed.sketchOnPlane("XZ").revolve([0, 0, 1]) as Shape3D;
+  return solid.translate(minX - offset, (minY + maxY) / 2, 0);
 }
 
 /** Parsed imports (STL/STEP), normalised to stand centred on z = 0; filled by the worker. */
@@ -277,7 +310,7 @@ export function buildLocal(f: Feature): Shape3D {
     if (!base) throw new Error("Importierte Datei fehlt im Projekt.");
     shape = f.scale !== 1 ? base.clone().scale(f.scale, [0, 0, 0]) : base.clone();
   } else if (f.type === "extrude") {
-    shape = buildExtrusion(f.profile, f.height, f.corner ?? 0);
+    shape = f.revolve ? buildRevolve(f.profile, f.revolve.offset, f.corner ?? 0) : buildExtrusion(f.profile, f.height, f.corner ?? 0);
   } else if (f.type === "text") {
     // On a face the text overlaps the surface by 0.01 mm so the boolean is clean:
     // embossed text starts just below the face, engraved text pokes just above it.

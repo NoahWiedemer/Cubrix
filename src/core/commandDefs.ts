@@ -1135,7 +1135,12 @@ defineCommand({
     const { id, name, visible, transform } = f;
     const next: Feature =
       height > 0
-        ? { id, name, visible, transform, type: "extrude", profile: shapes, height, fillet: f.fillet, chamfer: f.chamfer, ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}) }
+        ? {
+            id, name, visible, transform, type: "extrude", profile: shapes, height, fillet: f.fillet, chamfer: f.chamfer, shell: f.shell,
+            ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}),
+            // A turned body stays turned unless a height is set explicitly (then it is extruded).
+            ...(f.type === "extrude" && f.revolve && p.height === undefined ? { revolve: f.revolve } : {}),
+          }
         : { id, name, visible, transform, type: "sketch", shapes, ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}) };
     if (JSON.stringify(next) === JSON.stringify(f)) return null;
     const label =
@@ -1143,6 +1148,37 @@ defineCommand({
         ? height > 0 ? `${name} ${height.toLocaleString("de-DE")} mm hochziehen` : `${name} flach machen`
         : `${name}: Größe ändern`;
     return { doc: updateFeature(doc, f.id, () => next), label };
+  },
+});
+
+defineCommand({
+  id: "sketch.revolve",
+  kind: "document",
+  label: "Drehen (Rotationskörper)",
+  description:
+    "Macht aus einer Skizze einen Drehkörper (Vase, Becher, Knopf, Flasche): das Profil dreht sich einmal um eine senkrechte Achse links davon; die Y-Richtung des Profils wird zur Höhe. offset = Abstand der Achse von der linken Profilkante (0 = massiv, > 0 = Ring/Rohr). Zeichne nur die rechte Hälfte des Querschnitts.",
+  icon: "revolve",
+  params: {
+    id: { type: "id", optional: true, description: "Skizzen-ID (Standard: Auswahl)" },
+    offset: { type: "number", unit: "mm", min: 0, optional: true, description: "Abstand der Drehachse zur linken Profilkante (Standard 0)" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 1 && ["sketch", "extrude"].includes(findFeature(ctx.doc, ctx.selection[0])?.type ?? ""),
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f || (f.type !== "sketch" && f.type !== "extrude")) throw new Error("Bitte eine Skizze auswählen.");
+    const shapes = f.type === "sketch" ? f.shapes : f.profile;
+    if (!hasClosedProfile(shapes)) throw new Error("Die Skizze enthält keine geschlossene Form. Schließe den Linienzug am Startpunkt.");
+    const offset = round(Math.max(0, p.offset ?? (f.type === "extrude" ? f.revolve?.offset : undefined) ?? 0));
+    const { id, name, visible, transform } = f;
+    const next: Feature = {
+      id, name, visible, transform, type: "extrude", profile: shapes, height: f.type === "extrude" ? f.height : 10, revolve: { offset },
+      fillet: f.fillet, chamfer: f.chamfer, shell: f.shell, ...(f.corner ? { corner: f.corner } : {}), ...(f.color ? { color: f.color } : {}),
+    };
+    if (JSON.stringify(next) === JSON.stringify(f)) return null;
+    return {
+      doc: updateFeature(doc, f.id, () => next),
+      label: f.type === "extrude" && f.revolve ? `${name}: Achsabstand ${offset.toLocaleString("de-DE")} mm` : `${name} drehen`,
+    };
   },
 });
 

@@ -61,6 +61,7 @@ export function Toolbar() {
         {mode === "single" && single?.type === "sketch" && (
           <>
             {isEnabled("sketch.smooth") && <CommandTool id="sketch.smooth" tip="Kantige Kontur in eine glatte Kurve umwandeln" />}
+            {isEnabled("sketch.revolve") && <CommandTool id="sketch.revolve" label="Drehen" tip="Drehkörper: das Profil dreht sich um eine Achse links davon (Vase, Becher, Knopf)" />}
             <button className="tool" onClick={() => { useSketch.setState({ activeId: single.id }); void execute("workspace.sketch"); }} data-tip="Skizze im 2D-Modus bearbeiten" data-tip-pos="top">
               <Icon name="sketch" size={18} />In 2D bearbeiten
             </button>

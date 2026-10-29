@@ -254,24 +254,38 @@ function ImportSize({ f }: { f: Feature & { type: "import" } }) {
 /** Breite / Tiefe / Höhe of a sketch or extruded profile; Höhe 0 = flat, > 0 extrudes. */
 function ProfileSize({ f }: { f: Feature & { type: "sketch" | "extrude" } }) {
   const b = profileBounds(f.type === "sketch" ? f.shapes : f.profile);
+  const revolve = f.type === "extrude" ? f.revolve : undefined;
   const values = [b ? b.maxX - b.minX : 0, b ? b.maxY - b.minY : 0, f.type === "extrude" ? f.height : 0];
   const keys = ["width", "depth", "height"] as const;
+  // A turned body: profile width and height, plus the axis distance instead of an extrusion height.
+  const shown = revolve ? [0, 1] : [0, 1, 2];
   return (
     <div className="group">
-      <div className="group-label"><span><Icon name="measure" size={15} />Maße</span></div>
+      <div className="group-label"><span><Icon name="measure" size={15} />{revolve ? "Profil" : "Maße"}</span></div>
       <div className="field-row">
-        {values.map((v, i) => (
+        {shown.map((i) => (
           <NumberField
             key={keys[i]}
-            label={"BTH"[i]}
-            value={Math.round(v * 100) / 100}
+            label={revolve ? "BH"[i] : "BTH"[i]}
+            value={Math.round(values[i] * 100) / 100}
             min={i === 2 ? 0 : 0.1}
             onCommit={(n) => void execute("shape.setSize", { id: f.id, [keys[i]]: n })}
             onPercent={(k) => void execute("object.scale", { id: f.id, factor: [k, k, k] })}
           />
         ))}
+        {revolve && (
+          <NumberField
+            label="A"
+            value={revolve.offset}
+            min={0}
+            step={0.5}
+            onCommit={(n) => void execute("sketch.revolve", { id: f.id, offset: n })}
+          />
+        )}
       </div>
-      <div className="field-caption"><span>Breite</span><span>Tiefe</span><span>Höhe</span></div>
+      <div className="field-caption">
+        {revolve ? <><span>Breite</span><span>Höhe</span><span>Achsabstand</span></> : <><span>Breite</span><span>Tiefe</span><span>Höhe</span></>}
+      </div>
     </div>
   );
 }

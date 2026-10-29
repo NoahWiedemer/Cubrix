@@ -348,7 +348,10 @@ input.project-name { outline: none; border-color: var(--accent-line); background
 .vp-overlay { position: absolute; pointer-events: none; }
 .vp-badge {
   position: absolute;
-  left: 14px;
+  /* Top centre: the view-mode switch sits top left. */
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   top: 12px;
   display: flex;
   align-items: center;
