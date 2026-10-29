@@ -1286,3 +1286,24 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .msg-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; font-size: 12px; color: var(--text-3); }
 .source-link { color: var(--accent); padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); font-size: 12px; }
 .source-link:hover { text-decoration: underline; }
+/* AI glow v2: four soft, blurred bands in different greens drifting past each other
+   (own speed, direction and phase each), screen-blended, faded in from the edges. */
+@property --a1 { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@property --a2 { syntax: "<angle>"; initial-value: 120deg; inherits: false; }
+@property --a3 { syntax: "<angle>"; initial-value: 230deg; inherits: false; }
+@property --a4 { syntax: "<angle>"; initial-value: 300deg; inherits: false; }
+.ai-glow > span { position: absolute; inset: -20px; border-radius: 0; padding: 0; opacity: 1; animation: none; filter: blur(22px); mix-blend-mode: screen;
+  -webkit-mask: none; mask: none; }
+.ai-glow { -webkit-mask: linear-gradient(to right, #000, transparent 44px, transparent calc(100% - 44px), #000), linear-gradient(to bottom, #000, transparent 44px, transparent calc(100% - 44px), #000);
+  mask: linear-gradient(to right, #000, transparent 44px, transparent calc(100% - 44px), #000), linear-gradient(to bottom, #000, transparent 44px, transparent calc(100% - 44px), #000);
+  mask-composite: add; -webkit-mask-composite: source-over; }
+.ai-glow.on { opacity: 1; }
+.ai-glow .w1 { background: conic-gradient(from var(--a1), rgba(61, 220, 151, 0.17) 0deg, transparent 70deg, transparent 200deg, rgba(61, 220, 151, 0.12) 250deg, transparent 300deg); animation: ai-w1 9s linear infinite; }
+.ai-glow .w2 { background: conic-gradient(from var(--a2), rgba(43, 196, 176, 0.16) 0deg, transparent 90deg, transparent 360deg); animation: ai-w2 13s linear infinite; }
+.ai-glow .w3 { background: conic-gradient(from var(--a3), rgba(31, 162, 168, 0.15) 0deg, transparent 60deg, transparent 170deg, rgba(123, 232, 198, 0.12) 220deg, transparent 280deg); animation: ai-w3 17s linear infinite; }
+.ai-glow .w4 { background: conic-gradient(from var(--a4), rgba(18, 140, 126, 0.16) 0deg, transparent 110deg, transparent 360deg); animation: ai-w4 11s linear infinite reverse; }
+@keyframes ai-w1 { to { --a1: 360deg; } }
+@keyframes ai-w2 { from { --a2: 480deg; } to { --a2: 120deg; } }
+@keyframes ai-w3 { to { --a3: 590deg; } }
+@keyframes ai-w4 { to { --a4: 660deg; } }
+@media (prefers-reduced-motion: reduce) { .ai-glow > span { animation: none !important; } }

@@ -2,6 +2,7 @@
 // meta tools (model JSON, screenshot, scripts). All changes go through the
 // command registry with source "ai", grouped per response in the history.
 import { logError } from "../core/errorLog";
+import { markModeling } from "./run";
 import { execute, getCommand, listCommands, toToolDefinition } from "../core/commands";
 import { getDoc, useApp } from "../core/store";
 import { geometryKey, isSolid } from "../core/document";
@@ -119,6 +120,8 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   const cmd = getCommand(id);
   if (!cmd) throw new Error(`Unbekannter Befehl ${id}`);
   const before = useApp.getState().currentId;
+  // Scene-changing commands light up the viewport glow (read-only tools don't).
+  if (cmd.kind === "document") markModeling();
   await execute(id, params, { source: "ai", group, throwErrors: true });
   const after = useApp.getState().currentId;
   const node = after !== before ? useApp.getState().nodes[after] : undefined;

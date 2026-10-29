@@ -5,6 +5,8 @@ import { useApp } from "../core/store";
 
 export interface AiRunState {
   running: boolean;
+  /** The agent is changing the model right now (drives the viewport glow). */
+  modeling: boolean;
   startedAt: number;
   /** Plain-German current activity ("Denkt nach …", "Erstellt 21 Formen …"). */
   phase: string;
@@ -13,7 +15,16 @@ export interface AiRunState {
   born: Record<string, { delay: number; kind: "grow" | "glow" }>;
 }
 
-export const useAiRun = create<AiRunState>(() => ({ running: false, startedAt: 0, phase: "", born: {} }));
+export const useAiRun = create<AiRunState>(() => ({ running: false, modeling: false, startedAt: 0, phase: "", born: {} }));
+
+let modelingTimer: number | undefined;
+/** Called for every scene-changing command of a run; the glow fades after 4 s without one. */
+export function markModeling() {
+  if (!useAiRun.getState().running) return;
+  if (!useAiRun.getState().modeling) useAiRun.setState({ modeling: true });
+  window.clearTimeout(modelingTimer);
+  modelingTimer = window.setTimeout(() => useAiRun.setState({ modeling: false }), 4000);
+}
 
 let known = new Set<string>(useApp.getState().nodes[useApp.getState().currentId].doc.features.map((f) => f.id));
 
@@ -21,9 +32,12 @@ export const startRun = () => {
   // Everything already in the model is "known"; only objects made during the run animate.
   const s = useApp.getState();
   known = new Set(s.nodes[s.currentId].doc.features.map((f) => f.id));
-  useAiRun.setState({ running: true, startedAt: performance.now(), phase: "Denkt nach …", born: {} });
+  useAiRun.setState({ running: true, modeling: false, startedAt: performance.now(), phase: "Denkt nach …", born: {} });
 };
-export const endRun = () => useAiRun.setState({ running: false, phase: "" });
+export const endRun = () => {
+  window.clearTimeout(modelingTimer);
+  useAiRun.setState({ running: false, modeling: false, phase: "" });
+};
 export const setPhase = (phase: string) => useAiRun.setState({ phase });
 
 // New features during a run get a staggered start: a batch of 21 pips pops in like a

@@ -421,7 +421,7 @@ export function Viewport() {
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
   const textTool = useTextTool((s) => s.active);
   const frame = useViewportFrame();
-  const aiRunning = useAiRun((s) => s.running) && workspace !== "preview";
+  const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
   const aiAnimations = useSettings((s) => s.aiAnimations);
   const free = { left: frame.left, right: frame.right };
 
@@ -501,8 +501,10 @@ export function Viewport() {
       <div className="vp-frame" />
       {/* Siri-style glow while the AI works: CSS only, the canvas never re-renders for it. */}
       <div className={`ai-glow ${aiRunning && aiAnimations ? "on" : ""}`} aria-hidden>
-        <span className="ai-glow-edge" />
-        <span className="ai-glow-blur" />
+        <span className="w1" />
+        <span className="w2" />
+        <span className="w3" />
+        <span className="w4" />
       </div>
       {kernel.status !== "ready" || kernel.busy > 0 ? (
         <div className="vp-badge">
