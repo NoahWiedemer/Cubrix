@@ -625,8 +625,8 @@ export function Viewport() {
         <CameraRig />
         <SelectionOutline />
         {workspace !== "preview" && (
-          // Top left, under the projection toggle, ~78 % size; follows the free area.
-          <GizmoHelper alignment="top-left" margin={[free.left + 44, 94]} renderPriority={2}>
+          // Top right, level with the projection toggle, ~78 % size; follows the free area.
+          <GizmoHelper alignment="top-right" margin={[free.right + 44, 46]} renderPriority={2}>
             <group scale={0.78}>
               <AxisIndicator />
             </group>

@@ -233,7 +233,10 @@ export function buildLocal(f: Feature): Shape3D {
   } else {
     shape = buildPrimitive(f);
   }
-  return applyEdgeTreatment(shape, f);
+  shape = applyEdgeTreatment(shape, f);
+  // Mirrored copies: flip the geometry in the feature's own frame.
+  if (f.mirror) shape = shape.mirror(f.mirror === "x" ? "YZ" : "XZ", [0, 0, 0]);
+  return shape;
 }
 
 function place(shape: Shape3D, f: Feature): Shape3D {

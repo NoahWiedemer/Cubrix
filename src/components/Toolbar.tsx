@@ -8,6 +8,7 @@ import { useSketch } from "../ui/sketch";
 import { useTextTool } from "../ui/textTool";
 import { openValuePopover } from "./ValuePopover";
 import { openRotatePopover } from "./RotatePopover";
+import { openPatternPopover } from "./PatternPopover";
 
 /** Commands that ask for one value first (same inline popover as the context menu). */
 const VALUE_COMMANDS: Record<string, string> = { "object.fillet": "radius", "object.chamfer": "radius" };
@@ -17,6 +18,10 @@ function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; ic
   const tip = tipText ?? cmd.description.split(".")[0];
   const run = (e: React.MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
+    if (id === "object.pattern") {
+      const sel = useApp.getState().selection;
+      if (sel.length === 1) return openPatternPopover({ id: sel[0], at: { x: r.left + r.width / 2, y: r.top }, placement: "above" });
+    }
     if (id === "tool.rotate") {
       const sel = useApp.getState().selection;
       if (sel.length === 1) return openRotatePopover({ id: sel[0], at: { x: r.left + r.width / 2, y: r.top }, placement: "above" });
@@ -65,6 +70,7 @@ export function Toolbar() {
           <>
             <CommandTool id="tool.rotate" active={rotate} />
             <CommandTool id="tool.scale" active={scale} />
+            <CommandTool id="object.pattern" label="Muster" tip="Reihe, Raster, Kreis oder Spiegeln" />
             {single && (single.type === "extrude") && isEnabled("sketch.smooth") && <CommandTool id="sketch.smooth" tip="Kantige Kontur in eine glatte Kurve umwandeln" />}
             {single && single.type !== "sphere" && single.type !== "torus" && (
               <>

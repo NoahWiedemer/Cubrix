@@ -7,6 +7,7 @@ import { findFeature, parentsOf } from "../core/document";
 import { openValuePopover } from "./ValuePopover";
 import { openRotatePopover } from "./RotatePopover";
 import { openColorPopover } from "./ColorRow";
+import { openPatternPopover } from "./PatternPopover";
 import { useApp } from "../core/store";
 import { CommandItem } from "../ui/CommandItem";
 
@@ -66,6 +67,15 @@ export function ContextMenu() {
           />
         ))}
         <MenuSeparator />
+        <MenuItem
+          icon="pattern"
+          label="Muster / Spiegeln …"
+          disabled={useApp.getState().selection.length !== 1 || isOperand}
+          onClick={() => {
+            done();
+            openPatternPopover({ id: useApp.getState().selection[0], at });
+          }}
+        />
         <MenuItem
           icon="background"
           label="Farbe …"

@@ -1396,3 +1396,11 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px 8px 6px; }
 .view-grid button { height: 28px; border-radius: 6px; font-size: 12.5px; color: var(--text-2); background: var(--panel); border: 1px solid var(--line-soft); }
 .view-grid button:hover { color: var(--text); background: var(--panel-3); }
+.pattern-pop { position: fixed; z-index: 520; width: 280px; padding: 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px; animation: pop-in 120ms var(--ease); }
+.pat-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pat-fields > .segmented { grid-column: 1 / -1; }
+.pat-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-3); }
+.pat-field .field { height: 32px; }
+.pat-field input { text-align: right; padding-right: 6px; }
+.pat-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--text-3); }
+.pat-actions { display: flex; justify-content: flex-end; gap: 6px; }

@@ -298,7 +298,7 @@ defineCommand({
     const count = p.count;
     const step = (p.step ?? [10, 0, 0]) as number[];
     const [x0, y0, z0] = f.transform.position;
-    const places: { pos: Vec3; rotZ?: number }[] = [];
+    const places: { pos: Vec3; rotZ?: number; mirror?: "x" | "y" }[] = [];
     if (p.kind === "linear") {
       const n = Number(count ?? 2);
       for (let i = 1; i < n; i++) places.push({ pos: [x0 + step[0] * i, y0 + (step[1] ?? 0) * i, z0 + (step[2] ?? 0) * i] });
@@ -317,15 +317,25 @@ defineCommand({
         places.push({ pos: [cx + rx * Math.cos(a) - ry * Math.sin(a), cy + rx * Math.sin(a) + ry * Math.cos(a), z0], rotZ: (a * 180) / Math.PI });
       }
     } else {
-      const at = p.at ?? 0;
-      places.push({ pos: p.axis === "y" ? [x0, 2 * at - y0, z0] : [2 * at - x0, y0, z0] });
+      // Mirror plane: given, else flush against the object's side (copy right next to it).
+      const k = p.axis === "y" ? 1 : 0;
+      const b = worldBox(f, useMeshes.getState().entries);
+      const at = p.at ?? (b ? (k === 0 ? b.max.x : b.max.y) : f.transform.position[k]);
+      places.push({ pos: k === 1 ? [x0, 2 * at - y0, z0] : [2 * at - x0, y0, z0], mirror: p.axis === "y" ? "y" : "x" });
     }
     if (!places.length) return null;
     if (places.length > 500) throw new Error("Höchstens 500 Kopien auf einmal");
-    const copies = places.map(({ pos, rotZ }) => {
+    const copies = places.map(({ pos, rotZ, mirror }) => {
       const c = cloneFeature(f);
       const [rx, ry, rz] = c.transform.rotation;
-      return { ...c, name: uniqueName(doc, f.name.replace(/\s\d+$/, "")), transform: { position: pos.map(round) as Vec3, rotation: [rx, ry, round(rz + (rotZ ?? 0))] as Vec3 } };
+      // A mirror copy flips the geometry (toggles if the original was already mirrored).
+      const m = mirror ? (f.mirror === mirror ? undefined : mirror) : f.mirror;
+      // Mirroring across X also negates the rotation about Z (and Y), across Y about Z (and X).
+      const rot: Vec3 = mirror === "x" ? [rx, -ry, -rz] : mirror === "y" ? [-rx, ry, -rz] : [rx, ry, round(rz + (rotZ ?? 0))];
+      const out = { ...c, name: uniqueName(doc, f.name.replace(/\s\d+$/, "")), transform: { position: pos.map(round) as Vec3, rotation: rot } } as Feature;
+      if (m) out.mirror = m;
+      else delete out.mirror;
+      return out;
     });
     // Unique names in order.
     let named = doc;

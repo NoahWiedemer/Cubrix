@@ -4,10 +4,12 @@ import { Html, Line, useGizmoContext } from "@react-three/drei";
 import { AXIS_COLORS } from "../ui/axisColors";
 
 // CAD axes expressed in the internal Y-up scene frame.
+// The gizmo's greens, muted (≈65 % saturation/brightness) so the tripod stays calm.
+const muted = (hex: string) => "#" + new THREE.Color(hex).offsetHSL(0, -0.18, -0.06).getHexString();
 const AXES = [
-  { label: "X", color: AXIS_COLORS[0], dir: new THREE.Vector3(1, 0, 0) },
-  { label: "Y", color: AXIS_COLORS[1], dir: new THREE.Vector3(0, 0, -1) },
-  { label: "Z", color: AXIS_COLORS[2], dir: new THREE.Vector3(0, 1, 0) },
+  { label: "X", color: muted(AXIS_COLORS[0]), dir: new THREE.Vector3(1, 0, 0) },
+  { label: "Y", color: muted(AXIS_COLORS[1]), dir: new THREE.Vector3(0, 0, -1) },
+  { label: "Z", color: muted(AXIS_COLORS[2]), dir: new THREE.Vector3(0, 1, 0) },
 ];
 
 const LENGTH = 34;
@@ -21,8 +23,8 @@ function Axis({ label, color, dir }: (typeof AXES)[number]) {
       <Line points={[[0, 0, 0], tip.toArray()]} color={color} lineWidth={hover ? 3 : 2} />
       {/* No letters: a small dot at the tip; a larger invisible target makes it easy to click. */}
       <mesh position={tip.toArray()}>
-        <sphereGeometry args={[hover ? 4.2 : 3.2, 16, 12]} />
-        <meshBasicMaterial color={color} depthTest={false} toneMapped={false} />
+        <sphereGeometry args={[hover ? 3.3 : 2.5, 16, 12]} />
+        <meshBasicMaterial color={color} depthTest={false} />
       </mesh>
       <mesh
         position={tip.toArray()}
