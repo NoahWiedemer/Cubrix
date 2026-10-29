@@ -1445,3 +1445,5 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .tree-row:hover .tree-lock, .tree-lock.on { opacity: 1; }
 .tree-lock.on { color: var(--text-2); }
 .tree-lock:hover { color: var(--text); background: var(--panel-3); }
+.vp-badge.measure-mode { pointer-events: auto; padding: 4px 8px 4px 4px; gap: 10px; }
+.vp-badge.measure-mode .hint { color: var(--text-3); font-size: 12.5px; }

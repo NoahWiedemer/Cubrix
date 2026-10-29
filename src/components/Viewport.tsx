@@ -21,6 +21,7 @@ import { Toolbar } from "./Toolbar";
 import { GroundGrid } from "./GroundGrid";
 import { openContextMenu } from "./ContextMenu";
 import { SegmentedControl } from "../ui/SegmentedControl";
+import { Kbd } from "../ui/Tooltip";
 import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
 import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewControls";
@@ -29,7 +30,7 @@ import { usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
-import { addMeasurePoint, useMeasure } from "../ui/measureTool";
+import { addMeasurePoint, angleAt, setMeasureMode, useMeasure } from "../ui/measureTool";
 import { viewportPick } from "../ui/viewportPick";
 import { makeRectPicker, setPickInRect, useBoxSelect } from "./BoxSelect";
 import { volumeCorners, volumeEdges } from "../ui/buildVolume";
@@ -495,18 +496,57 @@ function MeasurePlane() {
 /** Measured points, the line between them and the distance label (CAD frame). */
 function MeasureOverlay() {
   const points = useMeasure((s) => s.points);
+  const mode = useMeasure((s) => s.mode);
   if (!points.length) return null;
-  const [a, b] = points;
   const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString("de-DE");
+  const dots = points.map((p, i) => (
+    <mesh key={i} position={p} renderOrder={30} raycast={() => null}>
+      <sphereGeometry args={[0.6, 16, 12]} />
+      <meshBasicMaterial color={ACCENT} depthTest={false} toneMapped={false} />
+    </mesh>
+  ));
+  if (mode === "angle") {
+    const [a, v, c] = points;
+    const arc: Vec3[] = [];
+    let label: Vec3 | null = null;
+    if (c) {
+      // Arc between the arms at a third of the shorter arm, label just outside it.
+      const u = new THREE.Vector3(a[0] - v[0], a[1] - v[1], a[2] - v[2]);
+      const w = new THREE.Vector3(c[0] - v[0], c[1] - v[1], c[2] - v[2]);
+      const r = Math.max(1.5, Math.min(u.length(), w.length()) / 3);
+      const un = u.clone().normalize();
+      const wn = w.clone().normalize();
+      for (let i = 0; i <= 24; i++) {
+        const d = un.clone().lerp(wn, i / 24);
+        if (d.lengthSq() < 1e-9) continue;
+        d.normalize().multiplyScalar(r);
+        arc.push([v[0] + d.x, v[1] + d.y, v[2] + d.z]);
+      }
+      const mid = un.clone().add(wn);
+      const dir = mid.lengthSq() > 1e-9 ? mid.normalize() : new THREE.Vector3(0, 0, 1);
+      label = [v[0] + dir.x * r * 1.9, v[1] + dir.y * r * 1.9, v[2] + dir.z * r * 1.9];
+    }
+    return (
+      <>
+        {dots}
+        {v && <Line points={[a, v]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={29} />}
+        {c && <Line points={[v, c]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={29} />}
+        {arc.length > 1 && <Line points={arc} color={ACCENT} lineWidth={1.5} depthTest={false} renderOrder={29} />}
+        {c && label && (
+          <Html position={label} center zIndexRange={[40, 0]} style={{ pointerEvents: "none" }}>
+            <div className="measure-label">
+              <b>{fmt(angleAt(a, v, c))}°</b>
+            </div>
+          </Html>
+        )}
+      </>
+    );
+  }
+  const [a, b] = points;
   const mid: Vec3 | null = b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] : null;
   return (
     <>
-      {points.map((p, i) => (
-        <mesh key={i} position={p} renderOrder={30} raycast={() => null}>
-          <sphereGeometry args={[0.6, 16, 12]} />
-          <meshBasicMaterial color={ACCENT} depthTest={false} toneMapped={false} />
-        </mesh>
-      ))}
+      {dots}
       {b && <Line points={[a, b]} color={ACCENT} lineWidth={2} depthTest={false} renderOrder={29} />}
       {b && mid && (
         <Html position={mid} center zIndexRange={[40, 0]} style={{ pointerEvents: "none" }}>
@@ -517,6 +557,20 @@ function MeasureOverlay() {
         </Html>
       )}
     </>
+  );
+}
+
+/** Abstand/Winkel switch shown while measuring (top centre). */
+function MeasureModeSwitch() {
+  const mode = useMeasure((s) => s.mode);
+  const n = useMeasure((s) => s.points.length);
+  const hint = mode === "angle" ? ["Ersten Schenkel anklicken", "Scheitelpunkt anklicken", "Zweiten Schenkel anklicken"][n] : ["Ersten Punkt anklicken", "Zweiten Punkt anklicken"][n];
+  return (
+    <div className="vp-badge measure-mode">
+      <SegmentedControl size="sm" value={mode} onChange={(m) => setMeasureMode(m)} options={[{ value: "distance", label: "Abstand" }, { value: "angle", label: "Winkel" }]} />
+      <span className="hint">{hint ?? "Neuer Klick misst neu"}</span>
+      <Kbd keys={["Tab"]} />
+    </div>
   );
 }
 
@@ -724,7 +778,8 @@ export function Viewport() {
         <span className="w3" />
         <span className="w4" />
       </div>
-      {isolated && workspace !== "preview" && (
+      {measuring && <MeasureModeSwitch />}
+      {isolated && workspace !== "preview" && !measuring && (
         <div className="vp-badge iso">
           <Icon name="isolate" size={14} />
           Isoliert: {isolated.length === 1 ? "1 Objekt" : `${isolated.length} Objekte`}

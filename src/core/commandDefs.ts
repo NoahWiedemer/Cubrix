@@ -1882,7 +1882,7 @@ defineCommand({
   id: "tool.measure",
   kind: "action",
   label: "Messen",
-  description: "Messwerkzeug: zwei Punkte anklicken (Körper oder Bett) zeigt Abstand und ΔX/ΔY/ΔZ.",
+  description: "Messwerkzeug: zwei Punkte anklicken (Körper oder Bett) zeigt Abstand und ΔX/ΔY/ΔZ; im Modus Winkel (Tab) drei Punkte für den Winkel am mittleren.",
   icon: "ruler",
   shortcut: "m",
   params: {},
