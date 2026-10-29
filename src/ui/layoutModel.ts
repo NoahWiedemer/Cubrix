@@ -1,5 +1,5 @@
 // Pure dock model (no React/zustand) so it can be unit-tested.
-export type PanelId = "tree" | "history" | "props";
+export type PanelId = "tree" | "history" | "props" | "chat";
 export type Side = "left" | "right";
 
 export interface PanelState {
@@ -13,14 +13,15 @@ export interface PanelState {
 
 export type Panels = Record<PanelId, PanelState>;
 
-export const PANEL_IDS: PanelId[] = ["tree", "history", "props"];
+export const PANEL_IDS: PanelId[] = ["tree", "history", "props", "chat"];
 
 export const DEFAULT_PANELS: Panels = {
   tree: { side: "left", order: 0, collapsed: false, open: true, weight: 1.2 },
   history: { side: "left", order: 1, collapsed: false, open: true, weight: 1 },
   props: { side: "right", order: 0, collapsed: false, open: true, weight: 1 },
+  chat: { side: "right", order: 1, collapsed: false, open: true, weight: 1 },
 };
-export const DEFAULT_WIDTH: Record<Side, number> = { left: 260, right: 300 };
+export const DEFAULT_WIDTH: Record<Side, number> = { left: 260, right: 340 };
 export const MIN_WIDTH = 200;
 export const MAX_WIDTH = 520;
 

@@ -30,6 +30,7 @@ import { useSettings } from "../ui/settings";
 import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
+import { useLayout } from "../ui/layout";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { PRINTERS, bestOrientation } from "./printAnalysis";
@@ -819,6 +820,21 @@ defineCommand({
   params: {},
   perform() {
     usePreview.setState({ captureAt: Date.now() });
+  },
+});
+
+defineCommand({
+  id: "ai.focus",
+  kind: "action",
+  label: "KI-Assistent",
+  description: "Öffnet den KI-Chat und setzt den Cursor ins Eingabefeld.",
+  icon: "ai",
+  shortcut: "mod+k",
+  params: {},
+  perform() {
+    const layout = useLayout.getState();
+    if (!layout.panels.chat.open || layout.panels.chat.collapsed) layout.setPanel("chat", { open: true, collapsed: false });
+    setTimeout(() => window.dispatchEvent(new Event("modelonio:focus-chat")), 60);
   },
 });
 

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { setCaptureViewport } from "../ai/agent";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { execute } from "../core/commands";
@@ -48,6 +49,28 @@ export function PreviewControls() {
 }
 
 /** Applies the section plane to all meshes and captures PNG screenshots after rendering. */
+/** Lets the AI agent grab a PNG of the viewport right after a frame is rendered. */
+export function ViewportCapture() {
+  const gl = useThree((s) => s.gl);
+  const pending = useRef<((v: string | null) => void)[]>([]);
+  useEffect(() => {
+    setCaptureViewport(() => new Promise((resolve) => pending.current.push(resolve)));
+  }, []);
+  useFrame(() => {
+    if (!pending.current.length) return;
+    const waiting = pending.current.splice(0);
+    const src = gl.domElement;
+    const scale = Math.min(1, 1024 / Math.max(src.width, src.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(src.width * scale);
+    c.height = Math.round(src.height * scale);
+    c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
+    const data = c.toDataURL("image/png").split(",")[1] ?? null;
+    waiting.forEach((r) => r(data));
+  }, 3);
+  return null;
+}
+
 export function PreviewEffects() {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);

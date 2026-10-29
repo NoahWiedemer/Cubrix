@@ -20,7 +20,7 @@ import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
 import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
-import { PreviewControls, PreviewEffects } from "./PreviewControls";
+import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewControls";
 import { usePreview } from "../ui/preview";
 import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
@@ -365,6 +365,7 @@ export function Viewport() {
         <Lights />
         {workspace !== "preview" && <Bed volume={doc.printer.volume} />}
         <PreviewEffects />
+        <ViewportCapture />
         {quality.shadows > 0 && (
           <ContactShadows position={[0, 0.02, 0]} scale={180} blur={2.8} far={70} opacity={0.42} resolution={quality.shadows} color="#000000" />
         )}

@@ -9,7 +9,16 @@ import { isTauri } from "./core/platform";
 import { isMac, listCommands, toToolDefinition, execute } from "./core/commands";
 import { useApp } from "./core/store";
 
-if (isTauri && isMac) document.documentElement.classList.add("mac-tauri");
+if (isTauri && isMac) {
+  document.documentElement.classList.add("mac-tauri");
+  // In fullscreen the traffic lights are hidden, so the logo moves back to normal padding.
+  void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+    const win = getCurrentWindow();
+    const sync = async () => document.documentElement.classList.toggle("fullscreen", await win.isFullscreen());
+    await sync();
+    await win.onResized(() => void sync());
+  });
+}
 initKernel();
 
 // In the desktop shell, mirror the kernel status to the terminal (useful when launching via `tauri dev`).

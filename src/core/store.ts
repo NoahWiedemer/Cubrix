@@ -17,6 +17,8 @@ export interface HistoryNode {
   icon: IconName;
   time: number;
   source: CommandSource;
+  /** AI response this step belongs to (all steps of one response form a block). */
+  group?: { id: string; prompt: string };
   doc: ModelDocument;
   selection: string[];
 }

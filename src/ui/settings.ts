@@ -18,3 +18,12 @@ export type Projection = "perspective" | "orthographic";
 export const useSettings = create<{ quality: Quality; projection: Projection }>()(
   persist(() => ({ quality: "high" as Quality, projection: "perspective" as Projection }), { name: "modelonio.settings" }),
 );
+
+export interface AiSettings {
+  provider: "anthropic" | "openai";
+  model: { anthropic: string; openai: string };
+}
+
+export const useAiSettings = create<AiSettings>()(
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "" } }), { name: "modelonio.ai" }),
+);

@@ -16,9 +16,9 @@ interface LayoutState {
   reset(): void;
 }
 
-export const PANEL_ICONS: Record<PanelId, IconName> = { tree: "boxes", history: "history", props: "sliders" };
+export const PANEL_ICONS: Record<PanelId, IconName> = { tree: "boxes", history: "history", props: "sliders", chat: "ai" };
 
-export const PANEL_TITLES: Record<PanelId, string> = { tree: "Objekte", history: "Verlauf", props: "Eigenschaften" };
+export const PANEL_TITLES: Record<PanelId, string> = { tree: "Objekte", history: "Verlauf", props: "Eigenschaften", chat: "KI-Assistent" };
 
 export const useLayout = create<LayoutState>()(
   persist(

@@ -5,9 +5,10 @@ import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId, type Side } from ".
 import { Icon } from "../ui/icons";
 import { ObjectTree } from "./ObjectTree";
 import { HistoryPanel } from "./HistoryPanel";
+import { ChatPanel } from "./ChatPanel";
 
 function PanelBody({ id }: { id: PanelId }) {
-  return id === "tree" ? <ObjectTree /> : <HistoryPanel />;
+  return id === "tree" ? <ObjectTree /> : id === "chat" ? <ChatPanel /> : <HistoryPanel />;
 }
 
 function PanelMeta({ id }: { id: PanelId }) {

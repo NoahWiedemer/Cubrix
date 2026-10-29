@@ -1,16 +1,40 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Rechte für das Hauptfenster",
-  "windows": ["main"],
+  "description": "Rechte f\u00fcr das Hauptfenster",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-title",
     "dialog:default",
     "fs:default",
-    { "identifier": "fs:allow-write-file", "allow": [{ "path": "**" }] },
-    { "identifier": "fs:allow-write-text-file", "allow": [{ "path": "**" }] },
-    { "identifier": "fs:allow-read-text-file", "allow": [{ "path": "**" }] }
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    "opener:default"
   ]
 }

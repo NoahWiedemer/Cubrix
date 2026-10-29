@@ -98,7 +98,7 @@ function withDefaults(schema: ParamSchema, params: Record<string, any>) {
 export async function execute(
   id: string,
   params: Record<string, any> = {},
-  opts: { source?: CommandSource } = {},
+  opts: { source?: CommandSource; group?: { id: string; prompt: string }; throwErrors?: boolean } = {},
 ): Promise<boolean> {
   const cmd = registry.get(id);
   const app = useApp.getState();
@@ -122,11 +122,13 @@ export async function execute(
       label: res.label ?? cmd.label,
       icon: cmd.icon,
       source: ctx.source,
+      group: opts.group,
       doc: res.doc,
       selection: res.selection ?? ctx.selection,
     });
     return true;
   } catch (e) {
+    if (opts.throwErrors) throw e;
     app.toast("error", e instanceof Error ? e.message : String(e));
     return false;
   }
