@@ -75,7 +75,7 @@ export function LeftRail() {
 
       <div className="rail-bottom">
         <ClosedPanels />
-        <RailButton icon="help" tip="Hilfe" kbd="shift+?" onClick={() => useHelp.setState({ open: true })} />
+        <RailButton icon="help" tip="Hilfe" kbd="f1" onClick={() => useHelp.setState({ open: true })} />
       </div>
     </aside>
   );

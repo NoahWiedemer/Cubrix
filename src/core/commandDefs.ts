@@ -1,4 +1,5 @@
 // All built-in commands. Importing this module registers them.
+import { useShortcuts } from "../components/ShortcutOverlay";
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
 import { checkForUpdates, useUpdater } from "./updater";
 import * as THREE from "three";
@@ -1036,7 +1037,7 @@ defineCommand({
 defineCommand({
   id: "view.showAll",
   kind: "action",
-  label: "Alles zeigen",
+  label: "Alle einblenden",
   description: "Beendet die Isolierung und blendet alle ausgeblendeten Objekte wieder ein.",
   icon: "visible",
   shortcut: "alt+h",
@@ -2083,12 +2084,25 @@ defineCommand({
 });
 
 defineCommand({
+  id: "help.shortcuts",
+  kind: "action",
+  label: "Tastenkürzel",
+  description: "Zeigt alle Tastenkürzel auf einen Blick.",
+  icon: "keyboard",
+  shortcut: "shift+?",
+  params: {},
+  perform() {
+    useShortcuts.setState({ open: !useShortcuts.getState().open });
+  },
+});
+
+defineCommand({
   id: "help.open",
   kind: "action",
   label: "Hilfe",
   description: "Öffnet das Hilfe-Center.",
   icon: "help",
-  shortcut: "shift+?",
+  shortcut: "f1",
   params: { topic: { type: "string", optional: true, description: "Themen-ID" } },
   perform(p) {
     useHelp.setState({ open: true, ...(p.topic ? { topic: p.topic } : {}) });

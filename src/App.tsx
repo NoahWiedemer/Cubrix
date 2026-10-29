@@ -20,6 +20,7 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { ProviderDialog } from "./components/ProviderKeys";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import { UpdateToast } from "./components/UpdateToast";
+import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { scheduleAutoCheck } from "./core/updater";
 
 /**
@@ -105,6 +106,7 @@ export function App() {
       <ProviderDialog />
       <RecoveryBanner />
       <UpdateToast />
+      <ShortcutOverlay />
     </div>
   );
 }

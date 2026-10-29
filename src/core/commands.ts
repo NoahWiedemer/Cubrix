@@ -212,8 +212,10 @@ function eventShortcut(e: KeyboardEvent): string {
   const parts: string[] = [];
   if (e.shiftKey) parts.push("shift");
   if (isMac ? e.metaKey : e.ctrlKey) parts.push("mod");
-  // Digits by physical key, so Shift+1 is "shift+1" (not "!") on every layout.
-  let key = /^Digit\d$/.test(e.code) ? e.code.slice(5) : e.key.toLowerCase();
+  if (e.altKey) parts.push("alt");
+  // Digits by physical key, so Shift+1 is "shift+1" (not "!") on every layout; with Alt
+  // letters too (on a Mac, Alt+H types "˙").
+  let key = /^Digit\d$/.test(e.code) ? e.code.slice(5) : e.altKey && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : e.key.toLowerCase();
   if (key === "backspace") key = "delete";
   parts.push(key);
   return parts.join("+");

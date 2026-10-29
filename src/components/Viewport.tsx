@@ -783,7 +783,7 @@ export function Viewport() {
         <div className="vp-badge iso">
           <Icon name="isolate" size={14} />
           Isoliert: {isolated.length === 1 ? "1 Objekt" : `${isolated.length} Objekte`}
-          <button onClick={() => void execute("view.isolate")} data-tip="Isolierung beenden" data-kbd="shift+h" data-tip-pos="bottom">Alles zeigen</button>
+          <button onClick={() => void execute("view.isolate")} data-tip="Isolierung beenden" data-kbd="shift+h" data-tip-pos="bottom">Beenden</button>
         </div>
       )}
       {kernel.status !== "ready" || kernel.busy > 0 ? (

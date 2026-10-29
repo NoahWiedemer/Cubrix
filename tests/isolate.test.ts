@@ -7,7 +7,7 @@ import { useApp } from "../src/core/store";
 const ctx = (doc: ModelDocument, selection: string[]) => ({ doc, selection, source: "user" as const });
 const doc = () => useApp.getState().nodes[useApp.getState().currentId].doc;
 
-describe("Isolieren / Alles zeigen / Sperren", () => {
+describe("Isolieren / Alle einblenden / Sperren", () => {
   beforeEach(() => useApp.getState().reset(createDocument("T"), "Test", null));
 
   it("isoliert nur in der Ansicht und hebt es wieder auf", async () => {
@@ -25,7 +25,7 @@ describe("Isolieren / Alles zeigen / Sperren", () => {
     expect(before).toBeTruthy();
   });
 
-  it("Alles zeigen beendet die Isolierung und blendet Ausgeblendetes ein", async () => {
+  it("Alle einblenden beendet die Isolierung und blendet Ausgeblendetes ein", async () => {
     const id = doc().features[0].id;
     await execute("object.setVisibility", { ids: [id], visible: false });
     useApp.setState({ isolated: ["x"] });
