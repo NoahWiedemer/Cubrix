@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Link2, Link2Off } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, Link2, Link2Off } from "lucide-react";
+import { SegmentedControl } from "../ui/SegmentedControl";
+import { textOf } from "../core/commandDefs";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { featureTypeLabel, type Feature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
@@ -154,7 +156,7 @@ function Dimensions({ f }: { f: Feature }) {
     );
   }
 
-  if (f.type === "sketch") return null;
+  if (f.type === "sketch" || f.type === "text") return null;
   const fields = f.type === "extrude" ? [{ key: "height", label: "Höhe" }] : PARAM_FIELDS[f.type];
   const params = (f.type === "extrude" ? { height: f.height } : f.params) as Record<string, number>;
   const set = (key: string, v: number) => {
@@ -225,6 +227,58 @@ function TransformFields({ f, kind }: { f: Feature; kind: "position" | "rotation
   );
 }
 
+/** Text settings for a text body or a body with embossed/engraved text; edits rebuild the solid. */
+function TextSection({ f }: { f: Feature }) {
+  const t = textOf(f);
+  const [draft, setDraft] = useState<string | null>(null);
+  if (!t) return null;
+  const p = t.params;
+  const edit = (patch: Record<string, unknown>) => void execute("text.edit", { id: f.id, ...patch });
+  const commitText = () => {
+    if (draft !== null && draft.trim() && draft !== p.text) edit({ text: draft });
+    setDraft(null);
+  };
+  return (
+    <div className="group text-section">
+      <div className="group-label"><span><Icon name="text" size={15} />Text</span></div>
+      <div className="field text-field">
+        <input
+          value={draft ?? p.text}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitText}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") setDraft(null);
+          }}
+        />
+      </div>
+      {p.onFace && (
+        <SegmentedControl size="sm" className="block" value={p.onFace} onChange={(mode) => edit({ mode })}
+          options={[{ value: "emboss", label: "Prägen" }, { value: "engrave", label: "Gravieren" }]} />
+      )}
+      <SegmentedControl size="sm" className="block" value={p.font} onChange={(font) => edit({ font })}
+        options={[{ value: "inter", label: "Inter" }, { value: "roboto-slab", label: "Slab" }, { value: "roboto-mono", label: "Mono" }]} />
+      <div className="field-row two">
+        <NumberField value={p.size} min={0.5} step={0.5} unit="mm" onCommit={(v) => edit({ size: v })} />
+        <NumberField value={p.depth} min={0.1} step={0.2} unit="mm" onCommit={(v) => edit({ depth: v })} />
+      </div>
+      <div className="field-caption two"><span>Höhe</span><span>{p.onFace === "engrave" ? "Tiefe" : p.onFace ? "Höhe über Fläche" : "Tiefe"}</span></div>
+      <div className="text-row">
+        <SegmentedControl size="sm" className="icons" value={p.align} onChange={(align) => edit({ align })}
+          options={[
+            { value: "left", icon: <AlignLeft size={15} />, tip: "Links" },
+            { value: "center", icon: <AlignCenter size={15} />, tip: "Mitte" },
+            { value: "right", icon: <AlignRight size={15} />, tip: "Rechts" },
+          ]} />
+        <button className={`btn-ghost bold-toggle ${p.bold ? "on" : ""}`} onClick={() => edit({ bold: !p.bold })} aria-pressed={p.bold}>
+          <Bold size={14} />Fett
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SingleObject({ f }: { f: Feature }) {
   return (
     <>
@@ -232,6 +286,7 @@ function SingleObject({ f }: { f: Feature }) {
         <span className="badge"><Icon name={featureIcon(f)} size={16} /></span>
         <div className="name" title={featureTypeLabel(f)}>{f.name}{f.visible ? "" : <span className="muted"> · ausgeblendet</span>}</div>
       </div>
+      <TextSection f={f} />
       <Dimensions f={f} />
       <TransformFields f={f} kind="position" />
       <TransformFields f={f} kind="rotation" />

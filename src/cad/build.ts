@@ -1,6 +1,7 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
 import { drawCircle, drawPolysides, drawRectangle, drawRoundedRectangle, draw, makeBaseBox, makeCylinder, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { buildText } from "./text";
 import { isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
@@ -160,6 +161,12 @@ export function buildLocal(f: Feature): Shape3D {
     shape = f.op === "union" ? a.fuse(b) : f.op === "subtract" ? a.cut(b) : a.intersect(b);
   } else if (f.type === "extrude") {
     shape = buildExtrusion(f.profile, f.height);
+  } else if (f.type === "text") {
+    // On a face the text overlaps the surface by 0.01 mm so the boolean is clean:
+    // embossed text starts just below the face, engraved text pokes just above it.
+    const p = f.params;
+    shape = p.onFace ? buildText({ ...p, depth: p.depth + 0.01 }) : buildText(p);
+    if (p.onFace === "emboss") shape = shape.translate(0, 0, -0.01);
   } else {
     shape = buildPrimitive(f);
   }

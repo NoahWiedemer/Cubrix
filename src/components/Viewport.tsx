@@ -28,6 +28,7 @@ import { usePreview } from "../ui/preview";
 import { PrintPanel, usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
 import { useSettings } from "../ui/settings";
+import { placeText, useTextTool } from "../ui/textTool";
 import { Icon } from "../ui/icons";
 
 const ACCENT = "#6ee7c5";
@@ -97,6 +98,11 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
     if (presenting) return; // Vorschau: clicks only orbit
     e.stopPropagation();
     if (e.delta > 4) return;
+    if (useTextTool.getState().active) {
+      // Scene is Y-up; the CAD frame is Z-up: (x, y, z)cad = (x, -z, y)world.
+      placeText({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }, [e.point.x, -e.point.z, e.point.y], f.id);
+      return;
+    }
     const multi = e.shiftKey || e.metaKey || e.ctrlKey;
     void execute("selection.set", { ids: [f.id], mode: multi ? "toggle" : "replace" });
   };
@@ -243,6 +249,23 @@ function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; str
   );
 }
 
+/** Invisible bed plane that catches the text tool's click (CAD frame, z = 0). */
+function TextPlacementPlane() {
+  return (
+    <mesh
+      position={[0, 0, 0]}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.delta > 4) return;
+        placeText({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }, [Math.round(e.point.x), Math.round(-e.point.z), 0]);
+      }}
+    >
+      <planeGeometry args={[4000, 4000]} />
+      <meshBasicMaterial visible={false} />
+    </mesh>
+  );
+}
+
 // ── Print bed ────────────────────────────────────────────────────────────────
 
 function Bed({ volume }: { volume: Vec3 }) {
@@ -330,11 +353,12 @@ export function Viewport() {
   const shadowKey = useApp((s) => s.currentId) + useMeshes((s) => Object.keys(s.entries).length);
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0] && f.visible) : undefined;
+  const textTool = useTextTool((s) => s.active);
 
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className={`panel viewport ${workspace === "preview" ? `bg-${background}` : ""}`}
+      className={`panel viewport ${workspace === "preview" ? `bg-${background}` : ""} ${textTool ? "placing-text" : ""}`}
       onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
     >
       <Canvas
@@ -367,6 +391,7 @@ export function Viewport() {
           {doc.features.map((f, i) =>
             f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
           )}
+          {textTool && <TextPlacementPlane />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
           {single && single.type !== "sketch" && (workspace === "model" || workspace === "print") && (
             <>

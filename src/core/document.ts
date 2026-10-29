@@ -75,7 +75,25 @@ export interface ExtrudeFeature extends FeatureBase {
   height: number;
 }
 
-export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature;
+export interface TextFeatureParams {
+  text: string;
+  /** Height of capital letters in mm. */
+  size: number;
+  /** Extrusion depth in mm (emboss height / engrave depth on a face). */
+  depth: number;
+  font: "inter" | "roboto-slab" | "roboto-mono";
+  bold: boolean;
+  align: "left" | "center" | "right";
+  /** Set when the text sits on a face as the tool of a union (emboss) or cut (engrave). */
+  onFace?: "emboss" | "engrave";
+}
+
+export interface TextFeature extends FeatureBase {
+  type: "text";
+  params: TextFeatureParams;
+}
+
+export type SolidFeature = PrimitiveFeature | BooleanFeature | ExtrudeFeature | TextFeature;
 export type Feature = SolidFeature | SketchFeature;
 
 export interface PrinterProfile {
@@ -147,6 +165,7 @@ export function featureTypeLabel(f: Feature): string {
   if (f.type === "boolean") return BOOLEAN_LABELS[f.op];
   if (f.type === "sketch") return "Skizze";
   if (f.type === "extrude") return "Extrusion";
+  if (f.type === "text") return "Text";
   return PRIMITIVE_LABELS[f.type];
 }
 

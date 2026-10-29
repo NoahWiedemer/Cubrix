@@ -11,7 +11,10 @@ import {
   newId,
   uniqueName,
   updateFeature,
+  type BooleanFeature,
   type BooleanOp,
+  type TextFeature,
+  type TextFeatureParams,
   type Feature,
   type ModelDocument,
   type SketchFeature,
@@ -31,6 +34,7 @@ import { useViewRequest } from "../ui/view";
 import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
+import { useTextTool } from "../ui/textTool";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
@@ -329,6 +333,163 @@ function maxEdgeSize(f: Feature): number | null {
       return null;
   }
 }
+
+// ── Text ─────────────────────────────────────────────────────────────────────
+
+const TEXT_FONTS = ["inter", "roboto-slab", "roboto-mono"] as const;
+
+const textParamSchema = {
+  text: { type: "string", description: "Der Text (eine Zeile, Umlaute erlaubt)" },
+  size: { type: "number", unit: "mm", min: 0.5, default: 10, description: "Höhe der Großbuchstaben" },
+  font: { type: "enum", options: TEXT_FONTS, default: "inter", description: "Schriftart: inter, roboto-slab, roboto-mono" },
+  bold: { type: "boolean", default: true, description: "Fett" },
+  align: { type: "enum", options: ["left", "center", "right"], default: "center", description: "Ausrichtung zum Fußpunkt" },
+} as const;
+
+defineCommand({
+  id: "text.create",
+  kind: "document",
+  label: "Text",
+  description:
+    "Erstellt 3D-Text als Körper (mode standalone) oder prägt/graviert ihn in die Oberseite eines Objekts (mode emboss/engrave, targetId).",
+  icon: "text",
+  params: {
+    ...textParamSchema,
+    text: { type: "string", default: "Text", description: "Der Text (eine Zeile, Umlaute erlaubt)" },
+    depth: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Tiefe: 2 mm frei stehend, 0,8 mm beim Prägen/Gravieren" },
+    mode: { type: "enum", options: ["standalone", "emboss", "engrave"], default: "standalone", description: "Frei stehend, prägen (aufsetzen) oder gravieren (einschneiden)" },
+    targetId: { type: "id", optional: true, description: "Objekt für prägen/gravieren (Standard: Auswahl)" },
+    position: { type: "vec3", unit: "mm", optional: true, description: "Fußpunkt (frei stehend) bzw. Mitte auf der Oberseite; ohne Angabe automatisch" },
+    name: { type: "string", optional: true, description: "Name im Objektbaum" },
+  },
+  apply(doc, p, ctx): DocumentResult {
+    const onFace = p.mode === "emboss" || p.mode === "engrave";
+    const params: TextFeatureParams = {
+      text: String(p.text),
+      size: p.size,
+      depth: p.depth ?? (onFace ? 0.8 : 2),
+      font: p.font,
+      bold: p.bold,
+      align: p.align,
+      ...(onFace ? { onFace: p.mode } : {}),
+    };
+    if (!params.text.trim()) throw new Error("Der Text ist leer.");
+    const name = p.name ?? (params.text.length > 18 ? `„${params.text.slice(0, 16)}…“` : `„${params.text}“`);
+    if (!onFace) {
+      const footprint = params.size * Math.max(1, params.text.length) * 0.7;
+      const feature: TextFeature = {
+        id: newId(),
+        type: "text",
+        name,
+        visible: true,
+        params,
+        transform: { position: p.position ?? freeSpot(doc, footprint), rotation: [0, 0, 0] },
+      };
+      return { doc: { ...doc, features: [...doc.features, feature] }, selection: [feature.id], label: `Text ${name} hinzufügen` };
+    }
+    const target = findFeature(doc, p.targetId ?? ctx.selection[0]);
+    if (!target || !isSolid(target)) throw new Error("Bitte zuerst einen Körper auswählen, auf dem der Text stehen soll.");
+    const box = worldBox(target, useMeshes.getState().entries);
+    if (!box) throw new Error("Das Objekt wird noch berechnet – bitte gleich noch einmal.");
+    const origin = target.transform.position;
+    const top = box.max.z;
+    const at: Vec3 = p.position
+      ? [p.position[0], p.position[1], top]
+      : [(box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, top];
+    const z = p.mode === "engrave" ? top - params.depth : top;
+    const text: TextFeature = {
+      id: newId(),
+      type: "text",
+      name,
+      visible: true,
+      params,
+      transform: { position: [at[0] - origin[0], at[1] - origin[1], z - origin[2]], rotation: [0, 0, 0] },
+    };
+    const result: Feature = {
+      id: newId(),
+      type: "boolean",
+      op: p.mode === "emboss" ? "union" : "subtract",
+      name: target.name,
+      visible: true,
+      transform: { position: [...origin], rotation: [0, 0, 0] },
+      children: [{ ...target, visible: true, transform: { ...target.transform, position: [0, 0, 0] } }, text],
+    };
+    const idx = doc.features.findIndex((f) => f.id === target.id);
+    const features = doc.features.filter((f) => f.id !== target.id);
+    features.splice(idx, 0, result);
+    return {
+      doc: { ...doc, features },
+      selection: [result.id],
+      label: `${target.name}: Text ${name} ${p.mode === "emboss" ? "prägen" : "gravieren"}`,
+    };
+  },
+});
+
+defineCommand({
+  id: "tool.text",
+  kind: "action",
+  label: "Text",
+  description: "Text-Werkzeug: Klick aufs Druckbett setzt 3D-Text, Klick auf einen Körper prägt Text darauf.",
+  icon: "text",
+  shortcut: "t",
+  params: {},
+  perform() {
+    useTextTool.setState((s) => ({ active: !s.active }));
+  },
+});
+
+/** The text feature behind an object: the text itself, or the text tool of an emboss/engrave. */
+export function textOf(f: Feature | undefined): TextFeature | undefined {
+  if (!f) return undefined;
+  if (f.type === "text") return f;
+  if (f.type === "boolean" && f.children[1].type === "text" && f.children[1].params.onFace) return f.children[1];
+  return undefined;
+}
+
+defineCommand({
+  id: "text.edit",
+  kind: "document",
+  label: "Text bearbeiten",
+  description: "Ändert Text, Größe, Tiefe, Schrift oder Ausrichtung eines Text-Objekts (auch geprägt/graviert); der Körper wird neu erzeugt.",
+  icon: "text",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    text: { type: "string", optional: true, description: "Neuer Text" },
+    size: { type: "number", unit: "mm", min: 0.5, optional: true, description: "Höhe der Großbuchstaben" },
+    depth: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Tiefe" },
+    font: { type: "enum", options: TEXT_FONTS, optional: true, description: "Schriftart" },
+    bold: { type: "boolean", optional: true, description: "Fett" },
+    align: { type: "enum", options: ["left", "center", "right"], optional: true, description: "Ausrichtung" },
+    mode: { type: "enum", options: ["emboss", "engrave"], optional: true, description: "Nur für Text auf einer Fläche: prägen oder gravieren" },
+  },
+  isEnabled: (ctx) => ctx.selection.length === 1 && !!textOf(findFeature(ctx.doc, ctx.selection[0])),
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    const t = textOf(f);
+    if (!f || !t) throw new Error("Kein Text-Objekt ausgewählt.");
+    const patch = Object.fromEntries(
+      (["text", "size", "depth", "font", "bold", "align"] as const).filter((k) => p[k] !== undefined).map((k) => [k, p[k]]),
+    ) as Partial<TextFeatureParams>;
+    if (patch.text !== undefined && !String(patch.text).trim()) throw new Error("Der Text ist leer.");
+    const params = { ...t.params, ...patch };
+    if (p.mode && t.params.onFace) params.onFace = p.mode;
+    if (JSON.stringify(params) === JSON.stringify(t.params)) return null;
+    // The face height stays fixed: emboss sits on it, engraved text ends at it.
+    const [x, y, z] = t.transform.position;
+    const face = t.params.onFace === "engrave" ? z + t.params.depth : z;
+    const nz = params.onFace === "engrave" ? face - params.depth : params.onFace === "emboss" ? face : z;
+    const next: TextFeature = { ...t, params, transform: { ...t.transform, position: [x, y, nz] } };
+    const updated: Feature =
+      f.type === "text"
+        ? { ...next, name: patch.text && /^„.*“$/.test(f.name) ? `„${params.text.slice(0, 16)}${params.text.length > 16 ? "…" : ""}“` : f.name }
+        : {
+            ...(f as BooleanFeature),
+            op: params.onFace === "engrave" ? "subtract" : "union",
+            children: [(f as BooleanFeature).children[0], next],
+          };
+    return { doc: updateFeature(doc, f.id, () => updated), label: `${f.name}: Text bearbeiten` };
+  },
+});
 
 defineEdgeCommand("fillet");
 defineEdgeCommand("chamfer");

@@ -7,6 +7,7 @@ import { Menu, MenuTitle } from "../ui/Menu";
 import { CommandItem } from "../ui/CommandItem";
 import { useHelp } from "../help/HelpCenter";
 import { useLibrary } from "./Library";
+import { useTextTool } from "../ui/textTool";
 
 export const PRIMITIVES: { id: string; icon: IconName; label: string }[] = [
   { id: "primitive.box", icon: "box", label: "Quader" },
@@ -51,6 +52,7 @@ function RailButton({ icon, tip, kbd, active, onClick }: { icon: IconName; tip: 
 export function LeftRail() {
   const workspace = useApp((s) => s.workspace);
   const library = useLibrary((s) => s.open);
+  const textTool = useTextTool((s) => s.active);
   const boolPop = usePopover();
   const edgePop = usePopover();
   useApp((s) => s.selection);
@@ -59,6 +61,7 @@ export function LeftRail() {
     <aside className="panel rail">
       <RailButton icon="select" tip="Auswählen" active={workspace === "model" && !library} onClick={() => { useLibrary.setState({ open: false }); void execute("workspace.model"); }} />
       <RailButton icon="shapes" tip="Formen-Bibliothek" active={library} onClick={() => useLibrary.setState({ open: !library })} />
+      <RailButton icon="text" tip="Text" kbd="t" active={textTool} onClick={() => execute("tool.text")} />
       <div className="rail-sep" />
       <RailButton icon="sketch" tip="Skizze (2D)" kbd="2" active={workspace === "sketch"} onClick={() => execute("workspace.sketch")} />
       <div ref={boolPop.ref} style={{ position: "relative" }}>

@@ -7,6 +7,22 @@ import wasmUrl from "replicad-opencascadejs/wasm?url";
 import { makeCompound, setOC, type Face, type Shape3D } from "replicad";
 import { buildLocal, buildPlaced, EdgeTreatmentError } from "./build";
 import { zipSync, strToU8 } from "fflate";
+import { loadFonts } from "./text";
+import inter400 from "@fontsource/inter/files/inter-latin-400-normal.woff?url";
+import inter700 from "@fontsource/inter/files/inter-latin-700-normal.woff?url";
+import slab400 from "@fontsource/roboto-slab/files/roboto-slab-latin-400-normal.woff?url";
+import slab700 from "@fontsource/roboto-slab/files/roboto-slab-latin-700-normal.woff?url";
+import mono400 from "@fontsource/roboto-mono/files/roboto-mono-latin-400-normal.woff?url";
+import mono700 from "@fontsource/roboto-mono/files/roboto-mono-latin-700-normal.woff?url";
+
+const FONT_URLS: Record<string, string> = {
+  "inter-400": inter400,
+  "inter-700": inter700,
+  "roboto-slab-400": slab400,
+  "roboto-slab-700": slab700,
+  "roboto-mono-400": mono400,
+  "roboto-mono-700": mono700,
+};
 import type { MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -19,6 +35,7 @@ function init() {
         locateFile: () => wasmUrl,
       });
       setOC(OC as Parameters<typeof setOC>[0]);
+      await loadFonts(async (name) => (await fetch(FONT_URLS[name])).arrayBuffer());
     })();
   }
   return ready;

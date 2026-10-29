@@ -4,6 +4,7 @@ import { Icon, type IconName } from "../ui/icons";
 import { PRIMITIVES } from "./LeftRail";
 import { useGizmo } from "../ui/gizmo";
 import { useSketch } from "../ui/sketch";
+import { useTextTool } from "../ui/textTool";
 
 function CommandTool({ id, icon, label, tip: tipText, active }: { id: string; icon?: IconName; label?: string; tip?: string; active?: boolean }) {
   const cmd = getCommand(id)!;
@@ -25,6 +26,7 @@ export function Toolbar() {
   const selection = useApp((s) => s.selection).filter((id) => doc.features.some((f) => f.id === id));
   const single = selection.length === 1 ? doc.features.find((f) => f.id === selection[0]) : undefined;
   const rotate = useGizmo((s) => s.mode === "rotate");
+  const textTool = useTextTool((s) => s.active);
   const mode = selection.length === 0 ? "create" : selection.length === 1 ? "single" : selection.length === 2 ? "pair" : "many";
 
   return (
@@ -32,6 +34,7 @@ export function Toolbar() {
       <div className="toolbar-set" key={mode}>
         {mode === "create" &&
           PRIMITIVES.map((p) => <CommandTool key={p.id} id={p.id} icon={p.icon} label={p.label} />)}
+        {mode === "create" && <CommandTool id="tool.text" active={textTool} tip="Text: aufs Druckbett klicken" />}
         {mode === "single" && single?.type === "sketch" && (
           <>
             <button className="tool" onClick={() => { useSketch.setState({ activeId: single.id }); void execute("workspace.sketch"); }} data-tip="Skizze im 2D-Modus bearbeiten" data-tip-pos="top">
@@ -50,6 +53,7 @@ export function Toolbar() {
               </>
             )}
             {single?.type === "boolean" && <CommandTool id="boolean.split" />}
+            <CommandTool id="tool.text" active={textTool} tip="Text prägen: auf den Körper klicken" />
           </>
         )}
         {mode === "pair" && (

@@ -1,5 +1,5 @@
 // Compact inline value input for commands with a single numeric parameter (Abrunden,
-// Fasen, …). Opens where the context menu was, previews live while typing and commits
+// Fasen, …) or a single text (placing 3D text). Opens where the context menu was, previews live while typing and commits
 // one history entry on Enter. Esc or a click outside cancels and removes the preview.
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
@@ -14,6 +14,10 @@ interface Request {
   at: { x: number; y: number };
   /** Extra fixed params (e.g. the object id). */
   params?: Record<string, unknown>;
+  /** "text": a string field (no unit, no arrow-key steps). Default "number". */
+  kind?: "number" | "text";
+  /** Initial value (else the last used one). */
+  initial?: string;
 }
 
 export const useValuePopover = create<{ req: Request | null }>(() => ({ req: null }));
@@ -35,8 +39,10 @@ export function ValuePopover() {
 function Popover({ req }: { req: Request }) {
   const cmd = getCommand(req.command)!;
   const spec = cmd.params[req.param];
-  const initial = useLastValues.getState().values[req.command] ?? 2;
-  const [text, setText] = useState(fmt(initial));
+  const isText = req.kind === "text";
+  const [text, setText] = useState(req.initial ?? fmt(useLastValues.getState().values[req.command] ?? 2));
+  const valueOf = (v: string) => (isText ? v : parse(v));
+  const invalid = (v: string) => (isText ? !v.trim() : !Number.isFinite(parse(v)) || parse(v) < 0);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -51,23 +57,22 @@ function Popover({ req }: { req: Request }) {
   const preview = (value: string) => {
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      const n = parse(value);
-      if (!Number.isFinite(n) || n < 0) {
+      if (invalid(value)) {
         clearPreview();
-        setError("Bitte eine Zahl ≥ 0 eingeben.");
+        setError(isText ? null : "Bitte eine Zahl ≥ 0 eingeben.");
         return;
       }
-      setError(previewCommand(req.command, { ...req.params, [req.param]: n }));
+      setError(previewCommand(req.command, { ...req.params, [req.param]: valueOf(value) }));
     }, 120);
   };
 
   const apply = async () => {
-    const n = parse(text);
-    if (!Number.isFinite(n) || n < 0 || error) return;
+    if (invalid(text) || error) return;
     window.clearTimeout(timer.current);
     clearPreview();
-    const ok = await execute(req.command, { ...req.params, [req.param]: n });
-    if (ok) useLastValues.setState((s) => ({ values: { ...s.values, [req.command]: n } }));
+    const v = valueOf(text);
+    const ok = await execute(req.command, { ...req.params, [req.param]: v });
+    if (ok && typeof v === "number") useLastValues.setState((s) => ({ values: { ...s.values, [req.command]: v } }));
     useValuePopover.setState({ req: null });
   };
 
@@ -105,10 +110,10 @@ function Popover({ req }: { req: Request }) {
         <Icon name={cmd.icon} size={15} />
         {cmd.label}
       </div>
-      <div className={`field value-pop-field ${error ? "invalid" : ""}`}>
+      <div className={`field value-pop-field ${isText ? "text" : ""} ${error ? "invalid" : ""}`}>
         <input
           ref={input}
-          inputMode="decimal"
+          inputMode={isText ? "text" : "decimal"}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -118,7 +123,7 @@ function Popover({ req }: { req: Request }) {
             e.stopPropagation();
             if (e.key === "Enter") void apply();
             else if (e.key === "Escape") close();
-            else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            else if (!isText && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
               e.preventDefault();
               nudge((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 5 : 0.5));
             }

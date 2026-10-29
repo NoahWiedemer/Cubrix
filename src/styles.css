@@ -1073,3 +1073,13 @@ body.panel-dragging, body.panel-dragging * { cursor: grabbing !important; user-s
 .view-tab h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-3); }
 .more-row { display: flex; align-items: center; gap: 6px; height: 28px; font-size: 13px; color: var(--text-3); align-self: flex-start; }
 .more-row:hover { color: var(--text-2); }
+.value-pop-field.text { width: 190px; } .value-pop-field.text input { text-align: left; padding-left: 8px; }
+.viewport.placing-text canvas { cursor: text !important; }
+/* Text section in the inspector */
+.text-section { display: flex; flex-direction: column; gap: 8px; }
+.text-section .group-label { margin-bottom: 0; }
+.text-field input { padding: 0 10px; font-size: 14px; }
+.text-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bold-toggle { height: 34px; }
+.bold-toggle.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.text-field input { text-align: left; }
