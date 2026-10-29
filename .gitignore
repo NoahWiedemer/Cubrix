@@ -7,3 +7,14 @@ src-tauri/gen/schemas
 
 # Updater signing keys never belong in the repo
 *.key
+*.pem
+*.p12
+.env
+.env.*
+secrets.json
+secrets.key
+errors.jsonl
+*.cubrix
+*.albedo
+.claude/
+.vscode/
