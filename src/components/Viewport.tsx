@@ -18,6 +18,7 @@ import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } fr
 import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
+import { SegmentedControl } from "../ui/SegmentedControl";
 import { SketchDraw, SketchObject } from "./SketchLayer";
 import { SketchToolbar } from "./SketchToolbar";
 import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewControls";
@@ -306,27 +307,19 @@ function ViewControls() {
   const projection = useSettings((s) => s.projection);
   return (
     <div className="view-controls">
-      <button
-        className={projection === "perspective" ? "on" : ""}
-        onClick={() => execute("view.projection", { mode: "perspective" })}
-        data-tip="Perspektive"
-        data-kbd="o"
-        data-tip-pos="bottom"
-      >
-        <Icon name="perspective" size={15} />
-      </button>
-      <button
-        className={projection === "orthographic" ? "on" : ""}
-        onClick={() => execute("view.projection", { mode: "orthographic" })}
-        data-tip="Orthografisch"
-        data-kbd="o"
-        data-tip-pos="top"
-      >
-        <Icon name="projection" size={15} />
-      </button>
+      <SegmentedControl
+        size="sm"
+        className="icons bare"
+        value={projection}
+        onChange={(mode) => execute("view.projection", { mode })}
+        options={[
+          { value: "perspective", icon: <Icon name="perspective" size={17} />, tip: "Perspektive", kbd: "o" },
+          { value: "orthographic", icon: <Icon name="projection" size={17} />, tip: "Orthografisch", kbd: "o" },
+        ]}
+      />
       <span className="vc-sep" />
-      <button onClick={() => execute("view.iso")} data-tip="Isometrische Ansicht" data-kbd="i" data-tip-pos="top">
-        <Icon name="iso" size={15} />
+      <button onClick={() => execute("view.iso")} data-tip="Isometrische Ansicht" data-kbd="i" data-tip-pos="bottom">
+        <Icon name="iso" size={17} />
       </button>
     </div>
   );

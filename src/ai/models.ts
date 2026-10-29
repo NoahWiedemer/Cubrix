@@ -3,8 +3,8 @@
 // - Anthropic: Claude API reference (models overview), current models Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5;
 //   depth via `output_config.effort` (low | medium | high | xhigh | max), thinking is adaptive by default.
 //   https://docs.anthropic.com/claude/docs/models-overview
-// - OpenAI: https://developers.openai.com/api/docs/models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna)
-//   and https://developers.openai.com/api/docs/guides/reasoning (`reasoning_effort` in Chat Completions).
+// - OpenAI: https://developers.openai.com/api/docs/models (GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Luna),
+//   Responses API with function tools and `reasoning.effort` (Chat Completions rejects tools + effort).
 import type { Provider } from "./providers";
 
 export type Effort = "low" | "medium" | "high";
@@ -31,13 +31,13 @@ export const CATALOG: Record<Provider, ModelInfo[]> = {
   ],
   openai: [
     { id: "gpt-6-astra", name: "GPT-6 Astra", hint: "Am stärksten", effort: true, recommended: true },
+    { id: "gpt-6.1-terra", name: "GPT-6.1 Terra", hint: "Empfohlen", effort: true, recommended: true },
     { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", hint: "Ausgewogen", effort: true, recommended: true },
-    { id: "gpt-6.1-terra", name: "GPT-6.1 Terra", hint: "Vielseitig", effort: true, recommended: true },
     { id: "gpt-6-luna", name: "GPT-6 Luna", hint: "Am schnellsten", effort: true, recommended: true },
   ],
 };
 
-export const DEFAULT_MODEL: Record<Provider, string> = { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-sol" };
+export const DEFAULT_MODEL: Record<Provider, string> = { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" };
 
 export const EFFORT_LABELS: Record<Effort, string> = { low: "Niedrig", medium: "Mittel", high: "Hoch" };
 

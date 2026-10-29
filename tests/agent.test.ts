@@ -69,27 +69,44 @@ describe("KI-Agent (gemockter Anbieter)", () => {
     expect(JSON.stringify(t.bodies[1].messages)).toContain("tool_result");
   });
 
-  it("spricht auch das OpenAI-Format", async () => {
-    let n = 0;
+  it("spricht die OpenAI Responses API (function_call / function_call_output)", async () => {
+    const bodies: any[] = [];
     const t: Transport = {
-      async stream(_p, _body, onChunk) {
-        n++;
-        if (n === 1)
+      async stream(_p, body, onChunk) {
+        bodies.push(body);
+        if (bodies.length === 1) {
+          const reasoning = { type: "reasoning", id: "rs_1", summary: [] };
+          const call = { type: "function_call", id: "fc_1", call_id: "call_1", name: "primitive__cylinder", arguments: '{"diameter":12,"height":5}' };
           onChunk(
             sse([
-              { choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "primitive__cylinder", arguments: '{"diameter":' } }] } }] },
-              { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '12,"height":5}' } }] } }] },
-              { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
-            ]) + "data: [DONE]\n\n",
+              { type: "response.output_item.done", item: reasoning },
+              { type: "response.output_item.added", item: { ...call, arguments: "" } },
+              { type: "response.function_call_arguments.delta", delta: '{"diameter":12,' },
+              { type: "response.output_item.done", item: call },
+              { type: "response.completed", response: { output: [reasoning, call] } },
+            ]),
           );
-        else onChunk(sse([{ choices: [{ delta: { content: "Erledigt." }, finish_reason: "stop" }] }]));
+        } else
+          onChunk(
+            sse([
+              { type: "response.output_text.delta", delta: "Erledigt." },
+              { type: "response.completed", response: { output: [{ type: "message", content: [{ type: "output_text", text: "Erledigt." }] }] } },
+            ]),
+          );
       },
     };
     await runAgent({
-      provider: "openai", model: "test", transport: t, history: [], prompt: "Zylinder",
+      provider: "openai", model: "gpt-6.1-terra", effort: "medium", transport: t, history: [], prompt: "Zylinder",
       signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} },
     });
     expect(getDoc().features.some((f) => f.type === "cylinder" && f.params.diameter === 12)).toBe(true);
+    expect(bodies[0].model).toBe("gpt-6.1-terra");
+    expect(bodies[0].reasoning).toEqual({ effort: "medium" });
+    expect(bodies[0].tools[0]).toMatchObject({ type: "function", name: expect.any(String), parameters: expect.any(Object) });
+    // Second request replays reasoning + call and adds the output.
+    const input = bodies[1].input;
+    expect(input.map((i: any) => i.type ?? i.role)).toEqual(["user", "reasoning", "function_call", "function_call_output"]);
+    expect(input[3].call_id).toBe("call_1");
   });
 });
 
@@ -123,18 +140,35 @@ describe("Denktiefe und Thinking-Blöcke", () => {
     expect(assistant.content[0]).toEqual({ type: "thinking", thinking: "", signature: "sig-123" });
   });
 
-  it("sendet reasoning_effort an OpenAI und lässt es ohne Unterstützung weg", async () => {
+  it("sendet reasoning.effort an OpenAI und lässt es ohne Unterstützung weg", async () => {
     const bodies: any[] = [];
     const t: Transport = {
       async stream(_p, body, onChunk) {
         bodies.push(body);
-        onChunk(sse([{ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] }]));
+        onChunk(sse([{ type: "response.completed", response: { output: [] } }]));
       },
     };
     const base = { provider: "openai" as const, model: "gpt-6.1-sol", transport: t, history: [], prompt: "x", signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} } };
     await runAgent({ ...base, effort: "low" });
     await runAgent({ ...base, effort: null });
-    expect(bodies[0].reasoning_effort).toBe("low");
-    expect("reasoning_effort" in bodies[1]).toBe(false);
+    expect(bodies[0].reasoning).toEqual({ effort: "low" });
+    expect("reasoning" in bodies[1]).toBe(false);
+  });
+
+  it("jeder Eintrag der Modellauswahl sendet seine eigene ID", async () => {
+    const { CATALOG, modelInfo } = await import("../src/ai/models");
+    for (const provider of ["anthropic", "openai"] as const)
+      for (const m of CATALOG[provider]) {
+        let sent = "";
+        const t: Transport = {
+          async stream(_p, body: any, onChunk) {
+            sent = body.model;
+            onChunk(provider === "openai" ? sse([{ type: "response.completed", response: { output: [] } }]) : sse([{ type: "message_delta", delta: { stop_reason: "end_turn" } }]));
+          },
+        };
+        const info = modelInfo(provider, m.id);
+        await runAgent({ provider, model: info.id, effort: info.effort ? "medium" : null, transport: t, history: [], prompt: "x", signal: new AbortController().signal, events: { onText: () => {}, onStep: () => {} } });
+        expect(sent).toBe(m.id);
+      }
   });
 });

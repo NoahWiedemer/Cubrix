@@ -35,6 +35,17 @@ fn boot_progress(app: tauri::AppHandle, step: String) {
     }
 }
 
+/// Dev-only end-to-end hook: `ALBEDO_E2E="openai|gpt-6.1-terra|Prompt;;anthropic|…"` makes the
+/// app run those prompts itself and log the steps (the API key never leaves the app).
+#[tauri::command]
+fn e2e_config() -> Option<String> {
+    if cfg!(debug_assertions) {
+        std::env::var("ALBEDO_E2E").ok()
+    } else {
+        None
+    }
+}
+
 /// The splash finished its animation after the app was ready.
 #[tauri::command]
 fn splash_finished(app: tauri::AppHandle) {
@@ -94,6 +105,7 @@ pub fn run() {
             log_status,
             boot_progress,
             splash_finished,
+            e2e_config,
             ai::ai_set_key,
             ai::ai_has_key,
             ai::ai_stream,

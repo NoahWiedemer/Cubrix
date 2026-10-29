@@ -33,6 +33,7 @@ if (isTauri) {
     // Never keep the window hidden: an error also ends the splash.
     if (k.status === "ready") boot("kernel");
     boot("ready");
+    if (import.meta.env.DEV && k.status === "ready") void import("./ai/e2e").then((m) => m.runE2E());
   });
   requestAnimationFrame(() => boot("ui"));
 }

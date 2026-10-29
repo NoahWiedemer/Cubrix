@@ -28,15 +28,19 @@ export interface AiSettings {
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-sol" }, effort: "medium" }), {
+  persist((): AiSettings => ({ provider: "anthropic", model: { anthropic: "claude-sonnet-5-5", openai: "gpt-6.1-terra" }, effort: "medium" }), {
     name: "albedo.ai",
-    version: 2,
+    version: 3,
     // Older settings could hold an empty OpenAI model id.
     migrate: (s) => {
       const old = s as Partial<AiSettings>;
       return {
         provider: old.provider ?? "anthropic",
-        model: { anthropic: old.model?.anthropic || "claude-sonnet-5-5", openai: old.model?.openai || "gpt-6.1-sol" },
+        // v3: GPT-6.1 Terra became the OpenAI default (replacing the previous default Sol).
+        model: {
+          anthropic: old.model?.anthropic || "claude-sonnet-5-5",
+          openai: !old.model?.openai || old.model.openai === "gpt-6.1-sol" ? "gpt-6.1-terra" : old.model.openai,
+        },
         effort: old.effort ?? "medium",
       };
     },

@@ -103,7 +103,7 @@ input.project-name { outline: none; border-color: var(--accent-line); background
 .save-state .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-line); }
 .save-state.dirty .dot { background: var(--text-3); box-shadow: none; }
 
-.tabs { display: flex; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 9px; }
+
 .tab {
   white-space: nowrap;
   font-size: 14.5px;
@@ -837,3 +837,42 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .chat-input textarea { padding-right: 44px; min-height: 64px; }
 .chat-send { right: 18px; bottom: 18px; width: 28px; height: 28px; border-radius: 8px; }
 .chat-note { color: var(--text-3); font-size: 12.5px; line-height: 1.45; }
+
+/* ── Segmented control (sliding pill) ─────────────────── */
+.segmented { position: relative; display: inline-flex; align-items: stretch; gap: 2px; padding: 3px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line-soft); isolation: isolate; }
+.segmented > button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; color: var(--text-2); font-weight: 500; transition: color 180ms var(--ease); }
+.segmented > button:hover { color: var(--text); }
+.segmented > button.on { color: var(--text); }
+.segmented > button svg { color: var(--text-3); transition: color 180ms var(--ease); }
+.segmented > button.on svg { color: var(--accent); }
+.segmented.md > button { padding: 6px 15px; font-size: 14.5px; border-radius: 6px; }
+.segmented.sm > button { padding: 5px 9px; font-size: 13px; border-radius: 6px; }
+.segmented-pill { position: absolute; z-index: 0; left: 0; top: 3px; bottom: 3px; border-radius: 6px; background: var(--panel-3); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 200ms cubic-bezier(0.3, 0.7, 0.2, 1), width 200ms cubic-bezier(0.3, 0.7, 0.2, 1); will-change: transform; }
+.segmented-pill.no-anim { transition: none; }
+@media (prefers-reduced-motion: reduce) { .segmented-pill, .segmented > button { transition: none; } }
+.segmented.block { display: flex; }
+.segmented.block > button { flex: 1; }
+.segmented.icons > button { padding: 5px 7px; }
+
+.menu-seg { padding: 2px 6px 6px; }
+.segmented.bare { background: transparent; border-color: transparent; padding: 0; }
+.segmented.bare .segmented-pill { top: 0; bottom: 0; background: var(--accent-soft); box-shadow: none; }
+.view-controls .segmented.bare > button { width: 32px; height: 30px; padding: 0; }
+.view-controls > button { width: 32px; height: 30px; }
+.preview-bar .segmented.bare > button { flex-direction: column; gap: 3px; padding: 6px 10px 5px; font-size: 12px; }
+.chat-setup { gap: 16px; padding: 14px 4px 10px; }
+.chat-setup .chat-link { align-self: center; text-align: center; }
+.chat-setup-title { justify-content: center; }
+
+/* Compact chat input */
+.chat-input { position: relative; padding: 6px 10px 10px; }
+.chat-input textarea { display: block; min-height: 42px; max-height: 140px; height: 42px; padding: 11px 44px 11px 12px; line-height: 20px; border-radius: 11px; overflow-y: auto; }
+.chat-send { position: absolute; right: 17px; bottom: 17px; width: 28px; height: 28px; border-radius: 8px; background: transparent; color: var(--text-3); transition: background var(--fast), color var(--fast); }
+.chat-send.ready { background: var(--accent); color: var(--accent-ink); }
+.chat-send:disabled { opacity: 1; cursor: default; }
+.chat-send.stop { background: var(--panel-3); color: var(--text); }
+.err-title { display: flex; align-items: center; gap: 7px; color: #f3b0b0; font-weight: 550; }
+.err-actions { display: flex; gap: 6px; margin-top: 8px; }
+.err-actions button { padding: 4px 9px; border-radius: 6px; font-size: 12px; color: var(--text-2); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.err-actions button:hover { color: var(--text); }
+.err-details { margin: 8px 0 0; padding: 8px; border-radius: 6px; background: #0c0f11; color: var(--text-3); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: auto; user-select: text; }

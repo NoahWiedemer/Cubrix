@@ -11,6 +11,8 @@ export type Block =
   // Anthropic thinking blocks must be sent back unchanged on later turns.
   | { type: "thinking"; thinking: string; signature: string }
   | { type: "redacted_thinking"; data: string }
+  // Raw OpenAI Responses output item (reasoning, message, function_call), replayed unchanged.
+  | { type: "openai_item"; item: Record<string, unknown> }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string; image?: string; isError?: boolean };
 
@@ -60,7 +62,7 @@ export function sseParser(onEvent: (data: Record<string, unknown>) => void) {
 function anthropicMessages(messages: Message[]) {
   return messages.map((m) => ({
     role: m.role,
-    content: m.content.map((b) => {
+    content: m.content.filter((b) => b.type !== "openai_item").map((b) => {
       if (b.type !== "tool_result") return b;
       const content: unknown[] = [{ type: "text", text: b.content }];
       if (b.image) content.unshift({ type: "image", source: { type: "base64", media_type: "image/png", data: b.image } });
@@ -129,81 +131,86 @@ async function anthropicTurn(
   return { blocks: blocks.filter(Boolean), stop };
 }
 
-// ── OpenAI ───────────────────────────────────────────────────────────────────
+// ── OpenAI (Responses API) ───────────────────────────────────────────────────
 
-function openaiMessages(system: string, messages: Message[]) {
-  const out: Record<string, unknown>[] = [{ role: "system", content: system }];
+/** Input items for /v1/responses. Output items of earlier turns (reasoning, function calls) are passed back as-is. */
+function openaiInput(messages: Message[]) {
+  const input: unknown[] = [];
   for (const m of messages) {
     if (m.role === "assistant") {
-      const text = m.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
-      const calls = m.content.filter((b) => b.type === "tool_use") as Extract<Block, { type: "tool_use" }>[];
-      out.push({
-        role: "assistant",
-        content: text || null,
-        tool_calls: calls.length
-          ? calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: JSON.stringify(c.input) } }))
-          : undefined,
-      });
+      for (const b of m.content) {
+        if (b.type === "openai_item") input.push(b.item);
+        else if (b.type === "text" && !m.content.some((x) => x.type === "openai_item"))
+          input.push({ role: "assistant", content: b.text });
+      }
       continue;
     }
     const images: string[] = [];
     for (const b of m.content) {
       if (b.type === "tool_result") {
-        out.push({ role: "tool", tool_call_id: b.tool_use_id, content: b.content });
+        input.push({ type: "function_call_output", call_id: b.tool_use_id, output: b.content });
         if (b.image) images.push(b.image);
-      } else if (b.type === "text") out.push({ role: "user", content: b.text });
+      } else if (b.type === "text") input.push({ role: "user", content: b.text });
     }
     if (images.length)
-      out.push({
+      input.push({
         role: "user",
         content: [
-          { type: "text", text: "Screenshot des Viewports:" },
-          ...images.map((d) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${d}` } })),
+          { type: "input_text", text: "Screenshot des Viewports:" },
+          ...images.map((d) => ({ type: "input_image", image_url: `data:image/png;base64,${d}` })),
         ],
       });
   }
-  return out;
+  return input;
 }
 
 async function openaiTurn(
   t: Transport, model: string, effort: Effort | null, system: string, tools: ToolSpec[], messages: Message[], onText: (d: string) => void, signal: AbortSignal,
 ): Promise<TurnResult> {
-  let text = "";
-  const calls: { id: string; name: string; args: string }[] = [];
-  let stop: TurnResult["stop"] = "end";
+  const items: Record<string, unknown>[] = [];
+  let finalOutput: Record<string, unknown>[] | null = null;
   const parse = sseParser((e) => {
-    const choice = (e.choices as { delta?: Record<string, unknown>; finish_reason?: string }[] | undefined)?.[0];
-    if (!choice) return;
-    const d = choice.delta ?? {};
-    if (typeof d.content === "string") {
-      text += d.content;
-      onText(d.content);
+    const type = e.type as string;
+    if (type === "response.output_text.delta") onText((e.delta as string) ?? "");
+    else if (type === "response.output_item.done") items.push(e.item as Record<string, unknown>);
+    else if (type === "response.completed") finalOutput = ((e.response as { output?: Record<string, unknown>[] }) ?? {}).output ?? null;
+    else if (type === "response.failed" || type === "error") {
+      const err = (e.response as { error?: { message?: string } } | undefined)?.error ?? (e.error as { message?: string } | undefined) ?? (e as { message?: string });
+      throw new Error(err?.message ?? "Fehler des KI-Anbieters");
     }
-    for (const c of (d.tool_calls as { index: number; id?: string; function?: { name?: string; arguments?: string } }[]) ?? []) {
-      const slot = (calls[c.index] ??= { id: "", name: "", args: "" });
-      if (c.id) slot.id = c.id;
-      if (c.function?.name) slot.name += c.function.name;
-      if (c.function?.arguments) slot.args += c.function.arguments;
-    }
-    if (choice.finish_reason === "tool_calls") stop = "tool_use";
   });
   await t.stream(
     "openai",
     {
       model,
       stream: true,
-      ...(effort ? { reasoning_effort: effort } : {}),
-      messages: openaiMessages(system, messages),
-      tools: tools.map((x) => ({ type: "function", function: { name: x.name, description: x.description, parameters: x.input_schema } })),
+      instructions: system,
+      input: openaiInput(messages),
+      tools: tools.map((x) => ({ type: "function", name: x.name, description: x.description, parameters: x.input_schema })),
+      ...(effort ? { reasoning: { effort } } : {}),
     },
     parse,
     signal,
   );
+  const output: Record<string, unknown>[] = finalOutput ?? items;
   const blocks: Block[] = [];
-  if (text) blocks.push({ type: "text", text });
-  for (const c of calls.filter(Boolean))
-    blocks.push({ type: "tool_use", id: c.id, name: c.name, input: c.args ? JSON.parse(c.args) : {} });
-  return { blocks, stop: calls.length ? "tool_use" : stop };
+  let calls = 0;
+  for (const item of output) {
+    blocks.push({ type: "openai_item", item });
+    if (item.type === "message") {
+      const text = ((item.content as { type: string; text?: string }[]) ?? []).filter((c) => c.type === "output_text").map((c) => c.text ?? "").join("");
+      if (text) blocks.push({ type: "text", text });
+    } else if (item.type === "function_call") {
+      calls++;
+      blocks.push({
+        type: "tool_use",
+        id: item.call_id as string,
+        name: item.name as string,
+        input: item.arguments ? JSON.parse(item.arguments as string) : {},
+      });
+    }
+  }
+  return { blocks, stop: calls ? "tool_use" : "end" };
 }
 
 export function runTurn(

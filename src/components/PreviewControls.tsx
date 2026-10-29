@@ -6,6 +6,7 @@ import { execute } from "../core/commands";
 import { useApp } from "../core/store";
 import { usePreview, type PreviewBackground } from "../ui/preview";
 import { Icon } from "../ui/icons";
+import { SegmentedControl } from "../ui/SegmentedControl";
 
 const BGS: { id: PreviewBackground; label: string }[] = [
   { id: "studio", label: "Studio" },
@@ -23,12 +24,14 @@ export function PreviewControls() {
           <Icon name="turntable" size={18} />Drehteller
         </button>
         <div className="tool-sep" />
-        {BGS.map((b) => (
-          <button key={b.id} className={`tool ${p.background === b.id ? "active" : ""}`} onClick={() => usePreview.setState({ background: b.id })}>
-            <span className={`bg-swatch ${b.id}`} />
-            {b.label}
-          </button>
-        ))}
+        <SegmentedControl
+          size="sm"
+          className="bare"
+          tipPos="top"
+          value={p.background}
+          onChange={(background) => usePreview.setState({ background })}
+          options={BGS.map((b) => ({ value: b.id, label: b.label, icon: <span className={`bg-swatch ${b.id}`} /> }))}
+        />
         <div className="tool-sep" />
         <button className={`tool ${p.section ? "active" : ""}`} onClick={() => usePreview.setState({ section: !p.section })} data-tip="Schnittansicht: ins Innere schauen" data-tip-pos="top">
           <Icon name="section" size={18} />Schnitt

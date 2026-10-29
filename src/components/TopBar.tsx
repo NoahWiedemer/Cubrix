@@ -4,6 +4,7 @@ import logo1x from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
 import logo2x from "../assets/brand/modelonio-logo-ohne-hintergrund-512.png";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { Icon, type IconName } from "../ui/icons";
+import { SegmentedControl } from "../ui/SegmentedControl";
 import { QUALITY_LABELS, useSettings } from "../ui/settings";
 import { PANEL_ICONS, PANEL_TITLES, useLayout, type PanelId } from "../ui/layout";
 import { execute } from "../core/commands";
@@ -80,20 +81,12 @@ export function TopBar() {
         </div>
       </div>
 
-      <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`tab ${workspace === t.id ? "active" : ""}`}
-            onClick={() => execute("workspace.set", { workspace: t.id })}
-            data-tip={`Arbeitsbereich ${t.label}`}
-            data-kbd={t.key}
-          >
-            <Icon name={t.icon} size={16} />
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <SegmentedControl
+        className="tabs"
+        value={workspace}
+        onChange={(w) => execute("workspace.set", { workspace: w })}
+        options={TABS.map((t) => ({ value: t.id, label: t.label, icon: <Icon name={t.icon} size={16} />, tip: `Arbeitsbereich ${t.label}`, kbd: t.key }))}
+      />
 
       <div className="topbar-right" data-tauri-drag-region>
         <button className="icon-btn" disabled={!canUndo} onClick={() => execute("history.undo")} data-tip="Rückgängig" data-kbd="mod+z" data-tip-pos="bottom">
@@ -126,9 +119,15 @@ export function TopBar() {
               <MenuItem icon="orient" label="Kamera-Trägheit" checked={inertia === "light"} onClick={() => useSettings.setState({ inertia: inertia === "light" ? "off" : "light" })} />
               <MenuSeparator />
               <MenuTitle>Darstellungsqualität</MenuTitle>
-              {(["high", "balanced", "fast"] as const).map((q) => (
-                <MenuItem key={q} icon="sparkle" label={QUALITY_LABELS[q]} checked={quality === q} onClick={() => useSettings.setState({ quality: q })} />
-              ))}
+              <div className="menu-seg">
+                <SegmentedControl
+                  size="sm"
+                  className="block"
+                  value={quality}
+                  onChange={(q) => useSettings.setState({ quality: q })}
+                  options={(["high", "balanced", "fast"] as const).map((q) => ({ value: q, label: QUALITY_LABELS[q] }))}
+                />
+              </div>
               <MenuSeparator />
               <MenuItem icon="reset" label="Layout zurücksetzen" onClick={() => { useLayout.getState().reset(); viewMenu.setOpen(false); }} />
             </Menu>

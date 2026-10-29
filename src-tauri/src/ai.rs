@@ -1,64 +1,105 @@
-//! AI provider bridge. API keys live in the OS keychain and never reach the
-//! webview; requests are proxied here (no CORS) and streamed back via a channel.
+//! AI provider bridge. API keys are stored by Rust in the app data folder and never
+//! reach the webview; requests are proxied here (no CORS) and streamed back via a channel.
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::fs;
+use std::path::PathBuf;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::oneshot;
-
-const SERVICE: &str = "de.codana.albedo";
-/// Keychain service used before the rename to Albedo.
-const OLD_SERVICE: &str = "de.codana.modelonio";
 
 #[derive(Default)]
 pub struct AiState {
     cancels: Mutex<HashMap<String, oneshot::Sender<()>>>,
 }
 
-fn entry(provider: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, &format!("api-key-{provider}")).map_err(|e| e.to_string())
+/// API keys live in `<app data>/secrets.json` (mode 0600), XOR-obfuscated with a random
+/// per-install key in `secrets.key`. Only Rust reads or writes them; the webview only
+/// learns whether a key is set. (No OS keychain: unsigned dev builds made it prompt.)
+fn secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
-fn key(provider: &str) -> Result<String, String> {
-    let current = entry(provider)?;
-    if let Ok(k) = current.get_password() {
-        return Ok(k);
+fn write_private(path: &PathBuf, data: &[u8]) -> Result<(), String> {
+    fs::write(path, data).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
     }
-    // One-time migration from the old keychain service.
-    let old = keyring::Entry::new(OLD_SERVICE, &format!("api-key-{provider}")).map_err(|e| e.to_string())?;
-    let k = old.get_password().map_err(|_| "Kein API-Schlüssel hinterlegt".to_string())?;
-    if current.set_password(&k).is_ok() {
-        let _ = old.delete_credential();
+    Ok(())
+}
+
+fn install_key(app: &AppHandle) -> Result<Vec<u8>, String> {
+    let path = secrets_dir(app)?.join("secrets.key");
+    if let Ok(k) = fs::read(&path) {
+        if k.len() == 32 {
+            return Ok(k);
+        }
     }
+    let mut k = vec![0u8; 32];
+    getrandom::getrandom(&mut k).map_err(|e| e.to_string())?;
+    write_private(&path, &k)?;
     Ok(k)
 }
 
-#[tauri::command]
-pub fn ai_set_key(provider: String, key: String) -> Result<(), String> {
-    let e = entry(&provider)?;
-    if key.trim().is_empty() {
-        let _ = e.delete_credential();
-        return Ok(());
-    }
-    e.set_password(key.trim()).map_err(|e| e.to_string())
+fn xor(data: &[u8], key: &[u8]) -> Vec<u8> {
+    data.iter().enumerate().map(|(i, b)| b ^ key[i % key.len()]).collect()
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn unhex(s: &str) -> Option<Vec<u8>> {
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok()).collect()
+}
+
+fn load_secrets(app: &AppHandle) -> HashMap<String, String> {
+    let Ok(dir) = secrets_dir(app) else { return HashMap::new() };
+    fs::read_to_string(dir.join("secrets.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn key(app: &AppHandle, provider: &str) -> Result<String, String> {
+    let stored = load_secrets(app).remove(provider).ok_or("Kein API-Schlüssel hinterlegt")?;
+    let bytes = unhex(&stored).ok_or("Gespeicherter Schlüssel ist beschädigt")?;
+    String::from_utf8(xor(&bytes, &install_key(app)?)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn ai_has_key(provider: String) -> bool {
-    key(&provider).is_ok()
+pub fn ai_set_key(app: AppHandle, provider: String, key: String) -> Result<(), String> {
+    let mut secrets = load_secrets(&app);
+    let k = key.trim();
+    if k.is_empty() {
+        secrets.remove(&provider);
+    } else {
+        secrets.insert(provider, hex(&xor(k.as_bytes(), &install_key(&app)?)));
+    }
+    let json = serde_json::to_vec_pretty(&secrets).map_err(|e| e.to_string())?;
+    write_private(&secrets_dir(&app)?.join("secrets.json"), &json)
+}
+
+#[tauri::command]
+pub fn ai_has_key(app: AppHandle, provider: String) -> bool {
+    key(&app, &provider).is_ok()
 }
 
 fn endpoint(provider: &str) -> Result<&'static str, String> {
     match provider {
         "anthropic" => Ok("https://api.anthropic.com/v1/messages"),
-        "openai" => Ok("https://api.openai.com/v1/chat/completions"),
+        "openai" => Ok("https://api.openai.com/v1/responses"),
         _ => Err(format!("Unbekannter Anbieter: {provider}")),
     }
 }
 
-fn request(provider: &str, body: &serde_json::Value) -> Result<reqwest::RequestBuilder, String> {
-    let key = key(provider)?;
+fn request(app: &AppHandle, provider: &str, body: &serde_json::Value) -> Result<reqwest::RequestBuilder, String> {
+    let key = key(app, provider)?;
     let client = reqwest::Client::new();
     let req = client.post(endpoint(provider)?).json(body);
     Ok(match provider {
@@ -70,6 +111,7 @@ fn request(provider: &str, body: &serde_json::Value) -> Result<reqwest::RequestB
 /// Sends a streaming request; raw SSE text chunks are forwarded to `on_chunk`.
 #[tauri::command]
 pub async fn ai_stream(
+    app: AppHandle,
     state: State<'_, AiState>,
     request_id: String,
     provider: String,
@@ -79,7 +121,7 @@ pub async fn ai_stream(
     let (tx, mut rx) = oneshot::channel();
     state.cancels.lock().unwrap().insert(request_id.clone(), tx);
     let result = async {
-        let res = request(&provider, &body)?.send().await.map_err(|e| e.to_string())?;
+        let res = request(&app, &provider, &body)?.send().await.map_err(|e| e.to_string())?;
         if !res.status().is_success() {
             let status = res.status();
             let text = res.text().await.unwrap_or_default();
@@ -111,8 +153,8 @@ pub fn ai_cancel(state: State<'_, AiState>, request_id: String) {
 
 /// Small non-streaming request to check key and model.
 #[tauri::command]
-pub async fn ai_test(provider: String, body: serde_json::Value) -> Result<(), String> {
-    let res = request(&provider, &body)?.send().await.map_err(|e| e.to_string())?;
+pub async fn ai_test(app: AppHandle, provider: String, body: serde_json::Value) -> Result<(), String> {
+    let res = request(&app, &provider, &body)?.send().await.map_err(|e| e.to_string())?;
     if res.status().is_success() {
         Ok(())
     } else {
@@ -123,13 +165,13 @@ pub async fn ai_test(provider: String, body: serde_json::Value) -> Result<(), St
 
 /// Lists the provider's models (GET /v1/models) with the stored key.
 #[tauri::command]
-pub async fn ai_models(provider: String) -> Result<serde_json::Value, String> {
+pub async fn ai_models(app: AppHandle, provider: String) -> Result<serde_json::Value, String> {
     let url = match provider.as_str() {
         "anthropic" => "https://api.anthropic.com/v1/models?limit=100",
         "openai" => "https://api.openai.com/v1/models",
         _ => return Err(format!("Unbekannter Anbieter: {provider}")),
     };
-    let key = key(&provider)?;
+    let key = key(&app, &provider)?;
     let client = reqwest::Client::new();
     let req = client.get(url);
     let req = match provider.as_str() {

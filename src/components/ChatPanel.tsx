@@ -7,8 +7,10 @@ import { useAiSettings } from "../ui/settings";
 import { Icon } from "../ui/icons";
 import { ProviderLogo } from "../ui/ProviderLogo";
 import { usePopover } from "../ui/usePopover";
+import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
+import { friendlyError, type FriendlyError } from "../ai/errors";
 import { tauriTransport, type Message, type Provider } from "../ai/providers";
 import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, extraModels, modelInfo, type Effort, type ModelInfo } from "../ai/models";
 import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
@@ -23,7 +25,8 @@ interface ChatEntry {
   role: "user" | "assistant";
   text: string;
   steps: Step[];
-  error?: string;
+  error?: FriendlyError;
+  prompt?: string;
 }
 
 /** Conversation state survives closing/reopening the panel. */
@@ -71,27 +74,26 @@ function SetupCard({ onDone }: { onDone(): void }) {
       const body =
         provider === "anthropic"
           ? { model, max_tokens: 16, messages: [{ role: "user", content: "Hallo" }] }
-          : { model, messages: [{ role: "user", content: "Hallo" }] };
+          : { model, input: "Hallo", max_output_tokens: 16 };
       await invoke("ai_test", { provider, body });
       void loadExtraModels(provider);
       onDone();
     } catch (e) {
       setState("error");
-      setError(String(e instanceof Error ? e.message : e).slice(0, 220));
+      setError(friendlyError(e).title);
     }
   };
 
   return (
     <div className="chat-setup">
       <div className="chat-setup-title"><Icon name="key" size={16} />KI verbinden</div>
-      <div className="seg">
-        {PROVIDERS.map((p) => (
-          <button key={p.id} className={provider === p.id ? "on" : ""} onClick={() => useAiSettings.setState({ provider: p.id })}>
-            <ProviderLogo mark={p.id} />
-            {p.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        className="block"
+        size="sm"
+        value={provider}
+        onChange={(p) => useAiSettings.setState({ provider: p })}
+        options={PROVIDERS.map((p) => ({ value: p.id, label: p.label, icon: <ProviderLogo mark={p.id} /> }))}
+      />
       <div className="field chat-key">
         <input type="password" placeholder="API-Schlüssel einfügen" value={key} onChange={(e) => setKey(e.target.value)} />
       </div>
@@ -100,7 +102,6 @@ function SetupCard({ onDone }: { onDone(): void }) {
       </button>
       {!isTauri && <div className="chat-note">Nur in der Desktop-App verfügbar.</div>}
       {state === "error" && <div className="chat-error">{error}</div>}
-      <div className="chat-note">Der Schlüssel wird im Schlüsselbund deines Systems gespeichert.</div>
       <button className="chat-link" onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(info.url))}>
         Wo bekomme ich einen Schlüssel?
       </button>
@@ -148,12 +149,14 @@ function ModelMenu() {
             <>
               <MenuSeparator />
               <MenuTitle>Denktiefe</MenuTitle>
-              <div className="seg effort-seg">
-                {(["low", "medium", "high"] as Effort[]).map((e) => (
-                  <button key={e} className={effort === e ? "on" : ""} onClick={() => useAiSettings.setState({ effort: e })}>
-                    {EFFORT_LABELS[e]}
-                  </button>
-                ))}
+              <div className="menu-seg">
+                <SegmentedControl
+                  size="sm"
+                  className="block"
+                  value={effort}
+                  onChange={(e) => useAiSettings.setState({ effort: e })}
+                  options={(["low", "medium", "high"] as Effort[]).map((e) => ({ value: e, label: EFFORT_LABELS[e] }))}
+                />
               </div>
             </>
           )}
@@ -178,6 +181,20 @@ function EffortDots({ effort }: { effort: Effort }) {
     <span className="effort-dots" title={`Denktiefe: ${EFFORT_LABELS[effort]}`}>
       {[1, 2, 3].map((i) => <i key={i} className={i <= n ? "on" : ""} />)}
     </span>
+  );
+}
+
+function ErrorBox({ error, onRetry }: { error: FriendlyError; onRetry?: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="chat-error">
+      <div className="err-title"><Icon name="warn" size={14} />{error.title}</div>
+      <div className="err-actions">
+        {onRetry && <button onClick={onRetry}>Erneut versuchen</button>}
+        <button onClick={() => setOpen(!open)}>{open ? "Details ausblenden" : "Details"}</button>
+      </div>
+      {open && <pre className="err-details">{error.details}</pre>}
+    </div>
   );
 }
 
@@ -237,10 +254,19 @@ export function ChatPanel() {
       return;
     }
     if (!isTauri) return setHasKey(false);
-    invoke<boolean>("ai_has_key", { provider }).then((ok) => {
+    void (async () => {
+      const ok = await invoke<boolean>("ai_has_key", { provider }).catch(() => false);
+      if (!ok) {
+        // Use the other provider automatically if only that one has a key.
+        const other: Provider = provider === "anthropic" ? "openai" : "anthropic";
+        if (await invoke<boolean>("ai_has_key", { provider: other }).catch(() => false)) {
+          useAiSettings.setState({ provider: other });
+          return;
+        }
+      }
       setHasKey(ok);
       if (ok) void loadExtraModels(provider);
-    }, () => setHasKey(false));
+    })();
   }, [provider]);
 
   useEffect(() => {
@@ -256,6 +282,7 @@ export function ChatPanel() {
   const send = async (prompt: string) => {
     if (!prompt.trim() || running) return;
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "";
     controller = new AbortController();
     const entry: ChatEntry = { role: "assistant", text: "", steps: [] };
     useChat.setState((s) => ({ entries: [...s.entries, { role: "user", text: prompt, steps: [] }, entry], running: true }));
@@ -278,11 +305,18 @@ export function ChatPanel() {
       });
       useChat.setState({ api });
     } catch (e) {
-      update((x) => ({ ...x, error: String(e instanceof Error ? e.message : e).slice(0, 300) }));
+      if (controller?.signal.aborted) update((x) => ({ ...x, text: x.text || "Gestoppt." }));
+      else update((x) => ({ ...x, error: friendlyError(e), prompt }));
     } finally {
       useChat.setState({ running: false });
       controller = null;
     }
+  };
+
+  // Retry: drop the failed exchange and send the same prompt again.
+  const retry = (prompt: string) => {
+    useChat.setState((s) => ({ entries: s.entries.slice(0, -2) }));
+    void send(prompt);
   };
 
   if (hasKey === false || showSetup)
@@ -324,7 +358,7 @@ export function ChatPanel() {
             <div key={i} className={`msg ${e.role}`}>
               {e.text && <div className="msg-text">{e.text}</div>}
               {e.steps.length > 0 && <Steps steps={e.steps} />}
-              {e.error && <div className="chat-error">{e.error}</div>}
+              {e.error && <ErrorBox error={e.error} onRetry={e.prompt ? () => retry(e.prompt!) : undefined} />}
               {e.role === "assistant" && running && i === entries.length - 1 && !e.text && !e.steps.length && (
                 <div className="typing"><span /><span /><span /></div>
               )}
@@ -335,13 +369,19 @@ export function ChatPanel() {
       <div className="chat-input">
         <textarea
           ref={inputRef}
-          rows={2}
+          rows={1}
           value={input}
           placeholder="Nachricht an die KI"
           data-tip="KI-Chat"
           data-kbd="mod+k"
           data-tip-pos="top"
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Grow with the content up to ~6 lines.
+            const el = e.target;
+            el.style.height = "auto";
+            el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -354,7 +394,7 @@ export function ChatPanel() {
             <Icon name="stop" size={13} />
           </button>
         ) : (
-          <button className="chat-send" disabled={!input.trim()} onClick={() => send(input)} data-tip="Senden" data-tip-pos="top">
+          <button className={`chat-send ${input.trim() ? "ready" : ""}`} disabled={!input.trim()} onClick={() => send(input)} data-tip="Senden" data-tip-pos="top">
             <Icon name="send" size={14} />
           </button>
         )}
