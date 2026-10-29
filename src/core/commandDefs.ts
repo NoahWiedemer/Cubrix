@@ -20,6 +20,7 @@ import {
   type Vec3,
 } from "./document";
 import { useApp } from "./store";
+import { useGizmo } from "../ui/gizmo";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import { worldBox } from "./bounds";
 import { baseName, isTauri, openTextFile, saveFile } from "./platform";
@@ -515,6 +516,7 @@ defineCommand({
   params: {},
   perform() {
     useApp.setState({ selection: [], primitivesOpen: false });
+    useGizmo.setState({ mode: "move" });
   },
 });
 
@@ -580,6 +582,19 @@ defineCommand({
   params: { nodeId: { type: "id", description: "ID des Verlaufseintrags" } },
   perform(p) {
     useApp.getState().jumpTo(p.nodeId);
+  },
+});
+
+defineCommand({
+  id: "tool.rotate",
+  kind: "action",
+  label: "Drehen",
+  description: "Schaltet das Gizmo zwischen Verschieben und Drehen um.",
+  icon: "rotate",
+  shortcut: "r",
+  params: {},
+  perform() {
+    useGizmo.setState((s) => ({ mode: s.mode === "rotate" ? "move" : "rotate" }));
   },
 });
 

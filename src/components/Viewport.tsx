@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Gizmo, useGizmo } from "./Gizmo";
 import {
   ContactShadows,
   Environment,
@@ -8,9 +9,7 @@ import {
   Grid,
   Html,
   Lightformer,
-  Line,
   OrbitControls,
-  PivotControls,
 } from "@react-three/drei";
 import { SelectionOutline, registerMesh } from "./SelectionOutline";
 import { AxisIndicator } from "./AxisIndicator";
@@ -18,7 +17,7 @@ import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { type Feature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
-import { transformMatrix, worldBox } from "../core/bounds";
+import { worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
 import { PropertiesOverlay } from "./PropertiesPanel";
@@ -38,7 +37,7 @@ function useTransform(f: Feature): Transform {
 
 // ── Objects ──────────────────────────────────────────────────────────────────
 
-function FeatureObject({ f }: { f: Feature }) {
+function FeatureObject({ f, order }: { f: Feature; order: number }) {
   const [entry, setEntry] = useState<GeometryEntry | null>(null);
   const key = geometryKey(f);
   useEffect(() => {
@@ -62,7 +61,6 @@ function FeatureObject({ f }: { f: Feature }) {
 
   const t = useTransform(f);
   const selected = useApp((s) => s.selection.includes(f.id));
-  const hovered = useApp((s) => s.hoveredId === f.id);
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -87,13 +85,15 @@ function FeatureObject({ f }: { f: Feature }) {
         onPointerOut={() => useApp.getState().hoveredId === f.id && useApp.setState({ hoveredId: null })}
       >
         <meshStandardMaterial
-          color={selected ? "#a6b0b7" : hovered ? "#9ea7ae" : "#959ea6"}
+          color="#9aa3aa"
           roughness={0.62}
           metalness={0.04}
           envMapIntensity={0.55}
           polygonOffset
+          // Coplanar faces of different bodies resolve deterministically:
+          // the selected body wins, then later bodies over earlier ones.
           polygonOffsetFactor={1}
-          polygonOffsetUnits={1}
+          polygonOffsetUnits={selected ? 1 : 2 + Math.max(0, 40 - order) * 2}
         />
       </mesh>
       <lineSegments geometry={entry.edges} raycast={() => null}>
@@ -103,89 +103,52 @@ function FeatureObject({ f }: { f: Feature }) {
   );
 }
 
-// ── Gizmo ────────────────────────────────────────────────────────────────────
-
-function SelectionGizmo({ f }: { f: Feature }) {
-  const t = useTransform(f);
-  const matrix = useMemo(() => transformMatrix(t), [t]);
-  const start = useRef<Transform>(f.transform);
-
-  return (
-    <PivotControls
-      matrix={matrix}
-      autoTransform={false}
-      fixed
-      scale={96}
-      lineWidth={2.5}
-      depthTest={false}
-      disableScaling
-      annotations
-      annotationsClass="dim-label live"
-      axisColors={["#ef6b73", "#7fd67a", "#6aa8ff"]}
-      hoveredColor={ACCENT}
-      onDragStart={() => {
-        start.current = f.transform;
-      }}
-      onDrag={(mL) => {
-        const pos = new THREE.Vector3();
-        const quat = new THREE.Quaternion();
-        mL.decompose(pos, quat, new THREE.Vector3());
-        const s0 = start.current;
-        const q0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(s0.rotation.map(deg) as Vec3), "XYZ"));
-        const rotating = q0.angleTo(quat) > 1e-5;
-        const snap = useApp.getState().snap;
-        const snapTo = (v: number, step: number) => (step > 0 ? Math.round(v / step) * step : Math.round(v * 100) / 100);
-        let transform: Transform;
-        if (rotating) {
-          const e = new THREE.Euler().setFromQuaternion(quat, "XYZ");
-          transform = {
-            position: s0.position,
-            rotation: [e.x, e.y, e.z].map((r) => snapTo(THREE.MathUtils.radToDeg(r), 1) + 0) as Vec3,
-          };
-        } else {
-          transform = { position: pos.toArray().map((v) => snapTo(v, snap) + 0) as Vec3, rotation: s0.rotation };
-        }
-        useApp.setState({ preview: { id: f.id, transform } });
-      }}
-      onDragEnd={() => {
-        const p = useApp.getState().preview;
-        if (!p) return;
-        void execute("object.transform", { id: f.id, position: p.transform.position, rotation: p.transform.rotation }).then(
-          (changed) => !changed && useApp.setState({ preview: null }),
-        );
-      }}
-    />
-  );
-}
-
 // ── Dimensions ───────────────────────────────────────────────────────────────
 
-function Dimension({ from, to, label }: { from: Vec3; to: Vec3; label: string }) {
-  const mid = from.map((v, i) => (v + to[i]) / 2) as Vec3;
-  return (
-    <group>
-      <Line points={[from, to]} color="#6b757d" lineWidth={1} dashed dashSize={1.5} gapSize={1} depthTest={false} transparent opacity={0.8} />
-      <Html position={mid} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-        <div className="dim-label">{label}</div>
-      </Html>
-    </group>
-  );
-}
-
+/** One compact label per axis at the middle of a bounding-box edge; shown only on hover or while dragging. */
 function Dimensions({ f }: { f: Feature }) {
   const entries = useMeshes((s) => s.entries);
   const t = useTransform(f);
+  const hovered = useApp((s) => s.hoveredId === f.id || s.preview?.id === f.id);
+  const dragging = useGizmo((s) => s.dragging);
   const b = worldBox(f, entries, t);
-  if (!b) return null;
-  const o = 5;
+  if (!b || !(hovered || dragging)) return null;
   const { min, max } = b;
+  const labels: [Vec3, string][] = [
+    [[(min.x + max.x) / 2, min.y, min.z], `${fmt(max.x - min.x)}`],
+    [[max.x, (min.y + max.y) / 2, min.z], `${fmt(max.y - min.y)}`],
+    [[max.x, min.y, (min.z + max.z) / 2], `${fmt(max.z - min.z)}`],
+  ];
   return (
     <>
-      <Dimension from={[min.x, min.y - o, min.z]} to={[max.x, min.y - o, min.z]} label={`${fmt(max.x - min.x)} mm`} />
-      <Dimension from={[max.x + o, min.y, min.z]} to={[max.x + o, max.y, min.z]} label={`${fmt(max.y - min.y)} mm`} />
-      <Dimension from={[max.x + o, min.y - o, min.z]} to={[max.x + o, min.y - o, max.z]} label={`${fmt(max.z - min.z)} mm`} />
+      {labels.map(([at, text], i) => (
+        <Html key={i} position={at} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+          <div className={`dim-label axis-${"xyz"[i]}`}>{text} mm</div>
+        </Html>
+      ))}
     </>
   );
+}
+
+function SelectedGizmo({ f }: { f: Feature }) {
+  const t = useTransform(f);
+  return <Gizmo f={f} transform={t} />;
+}
+
+/** Keeps near/far tight around the scene for good depth precision at any zoom. */
+function DepthRange() {
+  useFrame(({ camera, controls }) => {
+    const target = (controls as unknown as { target?: THREE.Vector3 } | null)?.target ?? new THREE.Vector3();
+    const dist = camera.position.distanceTo(target);
+    const near = Math.max(0.05, dist / 200);
+    const far = Math.max(2000, dist * 12);
+    if (Math.abs(camera.near - near) > near * 0.05 || Math.abs(camera.far - far) > far * 0.05) {
+      camera.near = near;
+      camera.far = far;
+      camera.updateProjectionMatrix();
+    }
+  });
+  return null;
 }
 
 // ── Print bed ────────────────────────────────────────────────────────────────
@@ -283,16 +246,17 @@ export function Viewport() {
         <ContactShadows position={[0, 0.02, 0]} scale={160} blur={2.4} far={60} opacity={0.55} resolution={512} color="#000000" />
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>
-          {doc.features.map((f) => (
-            <FeatureObject key={f.id} f={f} />
+          {doc.features.map((f, i) => (
+            <FeatureObject key={f.id} f={f} order={i} />
           ))}
           {single && workspace === "model" && (
             <>
-              <SelectionGizmo key={single.id} f={single} />
+              <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
             </>
           )}
         </group>
+        <DepthRange />
         <OrbitControls makeDefault enableDamping dampingFactor={0.12} target={[0, 12, 0]} minDistance={20} maxDistance={1500} />
         <SelectionOutline />
         <GizmoHelper alignment="bottom-left" margin={[58, 58]} renderPriority={2}>
