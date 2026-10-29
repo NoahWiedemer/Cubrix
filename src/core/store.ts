@@ -46,6 +46,8 @@ interface AppState {
   /** Grid snap in mm, 0 = off. */
   snap: number;
   hoveredId: string | null;
+  /** View-only isolation: only these top-level objects are shown (null = all). Not saved. */
+  isolated: string[] | null;
   primitivesOpen: boolean;
   toasts: Toast[];
 
@@ -85,6 +87,7 @@ export const useApp = create<AppState>((set, get) => ({
   workspace: "model",
   snap: 1,
   hoveredId: null,
+  isolated: null,
   primitivesOpen: false,
   toasts: [],
 
@@ -145,6 +148,7 @@ export const useApp = create<AppState>((set, get) => ({
       draft: null,
       savedNodeId: root.id,
       filePath,
+      isolated: null,
     });
   },
 

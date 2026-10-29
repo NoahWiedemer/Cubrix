@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { execute } from "../core/commands";
 import { useMeshObjects } from "./SelectionOutline";
 import { viewportPick } from "../ui/viewportPick";
+import { useApp } from "../core/store";
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
@@ -54,10 +55,12 @@ export function makeRectPicker(getCamera: () => THREE.Camera, canvas: () => HTML
     const cam = getCamera();
     const c = canvas().getBoundingClientRect();
     const out: string[] = [];
+    const { nodes, currentId } = useApp.getState();
+    const locked = new Set(nodes[currentId].doc.features.filter((f) => f.locked).map((f) => f.id));
     const box = new THREE.Box3();
     const centre = new THREE.Vector3();
     for (const [id, mesh] of Object.entries(useMeshObjects.getState().meshes)) {
-      if (!mesh.visible) continue;
+      if (!mesh.visible || locked.has(id)) continue;
       box.setFromObject(mesh).getCenter(centre).project(cam);
       const x = c.left + ((centre.x + 1) / 2) * c.width;
       const y = c.top + ((1 - centre.y) / 2) * c.height;

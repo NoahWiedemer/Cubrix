@@ -55,6 +55,8 @@ interface FeatureBase {
   mirror?: "x" | "y";
   /** Hollowed out with this wall thickness (mm), optionally open at the top or bottom face. */
   shell?: Shell;
+  /** Locked: cannot be picked or moved in the viewport (still selectable in the object list). */
+  locked?: boolean;
 }
 
 export interface Shell {

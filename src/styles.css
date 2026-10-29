@@ -1436,3 +1436,12 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .field-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 6px; }
 .field-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field-cap { color: var(--text-3); font-size: 12px; text-align: center; }
+.vp-badge.iso { pointer-events: auto; padding: 4px 4px 4px 10px; border-color: var(--accent-line); color: var(--text-2); }
+.vp-badge.iso svg { color: var(--accent); }
+.vp-badge.iso button { height: 24px; padding: 0 10px; border-radius: 6px; color: var(--text); background: var(--panel-3); font-size: 12.5px; }
+.vp-badge.iso button:hover { background: var(--accent-soft, var(--panel-3)); color: var(--accent); }
+.vp-badge.below { top: 52px; }
+.tree-lock { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--text-3); opacity: 0; transition: opacity var(--fast), color var(--fast), background var(--fast); }
+.tree-row:hover .tree-lock, .tree-lock.on { opacity: 1; }
+.tree-lock.on { color: var(--text-2); }
+.tree-lock:hover { color: var(--text); background: var(--panel-3); }

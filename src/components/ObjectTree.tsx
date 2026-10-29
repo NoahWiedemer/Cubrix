@@ -72,6 +72,18 @@ function Row({ f, depth = 0, parent, index = 0 }: { f: Feature; depth?: number; 
             f.name
           )}
         </span>
+        {(f.locked || !depth) && (
+          <button
+            className={`tree-lock ${f.locked ? "on" : ""}`}
+            title={f.locked ? "Entsperren" : "Sperren"}
+            onClick={(e) => {
+              e.stopPropagation();
+              void execute("object.lock", { ids: [f.id], locked: !f.locked });
+            }}
+          >
+            <Icon name={f.locked ? "lock" : "unlock"} size={13} />
+          </button>
+        )}
         <button
           className={`tree-eye ${f.visible ? "" : "off"}`}
           title={f.visible ? "Ausblenden" : "Einblenden"}

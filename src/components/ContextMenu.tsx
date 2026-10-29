@@ -43,6 +43,8 @@ export function ContextMenu() {
         <CommandItem id="object.duplicate" onDone={done} />
         <CommandItem id="object.dropToBed" onDone={done} />
         <CommandItem id="object.setVisibility" label="Ein-/Ausblenden" onDone={done} />
+        <CommandItem id="view.isolate" label={st.isolated ? "Isolierung beenden" : "Isolieren"} onDone={done} />
+        <CommandItem id="object.lock" label={sel && findFeature(doc, sel)?.locked ? "Entsperren" : "Sperren"} onDone={done} />
         <MenuItem
           icon="rotate"
           label="Drehen …"

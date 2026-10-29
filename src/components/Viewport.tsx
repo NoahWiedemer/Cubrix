@@ -180,6 +180,8 @@ function FeatureObject({ f, order }: { f: Feature; order: number }) {
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     if (presenting) return; // Vorschau: clicks only orbit
+    // Locked objects let the click through to whatever is behind them (or the empty bed).
+    if (f.locked && !useMeasure.getState().active) return;
     e.stopPropagation();
     if (e.delta > 4) return;
     if (useMeasure.getState().active) {
@@ -630,6 +632,7 @@ export function Viewport() {
   const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
   const aiAnimations = useSettings((s) => s.aiAnimations);
   const free = { left: frame.left, right: frame.right };
+  const isolated = useApp((s) => s.isolated);
 
   return (
     <div
@@ -685,13 +688,13 @@ export function Viewport() {
         {/* CAD frame: Z up, millimetres */}
         <group rotation={[-Math.PI / 2, 0, 0]}>
           {doc.features.map((f, i) =>
-            f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
+            isolated && !isolated.includes(f.id) ? null : f.type === "sketch" ? <SketchObject key={f.id} f={f} /> : <FeatureObject key={f.id} f={f} order={i} />,
           )}
           {textTool && <TextPlacementPlane />}
           {measuring && <MeasurePlane />}
           {measuring && <MeasureOverlay />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && workspace === "model" && singleParents.length === 0 && (
+          {single && workspace === "model" && singleParents.length === 0 && !single.locked && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -721,8 +724,15 @@ export function Viewport() {
         <span className="w3" />
         <span className="w4" />
       </div>
+      {isolated && workspace !== "preview" && (
+        <div className="vp-badge iso">
+          <Icon name="isolate" size={14} />
+          Isoliert: {isolated.length === 1 ? "1 Objekt" : `${isolated.length} Objekte`}
+          <button onClick={() => void execute("view.isolate")} data-tip="Isolierung beenden" data-kbd="shift+h" data-tip-pos="bottom">Alles zeigen</button>
+        </div>
+      )}
       {kernel.status !== "ready" || kernel.busy > 0 ? (
-        <div className="vp-badge">
+        <div className={`vp-badge ${isolated && workspace !== "preview" ? "below" : ""}`}>
           {kernel.status === "error" ? (
             <>CAD-Kern konnte nicht geladen werden: {kernel.error}</>
           ) : (

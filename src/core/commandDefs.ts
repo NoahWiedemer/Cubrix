@@ -2,7 +2,7 @@
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
 import { checkForUpdates, useUpdater } from "./updater";
 import * as THREE from "three";
-import { defineCommand, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
+import { defineCommand, execute, getCommand, type CommandContext, type DocumentCommand, type DocumentResult } from "./commands";
 import {
   BOOLEAN_LABELS,
   PRIMITIVE_LABELS,
@@ -1011,6 +1011,63 @@ defineCommand({
     }
     if (!created.length) return null;
     return { doc: working, selection: created, label: `${created.length > 1 ? `${created.length} Objekte` : findFeature(doc, ids[0])!.name} duplizieren` };
+  },
+});
+
+defineCommand({
+  id: "view.isolate",
+  kind: "action",
+  label: "Isolieren",
+  description: "Zeigt nur die ausgewählten Objekte (nur die Ansicht, Datei und Export bleiben unverändert). Nochmal: wieder alles zeigen.",
+  icon: "isolate",
+  shortcut: "shift+h",
+  params: {},
+  isEnabled: (ctx) => ctx.selection.length > 0 || useApp.getState().isolated !== null,
+  perform() {
+    const { isolated, selection, nodes, currentId } = useApp.getState();
+    if (isolated) return void useApp.setState({ isolated: null });
+    // Operands isolate the whole object they belong to.
+    const doc = nodes[currentId].doc;
+    const top = selection.map((id) => doc.features.find((f) => f.id === id || (f.type === "boolean" && parentsOf(doc, id)[0]?.id === f.id))?.id ?? id);
+    useApp.setState({ isolated: [...new Set(top)] });
+  },
+});
+
+defineCommand({
+  id: "view.showAll",
+  kind: "action",
+  label: "Alles zeigen",
+  description: "Beendet die Isolierung und blendet alle ausgeblendeten Objekte wieder ein.",
+  icon: "visible",
+  shortcut: "alt+h",
+  params: {},
+  async perform() {
+    useApp.setState({ isolated: null });
+    const { nodes, currentId } = useApp.getState();
+    const hidden = nodes[currentId].doc.features.filter((f) => !f.visible).map((f) => f.id);
+    if (hidden.length) await execute("object.setVisibility", { ids: hidden, visible: true });
+  },
+});
+
+defineCommand({
+  id: "object.lock",
+  kind: "document",
+  label: "Sperren",
+  description: "Sperrt Objekte gegen versehentliches Anklicken und Verschieben im Arbeitsbereich (in der Objektliste bleiben sie auswählbar). Ohne locked: umschalten.",
+  icon: "lock",
+  shortcut: "mod+l",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    locked: { type: "boolean", optional: true, description: "true = sperren; ohne Angabe umschalten" },
+  },
+  isEnabled: hasSelection,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    const first = findFeature(doc, ids[0]);
+    if (!first) return null;
+    const locked: boolean = p.locked ?? !first.locked;
+    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => ({ ...f, locked: locked || undefined })), doc);
+    return { doc: next, label: `${ids.length > 1 ? `${ids.length} Objekte` : first.name} ${locked ? "sperren" : "entsperren"}` };
   },
 });
 
