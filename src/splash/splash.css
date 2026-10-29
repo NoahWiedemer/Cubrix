@@ -1,32 +1,17 @@
 @import "@fontsource-variable/inter";
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
 body { font-family: "Inter Variable", Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; cursor: default; }
-.card {
-  position: absolute;
-  inset: 0;
-  border-radius: 16px;
-  overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 30%, #1b2024 0%, #121619 55%, #0e1113 100%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  transition: opacity 260ms ease, transform 260ms ease;
-}
-.card.out { opacity: 0; transform: scale(0.985); }
-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.word {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 74px;
-  text-align: center;
-  color: #e7ebee;
-  font-size: 30px;
-  font-weight: 640;
-  letter-spacing: -0.02em;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 420ms ease, transform 420ms ease;
-}
-.word.in { opacity: 1; transform: none; }
-.tagline { display: block; margin-top: 6px; font-size: 13px; font-weight: 450; letter-spacing: 0; color: #8b959d; }
-.meta { position: absolute; left: 22px; right: 22px; bottom: 18px; display: flex; justify-content: space-between; align-items: center; color: #5f6970; font-size: 12px; }
-.progress { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: #6ee7c5; box-shadow: 0 0 10px rgba(110, 231, 197, 0.6); transition: width 320ms ease; }
+.card { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; background: #0b0e10; border: 1px solid rgba(255, 255, 255, 0.07); transition: opacity 220ms ease, transform 220ms ease; }
+.card.out { opacity: 0; transform: scale(0.99); }
+.backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8, 10, 12, 0) 45%, rgba(8, 10, 12, 0.78) 100%); }
+.brand { position: absolute; left: 26px; bottom: 24px; display: flex; align-items: center; gap: 12px; color: #e7ebee; }
+.brand img { width: 34px; height: 34px; }
+.word { font-size: 21px; font-weight: 640; letter-spacing: -0.02em; line-height: 1.1; }
+.tagline { font-size: 12.5px; color: #93a0a8; margin-top: 2px; }
+.corner { position: absolute; right: 24px; bottom: 26px; display: flex; align-items: center; gap: 12px; }
+.version { font-size: 11.5px; color: #5d676f; font-variant-numeric: tabular-nums; }
+.spinner { width: 18px; height: 18px; animation: spin 1.1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite; }
+.spinner circle { fill: none; stroke: #6ee7c5; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 16 50.3; filter: drop-shadow(0 0 3px rgba(110, 231, 197, 0.6)); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; animation-timing-function: linear; } }
