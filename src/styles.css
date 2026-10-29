@@ -1210,3 +1210,10 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .vp-free { position: absolute; top: 0; bottom: 0; pointer-events: none; }
 .vp-free > * { pointer-events: auto; }
 .vp-free > .vp-frame { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 12px; pointer-events: none; }
+/* Portal popovers */
+.floating { z-index: 500; overflow-y: auto; box-sizing: border-box; }
+.floating.select-menu { position: fixed; top: auto; left: auto; right: auto; max-width: none; }
+/* Portal popovers */
+.floating { z-index: 500; overflow-y: auto; box-sizing: border-box; }
+.floating.select-menu { position: fixed; top: auto; left: auto; right: auto; max-width: none; }
+.floating.select-menu { width: max-content; max-width: min(380px, calc(100vw - 16px)); } .floating.select-menu .printer-opt { gap: 16px; }

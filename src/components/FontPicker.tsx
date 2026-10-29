@@ -6,7 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { FONTS, fontLabel, type FontId } from "../cad/fontKeys";
 import { isTauri } from "../core/platform";
 import { usePopover } from "../ui/usePopover";
-import { MenuItem, MenuTitle } from "../ui/Menu";
+import { Menu, MenuItem, MenuTitle } from "../ui/Menu";
 
 const useSystemFonts = create<{ families: string[] | null }>(() => ({ families: null }));
 
@@ -45,7 +45,7 @@ export function FontPicker({ value, onChange }: { value: string; onChange(font: 
         <ChevronDown size={14} />
       </button>
       {pop.open && (
-        <div className="popover menu select-menu font-menu" role="menu">
+        <Menu className="select-menu font-menu" matchWidth>
           <input
             className="select-search"
             autoFocus
@@ -71,7 +71,7 @@ export function FontPicker({ value, onChange }: { value: string; onChange(font: 
           ))}
           {families === null && <div className="menu-note">Schriften werden geladen …</div>}
           {families !== null && !bundled.length && !system.length && <div className="menu-note">Keine Schrift gefunden.</div>}
-        </div>
+        </Menu>
       )}
     </div>
   );

@@ -29,7 +29,7 @@ export function ContextMenu() {
   const y = Math.min(at.y, window.innerHeight - 320);
   return (
     <div style={{ position: "fixed", left: x, top: y, zIndex: 300 }} onPointerDown={(e) => e.stopPropagation()}>
-      <Menu style={{ position: "static" }}>
+      <Menu inline style={{ position: "static" }}>
         <CommandItem id="object.duplicate" onDone={done} />
         <CommandItem id="object.dropToBed" onDone={done} />
         <CommandItem id="object.setVisibility" label="Ein-/Ausblenden" onDone={done} />

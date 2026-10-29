@@ -4,12 +4,29 @@ import { Check } from "lucide-react";
 import { Icon, type IconName } from "./icons";
 import { Kbd } from "./Tooltip";
 import { shortcutKeys } from "../core/commands";
+import { Floating } from "./Floating";
 
-export function Menu({ children, style, className = "" }: { children: ReactNode; style?: CSSProperties; className?: string }) {
+/**
+ * A menu. By default it floats in a portal next to its wrapping element: `style.top` /
+ * `style.bottom` pick the preferred side, `style.right` aligns it to the right edge and
+ * a `style.left` larger than 0 opens it to the side. `inline` keeps it in place (for
+ * menus that are already positioned, like the context menu).
+ */
+export function Menu({ children, style, className = "", inline, matchWidth }: { children: ReactNode; style?: CSSProperties; className?: string; inline?: boolean; matchWidth?: boolean }) {
+  if (inline)
+    return (
+      <div className={`popover menu ${className}`} style={style} role="menu">
+        {children}
+      </div>
+    );
+  const { top, bottom, left, right, position: _p, transform: _t, ...rest } = style ?? {};
+  const side = bottom !== undefined && top === undefined ? "top" : typeof left === "number" && left > 0 ? "right" : "bottom";
+  const align = right !== undefined && right !== "auto" ? "end" : "start";
+  void top;
   return (
-    <div className={`popover menu ${className}`} style={style} role="menu">
+    <Floating className={`popover menu ${className}`} style={rest} role="menu" side={side} align={align} matchWidth={matchWidth}>
       {children}
-    </div>
+    </Floating>
   );
 }
 

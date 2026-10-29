@@ -11,7 +11,7 @@ import { useMeshes } from "../cad/kernel";
 import { worldBox } from "../core/bounds";
 import { MANUAL, PRINTERS } from "../core/printAnalysis";
 import { usePopover } from "../ui/usePopover";
-import { MenuItem } from "../ui/Menu";
+import { Menu, MenuItem } from "../ui/Menu";
 import { PrintSummary } from "./PrintPanel";
 import { useSettings } from "../ui/settings";
 import { SegmentedControl } from "../ui/SegmentedControl";
@@ -64,7 +64,7 @@ function Printer() {
           <ChevronDown size={14} />
         </button>
         {pop.open && (
-          <div className="popover menu select-menu" role="menu">
+          <Menu className="select-menu" matchWidth>
             <input className="select-search" autoFocus placeholder="Drucker suchen…" value={query} onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") pop.setOpen(false); }} />
             {"manuell".includes(query.toLowerCase()) && (
@@ -74,7 +74,7 @@ function Printer() {
               <MenuItem key={p.name} label={<span className="printer-opt"><span>{p.name}</span><span className="printer-dim">{p.volume.join(" × ")}</span></span>}
                 checked={p.name === doc.printer.name} onClick={() => { void execute("printer.set", { name: p.name }); pop.setOpen(false); }} />
             ))}
-          </div>
+          </Menu>
         )}
       </div>
       <div className="field-row">
