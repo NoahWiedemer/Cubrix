@@ -3,6 +3,7 @@ import { AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, ChevronRight, Li
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { textOf } from "../core/commandDefs";
 import { applyEdge } from "../ui/applyEdge";
+import { useEdgePick } from "../ui/edgePick";
 import { profileBounds } from "../core/scale";
 import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
@@ -180,6 +181,8 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
     </div>
   );
 }
+
+const EDGE_FILTER_LABELS: Record<string, string> = { top: "obere Kanten", bottom: "untere Kanten", vertical: "senkrechte Kanten", horizontal: "waagerechte Kanten", x: "Kanten parallel X", y: "Kanten parallel Y" };
 
 const PARAM_FIELDS: Record<PrimitiveFeature["type"], { key: string; label: string }[]> = {
   ...(Object.fromEntries(
@@ -455,10 +458,16 @@ function TextSection({ f }: { f: Feature }) {
 }
 
 function SingleObject({ f }: { f: Feature }) {
+  const edgePicking = useEdgePick((st) => st.id === f.id);
+  const pickedCount = useEdgePick((st) => st.picked.length);
   // Set when a value was clamped to what the geometry allows ("max. 3,4 mm").
   const [edgeLimit, setEdgeLimit] = useState<{ edge: "fillet" | "chamfer"; max: number } | null>(null);
+  const [edgeField, setEdgeField] = useState(0);
   const edgeApply = (edge: "fillet" | "chamfer", v: number) => {
-    void applyEdge(f.id, edge, v).then((r) => setEdgeLimit(r.limit !== null ? { edge, max: r.limit } : null));
+    void applyEdge(f.id, edge, v).then((r) => {
+      setEdgeLimit(r.limit !== null ? { edge, max: r.limit } : null);
+      setEdgeField((n) => n + 1); // show what really applies, not what was typed
+    });
   };
   return (
     <>
@@ -472,11 +481,16 @@ function SingleObject({ f }: { f: Feature }) {
       <TransformFields f={f} kind="rotation" />
       {!hasNoEdges(f) && f.type !== "sketch" && (
         <div className="group">
-          <div className="group-label"><span><Icon name="fillet" size={15} />Kanten</span></div>
+          <div className="group-label">
+            <span><Icon name="fillet" size={15} />Kanten{edgePicking && <em className="edge-max"> {pickedCount ? `${pickedCount} gewählt` : "alle"}</em>}</span>
+            <button className={`lock ${edgePicking ? "on" : ""}`} onClick={() => void execute("tool.edges")} data-tip="Einzelne Kanten wählen" data-kbd="shift+e" data-tip-pos="bottom-end">
+              <span>Kanten wählen</span>
+            </button>
+          </div>
           <div className="field-row two">
             {(["fillet", "chamfer"] as const).map((k) => (
               <NumberField
-                key={k}
+                key={`${k}-${edgeField}`}
                 label={k === "fillet" ? <FilletGlyph /> : <ChamferGlyph />}
                 value={f[k] ?? 0}
                 min={0}
@@ -490,6 +504,13 @@ function SingleObject({ f }: { f: Feature }) {
             <span>Abrunden{edgeLimit?.edge === "fillet" && <em className="edge-max"> max. {show(edgeLimit.max)} mm</em>}</span>
             <span>Fase{edgeLimit?.edge === "chamfer" && <em className="edge-max"> max. {show(edgeLimit.max)} mm</em>}</span>
           </div>
+          {f.edgeOps?.map((op, i) => (
+            <div key={i} className="edge-op">
+              <Icon name={op.kind} size={14} />
+              <span>{op.kind === "fillet" ? "Abrunden" : "Fase"} {show(op.size)} mm · {op.filter ? EDGE_FILTER_LABELS[op.filter] : `${op.refs?.length ?? 0} ${op.refs?.length === 1 ? "Kante" : "Kanten"}`}</span>
+              <button className="icon-btn small" onClick={() => void execute("edges.remove", { id: f.id, index: i })} data-tip="Entfernen" data-tip-pos="left"><Icon name="delete" size={13} /></button>
+            </div>
+          ))}
         </div>
       )}
       {f.type !== "sketch" && f.type !== "group" && <ShellSection f={f} />}

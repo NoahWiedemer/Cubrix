@@ -58,8 +58,30 @@ interface FeatureBase {
   mirror?: "x" | "y";
   /** Hollowed out with this wall thickness (mm), optionally open at the top or bottom face. */
   shell?: Shell;
+  /** Rounding/chamfering of chosen edges, applied in order after `fillet`/`chamfer`. */
+  edgeOps?: EdgeOp[];
   /** Locked: cannot be picked or moved in the viewport (still selectable in the object list). */
   locked?: boolean;
+}
+
+/**
+ * A remembered edge: its midpoint as a fraction of the body's bounding box and its
+ * direction. Fractions survive size changes; the closest parallel edge is used.
+ */
+export interface EdgeRef {
+  mid: Vec3;
+  dir: Vec3;
+}
+
+/** Rule-based edge choice (survives any change of the model). */
+export type EdgeFilter = "top" | "bottom" | "vertical" | "horizontal" | "x" | "y";
+
+export interface EdgeOp {
+  kind: "fillet" | "chamfer";
+  size: number;
+  /** Either picked edges or a rule. */
+  refs?: EdgeRef[];
+  filter?: EdgeFilter;
 }
 
 export interface Shell {
@@ -497,7 +519,7 @@ export const hasNoEdges = (f: Feature) => ["sphere", "torus", "thread", "threadh
 
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
-    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
+    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, eo: x.edgeOps, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "group") return { ...base, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };

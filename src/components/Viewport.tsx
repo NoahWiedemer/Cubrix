@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { materialOf } from "../core/materials";
 import { nextDrill } from "../ui/drill";
+import { nearestEdge, stopEdgePick, togglePick, useEdgePick } from "../ui/edgePick";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Gizmo, useGizmo } from "./Gizmo";
 import {
@@ -53,6 +54,66 @@ function useTransform(f: Feature): Transform {
 }
 
 const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0] };
+
+/** Kanten wählen: draws the body's edges and picks the one nearest to the pointer. */
+function EdgePicker({ f }: { f: Feature }) {
+  const edges = useEdgePick((s) => s.edges);
+  const picked = useEdgePick((s) => s.picked);
+  const hover = useEdgePick((s) => s.hover);
+  const { camera, gl } = useThree();
+  const t = useTransform(f);
+  const doc = useDoc();
+  const groups = useMemo(() => groupsOf(doc, f.id), [doc, f.id]);
+  const frame = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    const el = gl.domElement;
+    const nearest = (ev: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const m = frame.current?.matrixWorld;
+      if (!m) return null;
+      const v = new THREE.Vector3();
+      const project = (p: [number, number, number]): [number, number] | null => {
+        v.set(...p).applyMatrix4(m).project(camera);
+        return v.z > 1 ? null : [((v.x + 1) / 2) * r.width + r.left, ((1 - v.y) / 2) * r.height + r.top];
+      };
+      return nearestEdge(useEdgePick.getState().edges, ev.clientX, ev.clientY, project);
+    };
+    let down: [number, number] | null = null;
+    const onMove = (ev: PointerEvent) => {
+      const i = nearest(ev);
+      if (i !== useEdgePick.getState().hover) useEdgePick.setState({ hover: i });
+      el.style.cursor = i !== null ? "pointer" : "";
+    };
+    const onDown = (ev: PointerEvent) => (down = [ev.clientX, ev.clientY]);
+    const onUp = (ev: PointerEvent) => {
+      if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return;
+      const i = nearest(ev);
+      if (i !== null) togglePick(i, ev.shiftKey);
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointerup", onUp);
+    return () => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointerup", onUp);
+      el.style.cursor = "";
+    };
+  }, [camera, gl]);
+
+  const place = (x: Transform) => ({ position: x.position, rotation: new THREE.Euler(deg(x.rotation[0]), deg(x.rotation[1]), deg(x.rotation[2]), "XYZ") });
+  const inner = (
+    <group ref={frame} {...place(t)}>
+      {edges.map((e, i) => {
+        const on = picked.includes(i);
+        const hot = hover === i;
+        return <Line key={i} points={e.points} color={on || hot ? ACCENT : "#c9d3d9"} lineWidth={on ? 3.5 : hot ? 3 : 1} transparent opacity={on || hot ? 1 : 0.45} depthTest={false} renderOrder={31} />;
+      })}
+    </group>
+  );
+  return groups.reduceRight((child, g) => <group {...place(g.transform)}>{child}</group>, inner);
+}
 
 /** One gizmo for several selected objects, at their combined bounding box. */
 function SelectionGizmo({ features }: { features: Feature[] }) {
@@ -232,7 +293,7 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
         app.toast("error", err instanceof KernelError && err.edgeTreatment ? err.message : `${f.name}: ${err.message}`);
         // A rejected rounding/chamfer step is taken back so the model never shows a value it can't build.
         const node = app.nodes[app.currentId];
-        if (err instanceof KernelError && err.edgeTreatment && node.parentId && /^object\.(fillet|chamfer|shell)$/.test(node.commandId))
+        if (err instanceof KernelError && err.edgeTreatment && node.parentId && /^(object\.(fillet|chamfer|shell)|edges\.(fillet|chamfer))$/.test(node.commandId))
           app.jumpTo(node.parentId);
       });
     return () => {
@@ -255,7 +316,7 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
   if (!entry || !f.visible) return null;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (presenting) return; // Vorschau: clicks only orbit
+    if (presenting || useEdgePick.getState().id) return; // Vorschau: clicks only orbit; picking edges has its own clicks
     // Locked objects (or members of a locked group) let the click through to whatever is behind.
     const st = useApp.getState();
     if ((f.locked || groupsOf(st.nodes[st.currentId].doc, f.id).some((g) => g.locked)) && !useMeasure.getState().active) return;
@@ -662,6 +723,18 @@ function MeasureOverlay() {
   );
 }
 
+/** Hint and exit while picking edges (top centre). */
+function EdgePickBadge() {
+  const n = useEdgePick((s) => s.picked.length);
+  return (
+    <div className="vp-badge iso">
+      <Icon name="fillet" size={14} />
+      {n ? `${n} ${n === 1 ? "Kante" : "Kanten"} gewählt` : "Kante anklicken, Shift für mehrere"}
+      <button onClick={stopEdgePick} data-tip="Kanten-Auswahl beenden" data-kbd="escape" data-tip-pos="bottom">Fertig</button>
+    </div>
+  );
+}
+
 /** Abstand/Winkel switch shown while measuring (top centre). */
 function MeasureModeSwitch() {
   const mode = useMeasure((s) => s.mode);
@@ -796,6 +869,7 @@ export function Viewport() {
   const aiAnimations = useSettings((s) => s.aiAnimations);
   const free = { left: frame.left, right: frame.right };
   const isolated = useApp((s) => s.isolated);
+  const edgePickId = useEdgePick((s) => s.id);
 
   return (
     <div
@@ -857,7 +931,8 @@ export function Viewport() {
           {measuring && <MeasurePlane />}
           {measuring && <MeasureOverlay />}
           {workspace === "sketch" && <SketchDraw sketches={doc.features.filter((f): f is SketchFeature => f.type === "sketch" && f.visible)} />}
-          {single && workspace === "model" && singleParents.length === 0 && !single.locked && !insideMovedGroup && (
+          {single && edgePickId === single.id && <EdgePicker f={single} />}
+          {single && workspace === "model" && singleParents.length === 0 && !single.locked && !insideMovedGroup && edgePickId !== single.id && (
             <>
               <SelectedGizmo key={single.id} f={single} />
               <Dimensions f={single} />
@@ -891,6 +966,7 @@ export function Viewport() {
       {/* Crisp mint frame, same trigger and fade as the glow. */}
       <div className={`ai-frame ${aiRunning && aiAnimations ? "on" : ""}`} aria-hidden />
       {measuring && <MeasureModeSwitch />}
+      {edgePickId && <EdgePickBadge />}
       {isolated && workspace !== "preview" && !measuring && (
         <div className="vp-badge iso">
           <Icon name="isolate" size={14} />

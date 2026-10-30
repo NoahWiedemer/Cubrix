@@ -1,9 +1,9 @@
 // Builds OpenCascade solids (via replicad) from document features.
 // Shared by the CAD worker and the Node tests; requires setOC() to have run.
-import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, Compound, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCompound, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Shape3D } from "replicad";
+import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, Compound, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCompound, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Edge, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
-import { hasNoEdges, isClosed, shapePoints, type Feature, type SketchShape } from "../core/document";
+import { hasNoEdges, isClosed, shapePoints, type EdgeFilter, type EdgeOp, type EdgeRef, type Vec3, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
 export class EdgeTreatmentError extends Error {}
@@ -80,7 +80,7 @@ function applyShell(shape: Shape3D, f: Feature): Shape3D {
     }
     closed = shape.cut(inner);
   } catch {
-    throw (f.chamfer ?? 0) > 0 ? fail("mit gefasten Kanten noch nicht aushöhlen. Nimm stattdessen Abrunden.") : tooThick();
+    throw (f.chamfer ?? 0) > 0 || f.edgeOps?.some((o) => o.kind === "chamfer") ? fail("mit gefasten Kanten noch nicht aushöhlen. Nimm stattdessen Abrunden.") : tooThick();
   }
   const vClosed = measureVolume(closed);
   if (!(vClosed > 0 && vClosed < measureVolume(shape) - 1e-6)) throw tooThick();
@@ -113,6 +113,113 @@ function applyShell(shape: Shape3D, f: Feature): Shape3D {
   const result = attempt(pushThrough) ?? attempt(() => shape.shell(t, (finder) => finder.inPlane("XY", z)));
   if (!result) throw tooThick();
   return result;
+}
+
+const EPS = 1e-3;
+type Bounds = [[number, number, number], [number, number, number]];
+
+/** Reference of an edge relative to the body's bounding box. */
+function refOf(e: Edge, b: Bounds): EdgeRef {
+  const m = e.pointAt(0.5);
+  const t = e.tangentAt(0.5);
+  const frac = (v: number, i: number) => (b[1][i] - b[0][i] > EPS ? (v - b[0][i]) / (b[1][i] - b[0][i]) : 0.5);
+  const round = (v: number) => Math.round(v * 10000) / 10000;
+  const len = Math.hypot(t.x, t.y, t.z) || 1;
+  return { mid: [round(frac(m.x, 0)), round(frac(m.y, 1)), round(frac(m.z, 2))], dir: [round(t.x / len), round(t.y / len), round(t.z / len)] };
+}
+
+const parallel = (a: Vec3, b: Vec3) => Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) > 0.95;
+
+/** Does an edge fit a rule? */
+function matchesFilter(e: Edge, filter: EdgeFilter, b: Bounds): boolean {
+  const s = e.startPoint;
+  const end = e.endPoint;
+  const m = e.pointAt(0.5);
+  const t = e.tangentAt(0.5);
+  const tol = 0.01;
+  const flat = Math.abs(s.z - end.z) < tol && Math.abs(s.z - m.z) < tol;
+  const straight = (axis: "x" | "y" | "z") => {
+    const len = Math.hypot(t.x, t.y, t.z) || 1;
+    return Math.abs(t[axis]) / len > 0.999;
+  };
+  switch (filter) {
+    case "top":
+      return flat && Math.abs(m.z - b[1][2]) < tol;
+    case "bottom":
+      return flat && Math.abs(m.z - b[0][2]) < tol;
+    case "horizontal":
+      return flat;
+    case "vertical":
+      return straight("z");
+    case "x":
+      return straight("x");
+    case "y":
+      return straight("y");
+  }
+}
+
+/** The edges an operation addresses on the current shape (a matching set of hash codes). */
+function resolveEdges(shape: Shape3D, op: EdgeOp): Set<Edge> {
+  const edges = shape.edges;
+  const b = shape.boundingBox.bounds as Bounds;
+  if (op.filter) return new Set(edges.filter((e) => matchesFilter(e, op.filter!, b)));
+  const infos = edges.map((e) => ({ e, ref: refOf(e, b) }));
+  const out = new Set<Edge>();
+  for (const r of op.refs ?? []) {
+    // Closest parallel edge; far away means that edge no longer exists.
+    let best: Edge | null = null;
+    let bestD = 0.2;
+    for (const { e, ref } of infos) {
+      if (!parallel(ref.dir, r.dir)) continue;
+      const d = Math.hypot(ref.mid[0] - r.mid[0], ref.mid[1] - r.mid[1], ref.mid[2] - r.mid[2]);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    if (best) out.add(best);
+  }
+  return out;
+}
+
+/** One rounding/chamfer of chosen edges, validated like the all-edges pass. */
+function edgeOpPass(shape: Shape3D, f: Feature, op: EdgeOp): Shape3D {
+  const what = op.kind === "fillet" ? "Abrunden" : "Fasen";
+  const chosen = resolveEdges(shape, op);
+  if (!chosen.size) return shape; // the edges are gone after a model change: skip quietly
+  const tooBig = () => new EdgeTreatmentError(`${what} mit ${mm(op.size)} ist für diese Kanten von ${f.name} zu groß. Versuche einen kleineren Wert.`);
+  const pick = (e: Edge) => ([...chosen].some((c) => c.isSame(e)) ? op.size : null);
+  let result: Shape3D;
+  try {
+    result = op.kind === "fillet" ? shape.fillet(pick) : shape.chamfer(pick);
+  } catch {
+    throw tooBig();
+  }
+  const v0 = measureVolume(shape);
+  const v1 = result && !result.isNull ? measureVolume(result) : 0;
+  if (!(v1 > 0 && v1 < v0)) throw tooBig();
+  return result;
+}
+
+function applyEdgeOps(shape: Shape3D, f: Feature): Shape3D {
+  return (f.edgeOps ?? []).reduce((s, op) => edgeOpPass(s, f, op), shape);
+}
+
+/** Pickable edges of the finished body (before shell and mirror), for the viewport. */
+export function listEdges(f: Feature): { ref: EdgeRef; points: [number, number, number][] }[] {
+  const shape = buildBody(f);
+  const b = shape.boundingBox.bounds as Bounds;
+  return shape.edges.map((e) => {
+    const n = e.geomType === "LINE" ? 1 : 16;
+    const points: [number, number, number][] = [];
+    for (let i = 0; i <= n; i++) {
+      const p = e.pointAt(i / n);
+      const flip = f.mirror === "x" ? -1 : 1;
+      const flipY = f.mirror === "y" ? -1 : 1;
+      points.push([p.x * flip, p.y * flipY, p.z]);
+    }
+    return { ref: refOf(e, b), points };
+  });
 }
 
 export function buildPrimitive(f: Feature): Shape3D {
@@ -313,14 +420,25 @@ function compoundBoolean(op: "union" | "subtract" | "intersect", a: Shape3D, too
 export const importedShapes = new Map<string, Shape3D>();
 
 export function buildLocal(f: Feature): Shape3D {
+  if (f.type === "group") return buildGroup(f);
+  let shape = applyShell(buildBody(f), f);
+  // Mirrored copies: flip the geometry in the feature's own frame.
+  if (f.mirror) shape = shape.mirror(f.mirror === "x" ? "YZ" : "XZ", [0, 0, 0]);
+  return shape;
+}
+
+/** A folder of objects: its visible members side by side (no boolean, export keeps them apart). */
+function buildGroup(f: Feature & { type: "group" }): Shape3D {
+  const parts = f.children.filter((c) => c.visible && c.type !== "sketch").flatMap((c) => solidsOf(buildPlaced(c)));
+  if (!parts.length) throw new Error(`${f.name} ist leer.`);
+  return parts.length === 1 ? parts[0] : (makeCompound(parts) as Shape3D);
+}
+
+/** The solid with its edge treatments, before hollowing and mirroring. */
+function buildBody(f: Feature): Shape3D {
   if (f.type === "sketch") throw new Error("Skizzen sind keine Körper.");
+  if (f.type === "group") throw new Error("Gruppen haben keine eigenen Kanten.");
   let shape: Shape3D;
-  if (f.type === "group") {
-    // A folder of objects: its visible members side by side (no boolean, export keeps them apart).
-    const parts = f.children.filter((c) => c.visible && c.type !== "sketch").flatMap((c) => solidsOf(buildPlaced(c)));
-    if (!parts.length) throw new Error(`${f.name} ist leer.`);
-    return parts.length === 1 ? parts[0] : (makeCompound(parts) as Shape3D);
-  }
   if (f.type === "boolean") {
     // Many tools: fuse them first, then one boolean against the target (much faster
     // than one cut per tool).
@@ -349,10 +467,7 @@ export function buildLocal(f: Feature): Shape3D {
   } else {
     shape = buildPrimitive(f);
   }
-  shape = applyShell(applyEdgeTreatment(shape, f), f);
-  // Mirrored copies: flip the geometry in the feature's own frame.
-  if (f.mirror) shape = shape.mirror(f.mirror === "x" ? "YZ" : "XZ", [0, 0, 0]);
-  return shape;
+  return applyEdgeOps(applyEdgeTreatment(shape, f), f);
 }
 
 /**
@@ -360,10 +475,10 @@ export function buildLocal(f: Feature): Shape3D {
  * other edge treatment and shell): `value` itself if it works, otherwise a binary search
  * down; rounded down to 0.05 mm. 0 when no size works at all.
  */
-export function largestEdge(f: Feature, edge: "fillet" | "chamfer", value: number): number {
+export function largestEdge(f: Feature, edge: "fillet" | "chamfer", value: number, op?: EdgeOp): number {
   const works = (v: number) => {
     try {
-      buildLocal({ ...f, [edge]: v } as Feature);
+      buildLocal(op ? ({ ...f, edgeOps: [...(f.edgeOps ?? []), { ...op, size: v }] } as Feature) : ({ ...f, [edge]: v } as Feature));
       return true;
     } catch {
       return false;

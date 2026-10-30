@@ -1,4 +1,10 @@
-import type { Feature } from "../core/document";
+import type { EdgeOp, EdgeRef, Feature } from "../core/document";
+
+/** A pickable edge: its reference plus a polyline for drawing and hit testing. */
+export interface EdgeInfo {
+  ref: EdgeRef;
+  points: [number, number, number][];
+}
 
 export type ExportFormat = "stl" | "3mf" | "obj" | "step";
 
@@ -13,7 +19,9 @@ export type WorkerRequest =
   | { id: number; kind: "init" }
   | { id: number; kind: "mesh"; feature: Feature }
   /** Largest working fillet/chamfer up to `value` (0 = none works). */
-  | { id: number; kind: "edgeMax"; feature: Feature; edge: "fillet" | "chamfer"; value: number }
+  | { id: number; kind: "edgeMax"; feature: Feature; edge: "fillet" | "chamfer"; value: number; op?: EdgeOp }
+  /** The body's pickable edges (local frame). */
+  | { id: number; kind: "edges"; feature: Feature }
   /** Registers an imported file (STL/STEP) under its asset id. */
   | { id: number; kind: "asset"; assetId: string; format: "stl" | "step"; data: ArrayBuffer }
   /** Registers font bytes under a name (system fonts for text). */
@@ -26,5 +34,6 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: "asset"; triangles?: number }
   | { id: number; ok: true; kind: "mesh"; mesh: MeshData }
   | { id: number; ok: true; kind: "edgeMax"; value: number }
+  | { id: number; ok: true; kind: "edges"; edges: EdgeInfo[] }
   | { id: number; ok: true; kind: "export"; data: ArrayBuffer; mtl?: string }
   | { id: number; ok: false; error: string; edgeTreatment?: boolean };

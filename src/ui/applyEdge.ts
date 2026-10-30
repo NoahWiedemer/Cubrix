@@ -4,13 +4,28 @@
 import { clampEdge } from "../cad/kernel";
 import { execute } from "../core/commands";
 import { maxEdgeSize } from "../core/commandDefs";
-import { findFeature } from "../core/document";
+import { findFeature, type EdgeOp } from "../core/document";
+import { pickedRefs, useEdgePick } from "./edgePick";
 import { useApp } from "../core/store";
 
 export async function applyEdge(id: string, edge: "fillet" | "chamfer", value: number): Promise<{ value: number; limit: number | null }> {
   const s = useApp.getState();
   const f = findFeature(s.nodes[s.currentId].doc, id);
   if (!f) return { value, limit: null };
+  // Edges picked in the viewport: only those, as a separate step.
+  const refs = useEdgePick.getState().id === id ? pickedRefs() : [];
+  if (refs.length) {
+    if (value <= 0) return { value: 0, limit: null };
+    const op: EdgeOp = { kind: edge, size: value, refs };
+    const v = await clampEdge(f, edge, value, op);
+    if (v <= 0) {
+      s.toast("error", `Diese Kanten lassen sich so nicht ${edge === "fillet" ? "abrunden" : "fasen"}.`);
+      return { value: 0, limit: null };
+    }
+    await execute(`edges.${edge}`, { id, size: v, refs });
+    useEdgePick.setState({ picked: [] });
+    return { value: 0, limit: v < value ? v : null };
+  }
   if (value <= 0) {
     await execute(`object.${edge}`, { id, radius: 0 });
     return { value: 0, limit: null };

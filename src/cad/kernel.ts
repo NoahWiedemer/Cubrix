@@ -1,8 +1,8 @@
 // Main-thread client for the CAD worker plus a small geometry cache.
 import * as THREE from "three";
 import { create } from "zustand";
-import { geometryKey, type Feature } from "../core/document";
-import type { ExportFormat, MeshData, WorkerRequest, WorkerResponse } from "./protocol";
+import { geometryKey, type EdgeOp, type Feature } from "../core/document";
+import type { EdgeInfo, ExportFormat, MeshData, WorkerRequest, WorkerResponse } from "./protocol";
 import { fontKey, isBundledFont } from "./fontKeys";
 import { logError } from "../core/errorLog";
 import { assetById, base64ToBuffer } from "./assets";
@@ -161,15 +161,23 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
   return p;
 }
 
+/** Pickable edges of a body (local frame); shared by the edge picker. */
+export async function listBodyEdges(f: Feature): Promise<EdgeInfo[]> {
+  const local = { ...f, transform: { position: [0, 0, 0], rotation: [0, 0, 0] } } as Feature;
+  const r = await request({ kind: "edges", feature: await withFonts(local) });
+  if (!r.ok || r.kind !== "edges") throw new Error(r.ok ? "Unerwartete Antwort" : r.error);
+  return r.edges;
+}
+
 const edgeLimits = new Map<string, number>();
 
 /** Largest working fillet/chamfer up to `value` (0 = none); known limits are remembered per geometry. */
-export async function clampEdge(f: Feature, edge: "fillet" | "chamfer", value: number): Promise<number> {
-  const key = `${edge}|${geometryKey({ ...f, [edge]: 0 } as Feature)}`;
+export async function clampEdge(f: Feature, edge: "fillet" | "chamfer", value: number, op?: EdgeOp): Promise<number> {
+  const key = `${edge}|${op ? JSON.stringify(op.refs ?? op.filter) : ""}|${geometryKey(op ? f : ({ ...f, [edge]: 0 } as Feature))}`;
   const known = edgeLimits.get(key);
   if (known !== undefined && value >= known) return known;
   const local = { ...f, transform: { position: [0, 0, 0], rotation: [0, 0, 0] } } as Feature;
-  const r = await request({ kind: "edgeMax", feature: await withFonts(local), edge, value });
+  const r = await request({ kind: "edgeMax", feature: await withFonts(local), edge, value, op });
   if (!r.ok || r.kind !== "edgeMax") throw new Error(r.ok ? "Unerwartete Antwort" : r.error);
   if (r.value < value) edgeLimits.set(key, r.value);
   return r.value;

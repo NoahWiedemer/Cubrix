@@ -1,5 +1,6 @@
 // All built-in commands. Importing this module registers them.
 
+import { startEdgePick, stopEdgePick, useEdgePick } from "../ui/edgePick";
 import { DEFAULT_MATERIAL, MATERIALS, isMaterialId, materialOf, type MaterialId } from "./materials";
 import { useShortcuts } from "../components/ShortcutOverlay";
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
@@ -16,6 +17,9 @@ import {
   newId,
   uniqueName,
   parentsOf,
+  type EdgeFilter,
+  type EdgeOp,
+  type EdgeRef,
   containersOf,
   expandGroups,
   removeFeatures,
@@ -671,6 +675,81 @@ defineCommand({
     return {
       doc: updateFeature(doc, f.id, (x) => ({ ...x, shell: next })),
       label: next ? `${f.name} aushöhlen (${thickness.toLocaleString("de-DE")} mm, ${where})` : `${f.name}: wieder massiv`,
+    };
+  },
+});
+
+const EDGE_FILTERS: EdgeFilter[] = ["top", "bottom", "vertical", "horizontal", "x", "y"];
+
+function defineEdgeOpCommand(kind: "fillet" | "chamfer") {
+  const fillet = kind === "fillet";
+  defineCommand({
+    id: `edges.${kind}`,
+    kind: "document",
+    label: fillet ? "Kanten abrunden" : "Kanten fasen",
+    description: `${fillet ? "Rundet" : "Fast"} nur bestimmte Kanten: filter = "top" (obere Kanten), "bottom" (untere), "vertical" (senkrechte), "horizontal" (waagerechte), "x"/"y" (parallel zur Achse). Mehrere Aufrufe bauen aufeinander auf. Ohne Filter: im Viewport gewählte Kanten (refs).`,
+    icon: fillet ? "fillet" : "chamfer",
+    params: {
+      id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+      size: { type: "number", unit: "mm", min: 0.01, description: "Radius bzw. Fasenbreite" },
+      filter: { type: "enum", options: EDGE_FILTERS, optional: true, description: "Welche Kanten" },
+      refs: { type: "list", optional: true, description: "Gewählte Kanten (aus dem Viewport)" },
+    },
+    isEnabled: hasOne,
+    apply(doc, p, ctx) {
+      const f = findFeature(doc, p.id ?? ctx.selection[0]);
+      if (!f) throw new Error("Objekt nicht gefunden");
+      if (f.type === "sketch") throw new Error("Flache Skizzen haben keine Kanten – zuerst im Inspektor eine Höhe geben.");
+      if (hasNoEdges(f)) throw new Error(`${f.name} hat keine Kanten zum ${fillet ? "Abrunden" : "Fasen"}.`);
+      if (!p.filter && !p.refs?.length) throw new Error("Bitte Kanten wählen oder einen Filter angeben.");
+      const op: EdgeOp = { kind, size: round(p.size), ...(p.filter ? { filter: p.filter as EdgeFilter } : { refs: p.refs as EdgeRef[] }) };
+      const count = p.filter ? "" : ` (${(p.refs as EdgeRef[]).length} ${(p.refs as EdgeRef[]).length === 1 ? "Kante" : "Kanten"})`;
+      return {
+        doc: updateFeature(doc, f.id, (x) => ({ ...x, edgeOps: [...(x.edgeOps ?? []), op] })),
+        label: `${f.name}: ${fillet ? "abrunden" : "fasen"} ${op.size.toLocaleString("de-DE")} mm${count}`,
+      };
+    },
+  });
+}
+defineEdgeOpCommand("fillet");
+defineEdgeOpCommand("chamfer");
+
+defineCommand({
+  id: "tool.edges",
+  kind: "action",
+  label: "Kanten wählen",
+  description: "Einzelne Kanten des ausgewählten Objekts anklicken (Shift für mehrere), dann Abrunden oder Fasen wirkt nur dort.",
+  icon: "fillet",
+  shortcut: "shift+e",
+  params: {},
+  isEnabled: (ctx) => {
+    const f = ctx.selection.length === 1 ? findFeature(ctx.doc, ctx.selection[0]) : undefined;
+    return !!f && f.type !== "sketch" && !hasNoEdges(f) && useApp.getState().workspace === "model" && parentsOf(ctx.doc, f.id).length === 0;
+  },
+  perform(_p, ctx) {
+    if (useEdgePick.getState().id) stopEdgePick();
+    else startEdgePick(ctx.selection[0]);
+  },
+});
+
+defineCommand({
+  id: "edges.remove",
+  kind: "document",
+  label: "Kanten-Schritt entfernen",
+  description: "Entfernt eine Abrundung/Fase einzelner Kanten (index in der Liste).",
+  icon: "delete",
+  params: { id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" }, index: { type: "number", min: 0, description: "Index" } },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f?.edgeOps?.[p.index]) return null;
+    const rest = f.edgeOps.filter((_, i) => i !== p.index);
+    return {
+      doc: updateFeature(doc, f.id, (x) => {
+        const { edgeOps: _old, ...others } = x;
+        return (rest.length ? { ...others, edgeOps: rest } : others) as Feature;
+      }),
+      label: `${f.name}: Kanten-Schritt entfernen`,
     };
   },
 });
