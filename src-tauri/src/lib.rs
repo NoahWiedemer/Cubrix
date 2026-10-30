@@ -2,8 +2,9 @@ mod ai;
 mod autosave;
 mod errorlog;
 mod fonts;
+mod mcp;
 
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, RunEvent};
 
 /// Shows the main window and closes the splash (idempotent).
 fn show_main(app: &tauri::AppHandle) {
@@ -117,6 +118,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(ai::AiState::default())
+        .manage(mcp::McpState::default())
         .setup(|app| {
             ai::migrate_app_data(app.handle());
             if let Ok(dir) = app.path().app_cache_dir() {
@@ -149,8 +151,20 @@ pub fn run() {
             ai::ai_key_delete,
             ai::ai_key_activate,
             ai::ai_transcribe,
+            mcp::mcp_list,
+            mcp::mcp_add,
+            mcp::mcp_update,
+            mcp::mcp_remove,
+            mcp::mcp_connect,
+            mcp::mcp_call,
+            mcp::mcp_cancel,
             e2e_audio
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Cubrix");
+        .build(tauri::generate_context!())
+        .expect("error while running Cubrix")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                mcp::shutdown(app);
+            }
+        });
 }

@@ -32,6 +32,8 @@ export interface ToolSpec {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  /** false: the schema is someone else's and cannot meet OpenAI's strict rules. */
+  strict?: false;
 }
 
 export interface Transport {
@@ -188,7 +190,7 @@ async function anthropicTurn(
       model,
       max_tokens: 16000,
       system,
-      tools: webSearch ? [...tools, ...anthropicWebTools(model)] : tools,
+      tools: [...tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })), ...(webSearch ? anthropicWebTools(model) : [])],
       messages: anthropicMessages(messages, model),
       stream: true,
       // Thinking is adaptive by default on current models; depth is set via effort.
@@ -282,7 +284,7 @@ async function openaiTurn(
       instructions: system,
       input: openaiInput(messages),
       tools: [
-        ...tools.map((x) => ({ type: "function", name: x.name, description: x.description, parameters: x.input_schema })),
+        ...tools.map((x) => ({ type: "function", name: x.name, description: x.description, parameters: x.input_schema, ...(x.strict === false ? { strict: false } : {}) })),
         ...(webSearch ? [{ type: "web_search" }] : []),
       ],
       parallel_tool_calls: true,

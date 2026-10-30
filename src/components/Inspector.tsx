@@ -43,7 +43,7 @@ function SceneInfo() {
   );
 }
 
-function Printer() {
+export function Printer() {
   const doc = useDoc();
   const manual = !PRINTERS.some((p) => p.name === doc.printer.name);
   const pop = usePopover();

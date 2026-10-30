@@ -9,6 +9,7 @@ import { usePopover } from "../ui/usePopover";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
+import { prepareMcp, useMcpConsent } from "../ai/mcp";
 import { useChat, type ChatEntry, type ChatStep } from "../ai/chatStore";
 import { cleanModelText } from "../ai/cleanText";
 import { ACCEPTED, MAX_IMAGES, prepareImage } from "../ai/images";
@@ -99,6 +100,23 @@ function ModelLabel({ m }: { m: ModelInfo }) {
       {m.name}
       {m.hint && <span className="model-hint">{m.hint}</span>}
     </span>
+  );
+}
+
+/** Asks before the first call of an MCP server's tool. */
+function McpConsentCard() {
+  const { req, answer } = useMcpConsent();
+  if (!req || !answer) return null;
+  return (
+    <div className="mcp-consent" role="alertdialog" aria-label="MCP-Werkzeug erlauben">
+      <div className="mcp-consent-head"><Icon name="plug" size={15} /><span>„{req.server}“ möchte <b>{req.tool}</b> ausführen</span></div>
+      <code>{req.args}</code>
+      <div className="mcp-consent-actions">
+        <button className="btn-primary" onClick={() => answer("once")}>Einmal erlauben</button>
+        <button className="btn-ghost" onClick={() => answer("always")}>Immer für diesen Server</button>
+        <button className="btn-ghost" onClick={() => answer("deny")}>Ablehnen</button>
+      </div>
+    </div>
   );
 }
 
@@ -278,6 +296,7 @@ export function ChatPanel() {
         groupId,
         // Always offered; the system prompt keeps the model from searching without need.
         webSearch: true,
+        mcp: prepareMcp,
         provider,
         model: info.id,
         effort: info.effort ? effort : null,
@@ -390,6 +409,7 @@ export function ChatPanel() {
               )}
               {e.steps.length > 0 && <Steps steps={e.steps} live={running && i === entries.length - 1} />}
               {e.error && <ErrorBox error={e.error} onRetry={e.prompt ? () => retry(e.prompt!) : undefined} />}
+              {e.role === "assistant" && running && i === entries.length - 1 && <McpConsentCard />}
               {e.role === "assistant" && running && i === entries.length - 1 && <RunStatus />}
               {e.role === "assistant" && !(running && i === entries.length - 1) && e.durationMs !== undefined && !e.error && (
                 <div className="run-done">

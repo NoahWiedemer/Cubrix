@@ -3,12 +3,12 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 const KEEP: usize = 100;
 static LOCK: Mutex<()> = Mutex::new(());
 
-fn log_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn log_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("logs");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("errors.jsonl"))
@@ -50,7 +50,7 @@ pub fn redact(text: &str) -> String {
 }
 
 /// Appends one entry ({source, message, details?}) with timestamp and app version.
-pub fn append(app: &AppHandle, mut entry: serde_json::Value) -> Result<(), String> {
+pub fn append<R: Runtime>(app: &AppHandle<R>, mut entry: serde_json::Value) -> Result<(), String> {
     let _guard = LOCK.lock().unwrap();
     let path = log_path(app)?;
     if let Some(obj) = entry.as_object_mut() {

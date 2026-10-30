@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::oneshot;
 
 #[derive(Default)]
@@ -17,13 +17,13 @@ pub struct AiState {
 /// API keys live in `<app data>/secrets.json` (mode 0600), XOR-obfuscated with a random
 /// per-install key in `secrets.key`. Only Rust reads or writes them; the webview only
 /// learns whether a key is set. (No OS keychain: unsigned dev builds made it prompt.)
-fn secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn secrets_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
 
-fn write_private(path: &PathBuf, data: &[u8]) -> Result<(), String> {
+pub(crate) fn write_private(path: &PathBuf, data: &[u8]) -> Result<(), String> {
     fs::write(path, data).map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
@@ -60,7 +60,7 @@ pub fn migrate_app_data(app: &AppHandle) {
     }
 }
 
-fn install_key(app: &AppHandle) -> Result<Vec<u8>, String> {
+fn install_key<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<u8>, String> {
     let path = secrets_dir(app)?.join("secrets.key");
     if let Ok(k) = fs::read(&path) {
         if k.len() == 32 {
@@ -103,6 +103,9 @@ struct Secrets {
     keys: Vec<StoredKey>,
     /// Active key id per provider.
     active: HashMap<String, String>,
+    /// Secrets of MCP servers: server id → name ("url", "header:…", "env:…") → obfuscated hex.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    mcp: HashMap<String, HashMap<String, String>>,
 }
 
 /// What the webview may see about a key.
@@ -117,7 +120,7 @@ pub struct KeyInfo {
     active: bool,
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
@@ -131,7 +134,7 @@ fn default_name(secrets: &Secrets, provider: &str) -> String {
 }
 
 /// Reads secrets.json; the old format (`{"openai": "<hex>", …}`) is migrated once.
-fn load_secrets(app: &AppHandle) -> Secrets {
+fn load_secrets<R: Runtime>(app: &AppHandle<R>) -> Secrets {
     let Ok(dir) = secrets_dir(app) else { return Secrets::default() };
     let Ok(text) = fs::read_to_string(dir.join("secrets.json")) else { return Secrets { version: 2, ..Default::default() } };
     if let Ok(s) = serde_json::from_str::<Secrets>(&text) {
@@ -160,7 +163,7 @@ fn migrate_v1(text: &str) -> Secrets {
     s
 }
 
-fn save_secrets(app: &AppHandle, s: &Secrets) -> Result<(), String> {
+fn save_secrets<R: Runtime>(app: &AppHandle<R>, s: &Secrets) -> Result<(), String> {
     let json = serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?;
     write_private(&secrets_dir(app)?.join("secrets.json"), &json)
 }
@@ -170,7 +173,7 @@ fn reveal(app: &AppHandle, k: &StoredKey) -> Result<String, String> {
     String::from_utf8(xor(&bytes, &install_key(app)?)).map_err(|e| e.to_string())
 }
 
-fn mask(key: &str) -> String {
+pub(crate) fn mask(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     if chars.len() < 10 {
         return "…".into();
@@ -178,6 +181,35 @@ fn mask(key: &str) -> String {
     let head: String = chars[..3].iter().collect();
     let tail: String = chars[chars.len() - 4..].iter().collect();
     format!("{head}…{tail}")
+}
+
+/// Clear-text secrets of one MCP server, for Rust only.
+pub(crate) fn mcp_secrets<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<HashMap<String, String>, String> {
+    let s = load_secrets(app);
+    let key = install_key(app)?;
+    let Some(entries) = s.mcp.get(id) else { return Ok(HashMap::new()) };
+    entries
+        .iter()
+        .map(|(k, v)| {
+            let bytes = unhex(v).ok_or("Gespeichertes Geheimnis ist beschädigt")?;
+            Ok((k.clone(), String::from_utf8(xor(&bytes, &key)).map_err(|e| e.to_string())?))
+        })
+        .collect()
+}
+
+/// Replaces the secrets of an MCP server; an empty map removes them.
+pub(crate) fn mcp_set_secrets<R: Runtime>(app: &AppHandle<R>, id: &str, values: &HashMap<String, String>) -> Result<(), String> {
+    let mut s = load_secrets(app);
+    let key = install_key(app)?;
+    if values.is_empty() {
+        s.mcp.remove(id);
+    } else {
+        s.mcp.insert(id.to_string(), values.iter().map(|(k, v)| (k.clone(), hex(&xor(v.as_bytes(), &key)))).collect());
+    }
+    if s.version < 2 {
+        s.version = 2;
+    }
+    save_secrets(app, &s)
 }
 
 /// The active key of a provider.

@@ -11,6 +11,7 @@ import { getGeometry, settleGeometry, useMeshes } from "../cad/kernel";
 import { worldBox, worldTransform } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
 import { limitImages } from "./images";
+import { mcpPrompt, mcpResultText, type McpRoute, type McpRun } from "./mcp";
 import type { Effort } from "./models";
 import { runTurn, type Block, type Message, type Provider, type ToolSpec, type Transport } from "./providers";
 
@@ -184,7 +185,7 @@ export function sceneSummary(): string {
   return `${lines.length ? lines.join("\n") : "(leer)"}${sel.length ? `\nAuswahl des Nutzers: ${sel.join(", ")}` : ""}`.slice(0, 6000);
 }
 
-export function systemPrompt(webSearch = false): string {
+export function systemPrompt(webSearch = false, mcp = false): string {
   const doc = getDoc();
   const help = HELP_TOPICS.map((t) => `- ${t.title}${t.status === "soon" ? " (kommt bald)" : ""}: ${t.summary}`).join("\n");
   return `Du bist der KI-Assistent in Cubrix, einer CAD-App für den 3D-Druck für Einsteiger. Antworte auf Deutsch, freundlich und knapp.
@@ -206,7 +207,8 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
 - Aufräumen zuerst: Entscheide vor dem ersten Bauschritt, was ersetzt wird. Wird ein vorhandenes Objekt nicht mehr gebraucht, lösche es im ERSTEN Aufruf (object__delete) und baue erst dann; merkst du es später, lösche sofort, nie erst am Ende. Der unveränderte Start-Würfel (20-mm-Quader „Quader 1“ als einziges Objekt) ist nur ein Platzhalter: Bei einem Auftrag für etwas Neues löschst du ihn zuerst, außer die Nachricht bezieht sich auf ihn („mach daraus …“, „nimm den Würfel als Basis“). Was der Nutzer als Ausgangspunkt nennt, bleibt.
 - Beispiel Spielwürfel aus dem Start-Würfel („mach daraus einen Spielwürfel“): Würfel behalten, fillet, dann EIN shapes__createMany mit allen 21 Augen-Kugeln (Positionen auf den 6 Seiten), dann EIN boolean__subtract mit toolIds = alle Augen. Fertig in 3 Aufrufen.
 - Beispiel „Mach mir einen Schlüsselanhänger“ bei nur dem Start-Würfel: erst object__delete auf den Würfel, dann sketch__roundedRect mit height, Loch per Zylinder und boolean__subtract.
-${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren (Würfel, Box, Halter mit genannten Maßen: ohne Suche). Höchstens 3 Suchen; web_fetch (falls vorhanden) nur, um eine gefundene Seite mit den Maßen (Datenblatt, Maßzeichnung) ganz zu lesen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
+${mcp ? `${mcpPrompt}
+` : ""}${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren (Würfel, Box, Halter mit genannten Maßen: ohne Suche). Höchstens 3 Suchen; web_fetch (falls vorhanden) nur, um eine gefundene Seite mit den Maßen (Datenblatt, Maßzeichnung) ganz zu lesen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
 ` : ""}- Runde Formen IMMER als echte Kurven: sketch__ellipse, sketch__roundedRect, sketch__slot, sketch__path mit arc/spline-Segmenten, Kreise. Nie Rundungen durch Linienzüge/Vielecke annähern. Runde Umrisse über corner (2D) bzw. sketch__roundCorners, nicht über 3D-Kantenrundung. Beispiel ovaler Anhänger: sketch__ellipse (rx, ry, height 3), Loch per Zylinder + boolean__subtract.
 - Mehrteilige Dinge (z. B. „Bau mir ein ESP32-Modell“: Platine, Chips, Pins, USB-Buchse) kommen IMMER in eine benannte Gruppe (z. B. „ESP32 DevKit“): shapes__createMany mit groupName oder danach group__create. Gruppen sind reine Ordner, keine Booleschen Operationen.
 - Bohrungen: object__hole (viele Positionen in at, Tiefe, Senkung, thread für Kernlöcher), nicht einzelne Zylinder abziehen. Ausschnitte, Falze, Dome und Stege: object__pocket (cut/add) auf einer Fläche. Beide sind nachträglich änderbar.
@@ -281,6 +283,37 @@ export function phaseFor(name: string, input: Record<string, unknown>): string {
   if (name === "check_model") return "Prüft das Ergebnis …";
   if (name === "run_script") return "Führt mehrere Schritte aus …";
   return `${getCommand(id)?.label ?? id} …`;
+}
+
+/** A tool of an MCP server: the user decides first, the answer goes back marked as untrusted. */
+async function runMcpTool(block: Extract<Block, { type: "tool_use" }>, route: McpRoute, mcp: McpRun, signal: AbortSignal, events: AgentEvents): Promise<Block> {
+  const label = `MCP · ${route.server} · ${route.tool}`;
+  const result = (content: string, isError = false): Block => ({ type: "tool_result", tool_use_id: block.id, content, ...(isError ? { isError } : {}) });
+  try {
+    if (!mcp.allowed.has(route.serverId)) {
+      events.onPhase?.(`Wartet auf deine Bestätigung · ${route.server}`);
+      const decision = await mcp.consent({ serverId: route.serverId, server: route.server, tool: route.tool, args: JSON.stringify(block.input).slice(0, 400) }, signal);
+      if (decision === "deny") {
+        events.onStep({ label, ok: false, error: "Abgelehnt" });
+        return result(JSON.stringify({ ok: false, error: "Der Nutzer hat diesen Aufruf abgelehnt." }), true);
+      }
+      if (decision === "always") {
+        mcp.allowed.add(route.serverId);
+        await mcp.allowAlways(route.serverId);
+      }
+    }
+    events.onPhase?.(label);
+    const res = await mcp.call(route, block.input, signal);
+    const failed = !!(res as { isError?: boolean } | null)?.isError;
+    events.onStep({ label, ok: !failed, ...(failed ? { error: "Der Server meldet einen Fehler" } : {}) });
+    return result(mcpResultText(res, route.server, route.tool), failed);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    // The arguments stay out of the log: they may hold private data.
+    logError("ai", `MCP ${route.server}/${route.tool}: ${error}`);
+    events.onStep({ label, ok: false, error });
+    return result(JSON.stringify({ ok: false, error }), true);
+  }
 }
 
 async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
@@ -386,10 +419,17 @@ export async function runAgent(opts: {
   groupId?: string;
   /** Offer the provider's server-side web search (the model decides when to use it). */
   webSearch?: boolean;
+  /** Connects MCP servers for this run; `taken` holds the tool names already in use. */
+  mcp?: (taken: Set<string>, limit: number) => Promise<McpRun | undefined>;
 }): Promise<Message[]> {
   const group = { id: opts.groupId ?? Math.random().toString(36).slice(2), prompt: opts.prompt };
   const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }, ...(opts.images ?? []).map((url) => ({ type: "image" as const, url }))] }];
-  const tools = buildTools();
+  const builtIn = buildTools();
+  // OpenAI takes at most 128 functions per request.
+  const mcpLimit = opts.provider === "openai" ? Math.max(0, 128 - builtIn.length) : 200;
+  const mcp = await opts.mcp?.(new Set(builtIn.map((t) => t.name)), mcpLimit);
+  for (const note of mcp?.notes ?? []) opts.events.onStep({ label: note, ok: false });
+  const tools = [...builtIn, ...(mcp?.tools ?? [])];
   // Text before and after tool steps stays apart, as separate paragraphs.
   let wrote = false;
   let turnStart = false;
@@ -403,7 +443,7 @@ export async function runAgent(opts: {
     turnStart = true;
     if (opts.signal.aborted) break;
     opts.events.onPhase?.(turn === 0 ? "Denkt nach …" : "Plant den nächsten Schritt …");
-    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, limitImages(prepareHistory(messages)), onText, opts.signal, opts.webSearch);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch, !!mcp?.tools.length), tools, limitImages(prepareHistory(messages)), onText, opts.signal, opts.webSearch);
     messages.push({ role: "assistant", content: res.blocks, model: opts.model });
     for (const q of res.searches ?? []) opts.events.onStep({ label: `Sucht im Web: ${q}`, ok: true });
     if (res.sources?.length) opts.events.onSources?.(res.sources);
@@ -414,7 +454,8 @@ export async function runAgent(opts: {
     const results: Block[] = [];
     for (const c of calls) {
       if (opts.signal.aborted) break;
-      results.push(await runTool(c, group, opts.events));
+      const route = mcp?.routes.get(c.name);
+      results.push(await (route ? runMcpTool(c, route, mcp!, opts.signal, opts.events) : runTool(c, group, opts.events)));
     }
     messages.push({ role: "user", content: results });
   }

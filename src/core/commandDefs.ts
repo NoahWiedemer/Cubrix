@@ -68,7 +68,7 @@ import { useTextTool } from "../ui/textTool";
 import { useMeasure } from "../ui/measureTool";
 import { useAlign } from "../components/AlignPanel";
 import { useLibrary } from "../components/Library";
-import { useSettingsDialog } from "../components/SettingsDialog";
+import { useSettingsDialog } from "../ui/settingsNav";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";

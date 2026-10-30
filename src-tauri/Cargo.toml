@@ -24,6 +24,12 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 base64 = "0.22"
 ttf-parser = "0.25"
 futures-util = "0.3"
-tokio = { version = "1", features = ["sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros", "process", "io-util", "time", "rt"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["macos-private-api", "test"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
