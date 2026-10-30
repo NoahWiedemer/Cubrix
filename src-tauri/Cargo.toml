@@ -1,6 +1,6 @@
 [package]
 name = "cubrix"
-version = "0.1.4"
+version = "0.1.5"
 description = "Cubrix – CAD für den 3D-Druck"
 authors = ["Noah Wiedemer"]
 edition = "2021"
