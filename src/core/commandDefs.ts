@@ -2520,8 +2520,8 @@ defineCommand({
 defineCommand({
   id: "view.fitAll",
   kind: "action",
-  label: "Alles zeigen",
-  description: "Zoomt so, dass alle sichtbaren Objekte zu sehen sind.",
+  label: "Alles einpassen",
+  description: "Nur Kamera: zoomt so, dass alle sichtbaren Objekte zu sehen sind. Blendet nichts ein.",
   icon: "focus",
   shortcut: "shift+f",
   params: {},

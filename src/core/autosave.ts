@@ -10,13 +10,16 @@ import { isTauri } from "./platform";
 const KEY = "cubrix.autosave";
 let lastWritten: string | null = null;
 
+// Dev builds share the app data folder: they must never touch the real app's recovery file.
+const useFile = isTauri && !import.meta.env.DEV;
+
 async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(cmd, args);
 }
 
 async function writeAutosave(text: string) {
-  if (isTauri) await call("autosave_write", { text });
+  if (useFile) await call("autosave_write", { text });
   else
     try {
       localStorage.setItem(KEY, text);
@@ -26,7 +29,7 @@ async function writeAutosave(text: string) {
 }
 
 export async function readAutosave(): Promise<string | null> {
-  if (isTauri) return call<string | null>("autosave_read").catch(() => null);
+  if (useFile) return call<string | null>("autosave_read").catch(() => null);
   try {
     return localStorage.getItem(KEY);
   } catch {
@@ -36,7 +39,7 @@ export async function readAutosave(): Promise<string | null> {
 
 export async function clearAutosave() {
   lastWritten = null;
-  if (isTauri) await call("autosave_clear").catch(() => {});
+  if (useFile) await call("autosave_clear").catch(() => {});
   else
     try {
       localStorage.removeItem(KEY);
