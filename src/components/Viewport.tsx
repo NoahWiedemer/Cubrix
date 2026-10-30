@@ -14,6 +14,7 @@ import {
   Line,
 } from "@react-three/drei";
 import { SelectionOutline, registerMesh, useMeshObjects } from "./SelectionOutline";
+import { RenderOnDemand } from "./RenderOnDemand";
 import { AxisIndicator } from "./AxisIndicator";
 import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
@@ -32,7 +33,7 @@ import { PreviewControls, PreviewEffects, ViewportCapture } from "./PreviewContr
 import { usePreview } from "../ui/preview";
 import { usePrintView } from "./PrintPanel";
 import { CameraRig } from "./CameraRig";
-import { useSettings } from "../ui/settings";
+import { MAX_DPR, useSettings } from "../ui/settings";
 import { placeText, useTextTool } from "../ui/textTool";
 import { addMeasurePoint, angleAt, setMeasureMode, useMeasure } from "../ui/measureTool";
 import { viewportPick } from "../ui/viewportPick";
@@ -442,6 +443,9 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
   );
 }
 
+/** Longest step of a per-frame ease: the first frame after a pause must not jump. */
+const MAX_DT = 1 / 30;
+
 const reducedMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
@@ -455,7 +459,7 @@ function useBuildAnimation(id: string, target: Vec3) {
   const glow = useRef<THREE.LineBasicMaterial>(null);
   const shown = useRef<THREE.Vector3 | null>(null);
   const start = useRef<number | null>(null);
-  useFrame((_, dt) => {
+  useFrame(({ invalidate }, dt) => {
     const on = useSettings.getState().aiAnimations && !reducedMotion;
     const run = useAiRun.getState();
     // Position tween (AI only).
@@ -463,7 +467,10 @@ function useBuildAnimation(id: string, target: Vec3) {
     if (g) {
       const goal = new THREE.Vector3(...target);
       if (!shown.current || !on || !run.running) shown.current = goal.clone();
-      else shown.current.lerp(goal, Math.min(1, dt / 0.09));
+      else {
+        shown.current.lerp(goal, Math.min(1, Math.min(dt, MAX_DT) / 0.09));
+        if (shown.current.distanceToSquared(goal) > 1e-6) invalidate();
+      }
       g.position.copy(shown.current);
     }
     const b = run.born[id];
@@ -497,7 +504,7 @@ function useBuildAnimation(id: string, target: Vec3) {
       const born = { ...useAiRun.getState().born };
       delete born[id];
       useAiRun.setState({ born });
-    }
+    } else invalidate();
   });
   return { outer, inner, glow };
 }
@@ -617,7 +624,7 @@ function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; str
   }, [w, d, h]);
   useEffect(() => () => edges.list.forEach((e) => e.geometry.dispose()), [edges]);
   const mats = useRef<THREE.LineBasicMaterial[]>([]);
-  useFrame(({ camera }, dt) => {
+  useFrame(({ camera, invalidate }, dt) => {
     let nearest = 0;
     let best = Infinity;
     edges.corners.forEach(([cx, cz], i) => {
@@ -632,7 +639,8 @@ function BuildVolume({ w, d, h, strong }: { w: number; d: number; h: number; str
       if (!m) return;
       const target = e.corners.includes(nearest) ? 0 : strong ? 0.7 : 0.3;
       // ~120 ms exponential fade
-      m.opacity += (target - m.opacity) * Math.min(1, dt / 0.04);
+      m.opacity += (target - m.opacity) * Math.min(1, Math.min(dt, MAX_DT) / 0.04);
+      if (Math.abs(target - m.opacity) > 0.005) invalidate();
       m.visible = m.opacity > 0.01;
     });
   });
@@ -903,6 +911,7 @@ export function Viewport() {
   const frame = useViewportFrame();
   const aiRunning = useAiRun((s) => s.modeling) && workspace !== "preview";
   const aiAnimations = useSettings((s) => s.aiAnimations);
+  const quality = useSettings((s) => s.quality);
   const free = { left: frame.left, right: frame.right };
   const isolated = useApp((s) => s.isolated);
   const edgePickId = useEdgePick((s) => s.id);
@@ -918,7 +927,8 @@ export function Viewport() {
       {box.overlay}
       <Canvas
         shadows
-        dpr={[1, 2]}
+        frameloop="demand"
+        dpr={[1, MAX_DPR[quality]]}
         camera={{ position: [150, 135, 205], fov: 35, near: 0.5, far: 5000 }}
         gl={{ antialias: true, preserveDrawingBuffer: false }}
         onCreated={(state) => {
@@ -977,6 +987,7 @@ export function Viewport() {
           {movable.length > 0 && workspace === "model" && <SelectionGizmo key={movable.map((f) => f.id).join()} features={movable} />}
           {single && workspace === "model" && singleParents.length > 0 && <OperandEditor f={single} parents={singleParents} />}
         </group>
+        <RenderOnDemand />
         <DepthRange />
         <CameraRig />
         <SelectionOutline />

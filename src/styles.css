@@ -946,6 +946,7 @@ body.col-resizing .dock-col, body.col-resizing { transition: none; cursor: col-r
 .switch i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #c9d0d5; transition: transform 160ms var(--ease); }
 .switch.on { background: var(--accent); }
 .switch.on i { transform: translateX(14px); background: #0b2a22; }
+.quality-row { display: grid; gap: 6px; font-size: 13px; color: var(--text-2); }
 .slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
 .slider-row input { accent-color: var(--accent); }
 .slider-row b { font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums; }
@@ -1301,6 +1302,8 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
   mask: linear-gradient(to right, #000, transparent 44px, transparent calc(100% - 44px), #000), linear-gradient(to bottom, #000, transparent 44px, transparent calc(100% - 44px), #000);
   mask-composite: add; -webkit-mask-composite: source-over; }
 .ai-glow.on { opacity: 1; }
+/* Blurred, blended and animated: costly even at opacity 0, so it only runs while shown. */
+.ai-glow:not(.on) > span { animation-play-state: paused; }
 .ai-glow .w1 { background: conic-gradient(from var(--a1), rgba(61, 220, 151, 0.17) 0deg, transparent 70deg, transparent 200deg, rgba(61, 220, 151, 0.12) 250deg, transparent 300deg); animation: ai-w1 9s linear infinite; }
 .ai-glow .w2 { background: conic-gradient(from var(--a2), rgba(43, 196, 176, 0.16) 0deg, transparent 90deg, transparent 360deg); animation: ai-w2 13s linear infinite; }
 .ai-glow .w3 { background: conic-gradient(from var(--a3), rgba(31, 162, 168, 0.15) 0deg, transparent 60deg, transparent 170deg, rgba(123, 232, 198, 0.12) 220deg, transparent 280deg); animation: ai-w3 17s linear infinite; }

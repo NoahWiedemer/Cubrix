@@ -27,7 +27,7 @@ export function CameraRig() {
   const inPreview = useApp((s) => s.workspace === "preview");
   const turntableOn = usePreview((s) => s.turntable);
   const turntable = inPreview && turntableOn;
-  const { camera, set, size } = useThree();
+  const { camera, set, size, invalidate } = useThree();
   const controls = useThree((s) => s.controls) as unknown as Controls | null;
   const persp = useRef<THREE.PerspectiveCamera>(camera as THREE.PerspectiveCamera);
   const target = useRef(new THREE.Vector3(0, 12, 0));
@@ -117,6 +117,7 @@ export function CameraRig() {
     };
     const ctl = controls as unknown as { enabled: boolean } | null;
     if (ctl) ctl.enabled = false;
+    invalidate();
   };
 
   useFrame((state) => {
@@ -140,6 +141,8 @@ export function CameraRig() {
     p.quaternion.copy(q);
     p.position.copy(target.current).add(new THREE.Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(d));
     p.updateProjectionMatrix();
+    // The canvas draws on demand: keep asking until the tween has landed.
+    state.invalidate();
     if (k < 1) return;
     tween.current = null;
     if (tw.proj === "orthographic") {
@@ -185,6 +188,7 @@ export function CameraRig() {
       cam.updateProjectionMatrix();
       set({ camera: cam });
       ctl?.update();
+      invalidate();
     };
   });
 

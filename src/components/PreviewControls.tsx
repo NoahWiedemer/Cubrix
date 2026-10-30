@@ -43,10 +43,17 @@ export function PreviewControls() {
 /** Lets the AI agent grab a PNG of the viewport right after a frame is rendered. */
 export function ViewportCapture() {
   const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
   const pending = useRef<((v: string | null) => void)[]>([]);
   useEffect(() => {
-    setCaptureViewport(() => new Promise((resolve) => pending.current.push(resolve)));
-  }, []);
+    setCaptureViewport(
+      () =>
+        new Promise((resolve) => {
+          pending.current.push(resolve);
+          invalidate();
+        }),
+    );
+  }, [invalidate]);
   useFrame(() => {
     if (!pending.current.length) return;
     const waiting = pending.current.splice(0);

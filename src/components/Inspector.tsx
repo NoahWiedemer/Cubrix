@@ -161,6 +161,17 @@ function View() {
         {more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}Mehr
       </button>
       {more && (
+        <div className="quality-row">
+          <span>Qualität</span>
+          <SegmentedControl size="sm" className="block" value={s.quality} onChange={(quality) => useSettings.setState({ quality })}
+            options={[
+              { value: "high", label: "Hoch", tip: "Volle Retina-Schärfe, braucht am meisten Leistung" },
+              { value: "balanced", label: "Ausgewogen", tip: "Scharf und leise" },
+              { value: "eco", label: "Sparsam", tip: "Weniger Schärfe, schont Akku und Lüfter" },
+            ]} />
+        </div>
+      )}
+      {more && (
         <Toggle label="KI-Animationen" value={s.aiAnimations} onChange={(aiAnimations) => useSettings.setState({ aiAnimations })} />
       )}
       {more && (

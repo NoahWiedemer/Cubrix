@@ -1,7 +1,7 @@
 // Minimal transform gizmo: thin axis arrows for moving; rotation rings only in
 // rotate mode (R). Everything is sized in screen pixels and ignores depth.
 import { useSpacePan } from "../ui/spacePan";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Html } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
@@ -60,13 +60,18 @@ function priorityRaycast(this: THREE.Mesh, rc: THREE.Raycaster, hits: THREE.Inte
 /** Eases a group's scale toward `target` (~100 ms). */
 function useEasedScale(target: number) {
   const ref = useRef<THREE.Group>(null);
+  const invalidate = useThree((s) => s.invalidate);
   useFrame((_, dt) => {
     const g = ref.current;
-    if (!g) return;
-    const k = Math.min(1, dt / 0.035);
+    if (!g || g.scale.x === target) return;
+    const k = Math.min(1, Math.min(dt, 1 / 30) / 0.035);
     const v = g.scale.x + (target - g.scale.x) * k;
-    g.scale.set(v, v, v);
+    const done = Math.abs(target - v) < 0.001;
+    g.scale.setScalar(done ? target : v);
+    if (!done) invalidate();
   });
+  // A new target needs a frame to start from: the canvas draws on demand.
+  useEffect(() => invalidate(), [target, invalidate]);
   return ref;
 }
 
