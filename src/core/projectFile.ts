@@ -2,6 +2,7 @@
 //   v1 (Albedo/Modelonio era): the bare ModelDocument JSON.
 //   v2: { format, version: 2, document, history, chat, camera, selection }.
 // The window layout is a per-machine preference and never part of a project.
+import { capEntryImages, limitImages } from "../ai/images";
 import { isModelDocument, type ModelDocument, type Vec3 } from "./document";
 import type { HistoryNode } from "./store";
 import type { Message } from "../ai/providers";
@@ -86,7 +87,8 @@ function withAncestorsFresh(nodes: Record<string, HistoryNode>, id: string) {
 /** Chat for the file: the newest entries, API history without screenshots (keys never live here). */
 function chatForFile(entries: ChatEntryData[], api: Message[]) {
   const strip = (m: Message): Message => ({ ...m, content: m.content.map((b) => (b.type === "tool_result" && b.image ? { ...b, image: undefined } : b)) });
-  return { entries: entries.slice(-MAX_CHAT).map(({ ...e }) => e), api: api.map(strip) };
+  // Pictures: only the newest stay in the API history; the visible chat keeps them up to a size limit.
+  return { entries: capEntryImages(entries.slice(-MAX_CHAT) as { images?: string[] }[]) as ChatEntryData[], api: limitImages(api).map(strip) };
 }
 
 export function serializeProject(p: Omit<ProjectFile, "format" | "version">): string {

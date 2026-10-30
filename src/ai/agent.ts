@@ -10,6 +10,7 @@ import * as THREE from "three";
 import { getGeometry, settleGeometry, useMeshes } from "../cad/kernel";
 import { worldBox, worldTransform } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
+import { limitImages } from "./images";
 import type { Effort } from "./models";
 import { runTurn, type Block, type Message, type Provider, type ToolSpec, type Transport } from "./providers";
 
@@ -197,6 +198,7 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
   2. BAUEN: Möglichst alles in EINEM shapes__createMany: Teile bauen aufeinander auf (on: "Platine"), Reihen über repeat oder grid statt Einzelteilen, Farbe, Material, edges und holes direkt am Teil, groupName für das Ganze. Danach nur noch, was der Batch nicht kann (object__pocket, text__create, boolean__*).
   3. PRÜFEN: Rufe am Ende check_model auf, behebe, was es meldet, und miss kritische Abstände mit measure. Wenn ein Viewport-Bild verfügbar ist, kontrolliere mit get_screenshot das Aussehen. Überlappungen innerhalb einer Gruppe sind erlaubt (Pins in der Platine).
 - Du kannst mehrere Werkzeuge in einer Antwort aufrufen.
+- Bilder im Auftrag: Erkenne zuerst, was zu sehen ist, und leite Proportionen und Maße ab (bekannte Referenzen im Bild, Normmaße, Websuche). Nenne deine Annahmen kurz und baue dann; frage nur nach, wenn es wirklich nicht anders geht. Hole nach dem Bauen mit get_screenshot ein Bild, vergleiche es mit der Vorlage und bessere EINMAL gezielt nach.
 - Schreibe keine Zitat-Marker in den Text; die App zeigt deine Quellen selbst unter der Antwort.
 - Nutze Sammelbefehle, nie Schleifen über Einzelaufrufe: shapes__createMany (viele Körper auf einmal), object__pattern (linear/grid/circular/mirror), objects__transformMany, object__delete mit ids, boolean__subtract/union/intersect mit targetId und toolIds (alle Werkzeuge in einem Schnitt).
 - Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
@@ -375,6 +377,8 @@ export async function runAgent(opts: {
   transport: Transport;
   history: Message[];
   prompt: string;
+  /** Pictures sent with the prompt (data URLs). */
+  images?: string[];
   signal: AbortSignal;
   events: AgentEvents;
   maxTurns?: number;
@@ -384,7 +388,7 @@ export async function runAgent(opts: {
   webSearch?: boolean;
 }): Promise<Message[]> {
   const group = { id: opts.groupId ?? Math.random().toString(36).slice(2), prompt: opts.prompt };
-  const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }] }];
+  const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }, ...(opts.images ?? []).map((url) => ({ type: "image" as const, url }))] }];
   const tools = buildTools();
   // Text before and after tool steps stays apart, as separate paragraphs.
   let wrote = false;
@@ -399,7 +403,7 @@ export async function runAgent(opts: {
     turnStart = true;
     if (opts.signal.aborted) break;
     opts.events.onPhase?.(turn === 0 ? "Denkt nach …" : "Plant den nächsten Schritt …");
-    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, prepareHistory(messages), onText, opts.signal, opts.webSearch);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, limitImages(prepareHistory(messages)), onText, opts.signal, opts.webSearch);
     messages.push({ role: "assistant", content: res.blocks, model: opts.model });
     for (const q of res.searches ?? []) opts.events.onStep({ label: `Sucht im Web: ${q}`, ok: true });
     if (res.sources?.length) opts.events.onSources?.(res.sources);

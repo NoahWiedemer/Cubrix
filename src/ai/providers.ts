@@ -1,3 +1,4 @@
+import { splitDataUrl } from "./images";
 import type { Effort } from "./models";
 
 // Provider adapters (Anthropic Messages API, OpenAI Responses API) over a
@@ -8,6 +9,8 @@ export type Provider = "anthropic" | "openai";
 
 export type Block =
   | { type: "text"; text: string }
+  /** A picture from the user, as a data URL. */
+  | { type: "image"; url: string }
   // Anthropic thinking blocks must be sent back unchanged on later turns.
   | { type: "thinking"; thinking: string; signature: string }
   | { type: "redacted_thinking"; data: string }
@@ -92,6 +95,10 @@ function anthropicMessages(messages: Message[], model: string) {
   return messages.filter((m) => m.content.some((b) => keep(m, b))).map((m) => ({
     role: m.role,
     content: m.content.filter((b) => keep(m, b)).map((b) => {
+      if (b.type === "image") {
+        const { media, data } = splitDataUrl(b.url);
+        return { type: "image", source: { type: "base64", media_type: media, data } };
+      }
       if (b.type !== "tool_result") return out(b);
       const content: unknown[] = [{ type: "text", text: b.content }];
       if (b.image) content.unshift({ type: "image", source: { type: "base64", media_type: "image/png", data: b.image } });
@@ -218,8 +225,18 @@ function openaiInput(messages: Message[]) {
       if (b.type === "tool_result") {
         input.push({ type: "function_call_output", call_id: b.tool_use_id, output: b.content });
         if (b.image) images.push(b.image);
-      } else if (b.type === "text") input.push({ role: "user", content: b.text });
+      } else if (b.type === "text" && !m.content.some((x) => x.type === "image")) input.push({ role: "user", content: b.text });
     }
+    // A prompt with pictures: one user message holding the text and all of them.
+    const pictures = m.content.filter((b) => b.type === "image");
+    if (pictures.length)
+      input.push({
+        role: "user",
+        content: [
+          ...m.content.filter((b) => b.type === "text").map((b) => ({ type: "input_text", text: (b as { text: string }).text })),
+          ...pictures.map((b) => ({ type: "input_image", image_url: (b as { url: string }).url })),
+        ],
+      });
     if (images.length)
       input.push({
         role: "user",

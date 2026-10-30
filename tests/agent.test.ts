@@ -60,7 +60,7 @@ describe("KI-Agent (gemockter Anbieter)", () => {
     const node = useApp.getState().nodes[useApp.getState().currentId];
     expect(node.source).toBe("ai");
     expect(node.group?.prompt).toBe("Bau mir eine Platte 40 × 30 × 10");
-    expect(text).toBe("Ich baue eine Platte.Fertig!");
+    expect(text).toBe("Ich baue eine Platte.\n\nFertig!");
     expect(steps).toEqual(["Platte hinzufügen"]);
     expect(messages.at(-1)?.role).toBe("assistant");
     // Tool names never contain dots (provider requirement).

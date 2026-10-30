@@ -61,6 +61,13 @@ export function startAutosave(serialize: () => string) {
   }, 30_000);
 }
 
+/** "13:39" today, otherwise with the date. */
+export function recoveryTime(t: number, now = Date.now()) {
+  const d = new Date(t);
+  const today = d.toDateString() === new Date(now).toDateString();
+  return d.toLocaleString("de-DE", today ? { timeStyle: "short" } : { dateStyle: "short", timeStyle: "short" });
+}
+
 /** Recovered work waiting for the user's decision (shown as a banner). */
 export const useRecovery = create<{ text: string | null; name: string; time: string }>(() => ({ text: null, name: "", time: "" }));
 
@@ -72,7 +79,7 @@ export async function checkRecovery() {
     const name = raw.document?.name ?? "Projekt";
     const nodes = Object.values(raw.history?.nodes ?? {}) as { time: number }[];
     const t = nodes.length ? Math.max(...nodes.map((n) => n.time)) : Date.now();
-    useRecovery.setState({ text, name, time: new Date(t).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) });
+    useRecovery.setState({ text, name, time: recoveryTime(t) });
   } catch {
     void clearAutosave();
   }

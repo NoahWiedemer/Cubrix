@@ -68,3 +68,12 @@ describe("Projektdatei", () => {
     expect(file.history).toBeUndefined();
   });
 });
+
+describe("Wiederherstellungs-Hinweis", () => {
+  it("zeigt heute nur die Uhrzeit, sonst auch das Datum", async () => {
+    const { recoveryTime } = await import("../src/core/autosave");
+    const now = new Date(2026, 9, 30, 15, 0).getTime();
+    expect(recoveryTime(new Date(2026, 9, 30, 13, 39).getTime(), now)).toBe("13:39");
+    expect(recoveryTime(new Date(2026, 9, 28, 13, 39).getTime(), now)).toContain("28.10.");
+  });
+});

@@ -11,6 +11,7 @@ import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
 import { useChat, type ChatEntry, type ChatStep } from "../ai/chatStore";
 import { cleanModelText } from "../ai/cleanText";
+import { ACCEPTED, MAX_IMAGES, prepareImage } from "../ai/images";
 import { VoiceButton } from "./VoiceButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { friendlyError, type FriendlyError } from "../ai/errors";
@@ -188,6 +189,10 @@ export function ChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const more = usePopover();
+  const [images, setImages] = useState<string[]>([]);
+  const [dropping, setDropping] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Dev-only preview of the connected panel in a plain browser (?kiDemo, ?kiDemo=chat).
@@ -230,9 +235,27 @@ export function ChatPanel() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [entries]);
 
-  const send = async (prompt: string) => {
-    if (!prompt.trim() || running) return;
+  const addFiles = async (files: File[]) => {
+    const pictures = files.filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+    if (!pictures.length) return;
+    try {
+      const prepared = await Promise.all(pictures.map(prepareImage));
+      setImages((list) => {
+        const next = [...list, ...prepared.map((p) => p.url)];
+        if (next.length > MAX_IMAGES) useApp.getState().toast("info", `Höchstens ${MAX_IMAGES} Bilder pro Nachricht.`);
+        return next.slice(0, MAX_IMAGES);
+      });
+    } catch (e) {
+      useApp.getState().toast("error", e instanceof Error ? e.message : "Das Bild ließ sich nicht öffnen.");
+    }
+  };
+
+  const send = async (text: string, pictures: string[] = images) => {
+    // A picture alone is a request too.
+    const prompt = text.trim() || (pictures.length ? "Bau das nach." : "");
+    if (!prompt || running) return;
     setInput("");
+    setImages([]);
     if (inputRef.current) inputRef.current.style.height = "";
     controller = new AbortController();
     const signal = controller.signal;
@@ -241,7 +264,7 @@ export function ChatPanel() {
     // After switching projects this run may only wind down, not touch the new chat.
     const current = () => useChat.getState().generation === generation;
     const entry: ChatEntry = { role: "assistant", text: "", steps: [] };
-    useChat.setState((s) => ({ entries: [...s.entries, { role: "user", text: prompt, steps: [] }, entry], running: true }));
+    useChat.setState((s) => ({ entries: [...s.entries, { role: "user", text: text.trim(), steps: [], ...(pictures.length ? { images: pictures } : {}) }, entry], running: true }));
     const update = (fn: (e: ChatEntry) => ChatEntry) => {
       if (current()) useChat.setState((s) => ({ entries: [...s.entries.slice(0, -1), fn(s.entries[s.entries.length - 1])] }));
     };
@@ -261,6 +284,7 @@ export function ChatPanel() {
         transport: tauriTransport,
         history: useChat.getState().api,
         prompt,
+        images: pictures,
         signal,
         events: {
           onText: (d) => update((e) => ({ ...e, text: e.text + d })),
@@ -287,8 +311,9 @@ export function ChatPanel() {
 
   // Retry: drop the failed exchange and send the same prompt again.
   const retry = (prompt: string) => {
+    const pictures = useChat.getState().entries.at(-2)?.images ?? [];
     useChat.setState((s) => ({ entries: s.entries.slice(0, -2) }));
-    void send(prompt);
+    void send(prompt, pictures);
   };
 
   if (!hasKey)
@@ -300,7 +325,26 @@ export function ChatPanel() {
     );
 
   return (
-    <div className="chat">
+    <div
+      className={`chat ${dropping ? "dropping" : ""}`}
+      onDragOver={(e) => {
+        if (![...e.dataTransfer.types].includes("Files")) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropping(false);
+        void addFiles([...e.dataTransfer.files]);
+      }}
+    >
+      {dropping && <div className="chat-drop"><Icon name="clip" size={18} />Bild hier ablegen</div>}
+      {viewing && (
+        <div className="image-view" onClick={() => setViewing(null)} role="dialog" aria-label="Bild">
+          <img src={viewing} alt="" />
+        </div>
+      )}
       <div className="chat-bar">
         <ModelMenu />
         <div ref={more.ref} style={{ position: "relative" }}>
@@ -328,6 +372,11 @@ export function ChatPanel() {
         ) : (
           entries.map((e, i) => (
             <div key={i} className={`msg ${e.role}`}>
+              {e.images && e.images.length > 0 && (
+                <div className="msg-images">
+                  {e.images.map((url, k) => <button key={k} onClick={() => setViewing(url)} data-tip="Vergrößern" data-tip-pos="top"><img src={url} alt="" /></button>)}
+                </div>
+              )}
               {e.text && (e.role === "assistant" ? <div className="msg-text"><ChatMarkdown text={e.text} /></div> : <div className="msg-text">{e.text}</div>)}
               {e.sources && e.sources.length > 0 && (
                 <div className="msg-sources">
@@ -354,8 +403,24 @@ export function ChatPanel() {
         )}
       </div>
       <div className="chat-input">
+        {images.length > 0 && (
+          <div className="chat-thumbs">
+            {images.map((url, i) => (
+              <span key={i} className="chat-thumb">
+                <img src={url} alt="" />
+                <button onClick={() => setImages((l) => l.filter((_, k) => k !== i))} data-tip="Entfernen" data-tip-pos="top" aria-label="Bild entfernen">×</button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           ref={inputRef}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files];
+            if (!files.length) return;
+            e.preventDefault();
+            void addFiles(files);
+          }}
           rows={1}
           value={input}
           placeholder={running ? "Arbeitet …" : "Nachricht an die KI"}
@@ -382,10 +447,24 @@ export function ChatPanel() {
             <Icon name="stop" size={13} />
           </button>
         ) : (
-          <button className={`chat-send ${input.trim() ? "ready" : ""}`} disabled={!input.trim()} onClick={() => send(input)} data-tip="Senden" data-tip-pos="top">
+          <button className={`chat-send ${input.trim() || images.length ? "ready" : ""}`} disabled={!input.trim() && !images.length} onClick={() => send(input)} data-tip="Senden" data-tip-pos="top">
             <Icon name="send" size={14} />
           </button>
         )}
+        <button className="chat-attach" onClick={() => fileRef.current?.click()} disabled={running} data-tip="Bild anhängen" data-tip-pos="top" aria-label="Bild anhängen">
+          <Icon name="clip" size={15} />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPTED}
+          multiple
+          hidden
+          onChange={(e) => {
+            void addFiles([...(e.target.files ?? [])]);
+            e.target.value = "";
+          }}
+        />
         <VoiceButton
           disabled={running}
           onText={(t) => void send(t)}

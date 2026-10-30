@@ -1479,3 +1479,24 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .face-op-form .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .face-op-form .field-grid:nth-of-type(2) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .face-op-form .select { height: 32px; min-width: 0; width: 100%; }
+.chat { position: relative; }
+.chat.dropping > :not(.chat-drop) { opacity: 0.45; }
+.chat-drop { position: absolute; inset: 6px; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1.5px dashed var(--accent); background: rgba(110, 231, 197, 0.07); color: var(--accent); font-size: 13.5px; pointer-events: none; }
+.chat-thumbs { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; }
+.chat-thumb { position: relative; width: 52px; height: 52px; }
+.chat-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.chat-thumb button { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--line); color: var(--text-2); }
+.chat-thumb button:hover { color: var(--text); }
+.chat-attach { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--text-3); }
+.chat-attach:hover:not(:disabled) { color: var(--text); background: var(--panel-3); }
+.msg-images { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.msg-images button { padding: 0; border-radius: 9px; overflow: hidden; cursor: zoom-in; }
+.msg-images img { display: block; max-width: 132px; max-height: 110px; border-radius: 9px; border: 1px solid var(--line); }
+.image-view { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; background: rgba(6, 8, 9, 0.8); backdrop-filter: blur(4px); cursor: zoom-out; animation: fade 140ms var(--ease); }
+.image-view img { max-width: 88vw; max-height: 88vh; border-radius: 10px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5); }
+.recovery { top: auto; bottom: 84px; padding: 6px 6px 6px 14px; border-color: var(--line); gap: 8px; max-width: min(620px, calc(100vw - 32px)); }
+.recovery-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.recovery .btn-primary.small, .recovery .btn-ghost.small { height: 28px; flex: none; }
+.chat-thumb button { font-size: 13px; line-height: 1; }
+.chat-input textarea { padding-right: 112px; }
+.recovery { bottom: 112px; max-width: min(760px, calc(100vw - 32px)); }

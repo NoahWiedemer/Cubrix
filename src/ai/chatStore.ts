@@ -20,6 +20,8 @@ export interface ChatEntry {
   groupId?: string;
   durationMs?: number;
   sources?: { url: string; title: string }[];
+  /** Pictures sent with this message (data URLs). */
+  images?: string[];
 }
 
 interface ChatState {
