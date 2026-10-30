@@ -73,10 +73,9 @@ fn log_status(message: String) {
 }
 
 /// One-time copy of the webview storage (layout, settings) from the old app
-/// identifier after the renames Modelonio → Albedo → Cubrix. Never overwrites new data.
+/// identifier after the rename to Cubrix. Never overwrites new data.
 fn migrate_webview_data() {
-    // Newest name first: an existing Albedo store wins over an older Modelonio one.
-    let pairs = [("de.codana.albedo", "de.codana.cubrix"), ("albedo", "cubrix"), ("de.codana.modelonio", "de.codana.cubrix"), ("modelonio", "cubrix")];
+    let pairs = [("de.codana.albedo", "de.codana.cubrix"), ("albedo", "cubrix")];
     let bases: Vec<std::path::PathBuf> = if cfg!(target_os = "macos") {
         std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/WebKit")).into_iter().collect()
     } else if cfg!(target_os = "windows") {

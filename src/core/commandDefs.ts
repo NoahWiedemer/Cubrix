@@ -2800,7 +2800,7 @@ defineCommand({
 
 const PROJECT_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix"] };
 /** Opening also accepts project files saved before the rename. */
-const OPEN_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix", "albedo", "modelonio"] };
+const OPEN_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix", "albedo"] };
 
 async function confirmDiscard(): Promise<boolean> {
   const s = useApp.getState();
@@ -2874,7 +2874,7 @@ defineCommand({
   id: "file.open",
   kind: "action",
   label: "Öffnen …",
-  description: "Öffnet eine Cubrix-Projektdatei (.cubrix, auch ältere .albedo- und .modelonio-Dateien).",
+  description: "Öffnet eine Cubrix-Projektdatei (.cubrix).",
   icon: "open",
   shortcut: "mod+o",
   params: {},

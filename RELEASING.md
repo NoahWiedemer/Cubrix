@@ -14,7 +14,7 @@ Windows: SmartScreen „Trotzdem ausführen“).
 
 Cubrix sucht über **Einstellungen → Updates** bzw. **Logo-Menü → Nach Updates suchen …**
 (und automatisch einmal täglich beim Start) nach neuen Versionen. Es liest
-`https://github.com/NoahWiedemer/modelonio/releases/latest/download/latest.json`,
+`https://github.com/NoahWiedemer/Cubrix/releases/latest/download/latest.json`,
 das der Release-Workflow hochlädt. Updates sind mit einem eigenen Schlüsselpaar signiert;
 die App installiert nur Pakete, deren Signatur zum öffentlichen Schlüssel in
 `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`) passt.
@@ -65,7 +65,7 @@ neuerer Release als „latest“ veröffentlicht ist (kein Draft, kein Pre-Relea
    git push && git push origin vX.Y.Z
    ```
 5. Nach etwa 15–25 Minuten erscheint der Release unter
-   https://github.com/NoahWiedemer/modelonio/releases
+   https://github.com/NoahWiedemer/Cubrix/releases
 
 Der Workflow lässt sich auch manuell unter **Actions → Release → Run workflow** (Tag auswählen) starten, falls er nach dem Tag-Push nicht von selbst losläuft.
 Für das Anlegen des Releases genügt das Standard-Token (`permissions: contents: write` im Workflow).

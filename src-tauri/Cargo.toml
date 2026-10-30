@@ -1,12 +1,12 @@
 [package]
-name = "modelonio"
+name = "cubrix"
 version = "0.1.2"
 description = "Cubrix – CAD für den 3D-Druck"
 authors = ["Noah Wiedemer"]
 edition = "2021"
 
 [lib]
-name = "modelonio_lib"
+name = "cubrix_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

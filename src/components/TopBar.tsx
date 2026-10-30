@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Undo2, Redo2, PanelsTopLeft } from "lucide-react";
-import logo1x from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
-import logo2x from "../assets/brand/modelonio-logo-ohne-hintergrund-512.png";
+import logo1x from "../assets/brand/cubrix-logo-ohne-hintergrund-256.png";
+import logo2x from "../assets/brand/cubrix-logo-ohne-hintergrund-512.png";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { Icon, type IconName } from "../ui/icons";
 import { SegmentedControl } from "../ui/SegmentedControl";

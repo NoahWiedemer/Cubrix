@@ -39,7 +39,7 @@ fn write_private(path: &PathBuf, data: &[u8]) -> Result<(), String> {
 pub fn migrate_app_data(app: &AppHandle) {
     let Ok(new_dir) = app.path().app_data_dir() else { return };
     let Some(parent) = new_dir.parent() else { return };
-    for old_id in ["de.codana.albedo", "de.codana.modelonio"] {
+    for old_id in ["de.codana.albedo"] {
         let old = parent.join(old_id);
         if !old.is_dir() || new_dir.join("secrets.json").exists() {
             continue;

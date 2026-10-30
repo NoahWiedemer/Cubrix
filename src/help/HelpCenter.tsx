@@ -4,7 +4,7 @@ import { Search, X, Lightbulb } from "lucide-react";
 import { HELP_TOPICS, type HelpTopic } from "./topics";
 import { Icon } from "../ui/icons";
 import { Diagram } from "./diagrams";
-import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
+import logo from "../assets/brand/cubrix-logo-mit-hintergrund-256.png";
 
 const SHOTS = import.meta.glob("../assets/help/*.jpg", { eager: true, import: "default" }) as Record<string, string>;
 const shot = (name: string) => SHOTS[`../assets/help/${name}.jpg`];

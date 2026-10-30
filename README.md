@@ -7,7 +7,7 @@ CAD für den 3D-Druck – einfach, ruhig, auf Deutsch. Desktop-App (macOS, spät
 ## Download
 
 Fertige Versionen für macOS (`.dmg`) und Windows (`.exe`/`.msi`):
-**https://github.com/NoahWiedemer/modelonio/releases/latest**
+**https://github.com/NoahWiedemer/Cubrix/releases/latest**
 
 Hinweis: Die Builds sind noch nicht signiert – auf dem Mac beim ersten Start Rechtsklick → „Öffnen“.
 Wie Releases entstehen, steht in [RELEASING.md](RELEASING.md).
@@ -32,7 +32,7 @@ Voraussetzungen: Node 20+, Rust (stable).
 - Boolesche Operationen: Vereinen, Abziehen, Schnittmenge (und wieder auflösen)
 - Verlauf wie in Photoshop: jeder Schritt anklickbar, frühere Zweige bleiben wiederherstellbar, ⌘Z / ⇧⌘Z
 - Druckprüfung (geschlossen, auf dem Bett, im Bauraum des Snapmaker Original 125³ mm)
-- Export als STL, 3MF, OBJ und STEP; Projekte als `.cubrix` (JSON) speichern/öffnen (ältere `.albedo`- und `.modelonio`-Dateien werden weiterhin geöffnet)
+- Export als STL, 3MF, OBJ und STEP; Projekte als `.cubrix` (JSON) speichern/öffnen
 
 ## Architektur
 
@@ -45,4 +45,3 @@ Voraussetzungen: Node 20+, Rust (stable).
 
 In der Entwicklerkonsole: `cubrix.execute("primitive.box", { width: 40 })`, `cubrix.commands()`.
 
-Hinweis: Ordner, Repository und Rust-Crate heißen aus technischen Gründen noch `modelonio`.

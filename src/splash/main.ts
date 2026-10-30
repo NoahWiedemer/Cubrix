@@ -3,7 +3,7 @@
 import "./splash.css";
 import pkg from "../../package.json";
 import image from "../assets/splash/splash.webp";
-import logo from "../assets/brand/modelonio-logo-ohne-hintergrund-256.png";
+import logo from "../assets/brand/cubrix-logo-ohne-hintergrund-256.png";
 
 const MIN_MS = 800;
 const shownAt = performance.now();

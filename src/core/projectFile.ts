@@ -1,5 +1,5 @@
 // The .cubrix project file. Versioned:
-//   v1 (Albedo/Modelonio era): the bare ModelDocument JSON.
+//   v1 (Albedo era): the bare ModelDocument JSON.
 //   v2: { format, version: 2, document, history, chat, camera, selection }.
 // The window layout is a per-machine preference and never part of a project.
 import { capEntryImages, limitImages } from "../ai/images";

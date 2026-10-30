@@ -32,7 +32,7 @@ const lockPath = "src-tauri/Cargo.lock";
 if (fs.existsSync(lockPath))
   fs.writeFileSync(
     lockPath,
-    fs.readFileSync(lockPath, "utf8").replace(/(name = "modelonio"\nversion = ")[^"]+(")/, `$1${next}$2`),
+    fs.readFileSync(lockPath, "utf8").replace(/(name = "cubrix"\nversion = ")[^"]+(")/, `$1${next}$2`),
   );
 
 sh("npm install --package-lock-only --ignore-scripts");

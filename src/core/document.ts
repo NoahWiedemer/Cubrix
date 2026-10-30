@@ -560,7 +560,6 @@ export function geometryKey(f: Feature): string {
 
 export function isModelDocument(x: unknown): x is ModelDocument {
   const d = x as ModelDocument;
-  // Files from before the rename (format "modelonio") are still accepted.
-  // Files from before the renames (format "albedo" / "modelonio") are still accepted.
-  return !!d && ["cubrix", "albedo", "modelonio"].includes(d.format as string) && Array.isArray(d.features);
+  // Files from before the rename (format "albedo") are still accepted.
+  return !!d && ["cubrix", "albedo"].includes(d.format as string) && Array.isArray(d.features);
 }
