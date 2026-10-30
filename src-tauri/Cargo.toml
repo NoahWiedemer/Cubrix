@@ -1,6 +1,6 @@
 [package]
 name = "modelonio"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cubrix – CAD für den 3D-Druck"
 authors = ["Noah Wiedemer"]
 edition = "2021"
