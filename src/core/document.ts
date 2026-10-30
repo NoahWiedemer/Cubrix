@@ -60,6 +60,8 @@ interface FeatureBase {
   shell?: Shell;
   /** Rounding/chamfering of chosen edges, applied in order after `fillet`/`chamfer`. */
   edgeOps?: EdgeOp[];
+  /** Holes, pockets and bosses on the body's faces, applied in order after the edge steps. */
+  faceOps?: FaceOp[];
   /** Locked: cannot be picked or moved in the viewport (still selectable in the object list). */
   locked?: boolean;
 }
@@ -82,6 +84,31 @@ export interface EdgeOp {
   /** Either picked edges or a rule. */
   refs?: EdgeRef[];
   filter?: EdgeFilter;
+}
+
+export type FaceName = "top" | "bottom" | "front" | "back" | "left" | "right";
+
+export type FaceShape =
+  | { kind: "circle"; d: number }
+  /** w along u, h along v; r rounds the corners. */
+  | { kind: "rect"; w: number; h: number; r?: number }
+  /** Slot of total length l along u. */
+  | { kind: "slot"; l: number; w: number };
+
+/**
+ * A hole, pocket ("cut") or boss ("add") on a face of the body's bounding box. (u, v) is
+ * measured from the face centre: top/bottom u = X, v = Y; front/back u = X, v = Z;
+ * left/right u = Y, v = Z. No depth: right through the body.
+ */
+export interface FaceOp {
+  op: "cut" | "add";
+  face: FaceName;
+  u: number;
+  v: number;
+  shape: FaceShape;
+  depth?: number;
+  /** Screw head recess of a hole. */
+  head?: { kind: "counterbore" | "countersink"; d: number; depth?: number };
 }
 
 export interface Shell {
@@ -519,7 +546,7 @@ export const hasNoEdges = (f: Feature) => ["sphere", "torus", "thread", "threadh
 
 export function geometryKey(f: Feature): string {
   const strip = (x: Feature, top: boolean): unknown => {
-    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, eo: x.edgeOps, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
+    const base = { type: x.type, fillet: x.fillet ?? 0, chamfer: x.chamfer ?? 0, eo: x.edgeOps, fo: x.faceOps, m: x.mirror, sh: x.shell, t: top ? undefined : x.transform };
     if (x.type === "boolean")
       return { ...base, op: x.op, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };
     if (x.type === "group") return { ...base, c: x.children.map((c) => ({ ...(strip(c, false) as object), v: c.visible })) };

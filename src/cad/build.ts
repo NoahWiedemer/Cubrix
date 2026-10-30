@@ -3,7 +3,7 @@
 import { drawCircle, drawEllipse, drawPolysides, drawRectangle, drawRoundedRectangle, draw, Compound, FaceFinder, Vector, basicFaceExtrusion, makeBaseBox, makeCompound, makeCylinder, makeOffset, makeSolid, makeSphere, measureVolume, type Drawing, type Edge, type Shape3D } from "replicad";
 import { buildText } from "./text";
 import { EXTRA_BUILDERS } from "./shapes";
-import { hasNoEdges, isClosed, shapePoints, type EdgeFilter, type EdgeOp, type EdgeRef, type Vec3, type Feature, type SketchShape } from "../core/document";
+import { hasNoEdges, isClosed, shapePoints, type EdgeFilter, type EdgeOp, type EdgeRef, type FaceName, type FaceOp, type Vec3, type Feature, type SketchShape } from "../core/document";
 
 /** Raised when rounding/chamfering edges fails, with a message meant for the user. */
 export class EdgeTreatmentError extends Error {}
@@ -203,6 +203,83 @@ function edgeOpPass(shape: Shape3D, f: Feature, op: EdgeOp): Shape3D {
 
 function applyEdgeOps(shape: Shape3D, f: Feature): Shape3D {
   return (f.edgeOps ?? []).reduce((s, op) => edgeOpPass(s, f, op), shape);
+}
+
+/** Turns a tool made along +Z (into the body) to look into `face`, then moves it there. */
+function onFace(tool: Shape3D, op: FaceOp, b: Bounds): Shape3D {
+  const c = [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2];
+  const X: [number, number, number] = [1, 0, 0];
+  const Y: [number, number, number] = [0, 1, 0];
+  const O: [number, number, number] = [0, 0, 0];
+  switch (op.face) {
+    case "bottom":
+      return tool.translate(c[0] + op.u, c[1] + op.v, b[0][2]);
+    case "top":
+      return tool.rotate(180, O, X).translate(c[0] + op.u, c[1] + op.v, b[1][2]);
+    case "front":
+      return tool.rotate(-90, O, X).translate(c[0] + op.u, b[0][1], c[2] + op.v);
+    case "back":
+      return tool.rotate(90, O, X).translate(c[0] + op.u, b[1][1], c[2] + op.v);
+    case "left":
+      return tool.rotate(90, O, Y).translate(b[0][0], c[1] + op.u, c[2] + op.v);
+    case "right":
+      return tool.rotate(-90, O, Y).translate(b[1][0], c[1] + op.u, c[2] + op.v);
+  }
+}
+
+const faceAxis = (face: FaceName) => (face === "top" || face === "bottom" ? 2 : face === "front" || face === "back" ? 1 : 0);
+
+function faceDrawing(op: FaceOp): Drawing {
+  const s = op.shape;
+  // Left/right faces turn the tool about Y, so its X becomes Z: swap the sides to keep w along u.
+  const side = op.face === "left" || op.face === "right";
+  if (s.kind === "circle") return drawCircle(s.d / 2);
+  if (s.kind === "rect") {
+    const [a, b] = side ? [s.h, s.w] : [s.w, s.h];
+    return s.r ? drawRoundedRectangle(a, b, Math.min(s.r, Math.min(a, b) / 2 - 0.001)) : drawRectangle(a, b);
+  }
+  const r = s.w / 2;
+  const straight = Math.max(0.01, s.l - s.w);
+  const slot = drawRoundedRectangle(straight + s.w, s.w, r - 0.001);
+  return side ? slot.rotate(90, [0, 0]) : slot;
+}
+
+/** Tool for a cut: starts just outside the face and runs `depth` into the body. */
+function cutTool(op: FaceOp, depth: number): Shape3D {
+  const EPS_OUT = 0.02;
+  let tool = (faceDrawing(op).sketchOnPlane("XY").extrude(depth + EPS_OUT) as Shape3D).translateZ(-EPS_OUT);
+  if (op.head && op.shape.kind === "circle") {
+    const R = op.head.d / 2;
+    const r = op.shape.d / 2;
+    const depthHead = op.head.depth ?? (op.head.kind === "countersink" ? Math.max(0, R - r) : r * 2);
+    const recess =
+      op.head.kind === "counterbore"
+        ? (drawCircle(R).sketchOnPlane("XY").extrude(depthHead + EPS_OUT) as Shape3D).translateZ(-EPS_OUT)
+        : (draw([0, -EPS_OUT]).lineTo([R, -EPS_OUT]).lineTo([R, 0]).lineTo([r, depthHead]).lineTo([0, depthHead]).close().sketchOnPlane("XZ").revolve([0, 0, 1]) as Shape3D);
+    tool = tool.fuse(recess);
+  }
+  return tool;
+}
+
+/** Holes, pockets and bosses; each face position follows the body's bounding box. */
+function applyFaceOps(shape: Shape3D, f: Feature): Shape3D {
+  let result = shape;
+  for (const op of f.faceOps ?? []) {
+    const b = result.boundingBox.bounds as Bounds;
+    const axis = faceAxis(op.face);
+    const depth = op.depth ?? b[1][axis] - b[0][axis] + 0.04;
+    try {
+      if (op.op === "cut") result = result.cut(onFace(cutTool(op, depth), op, b));
+      else {
+        // A boss grows outwards and reaches 0.02 mm into the body for a clean fuse.
+        const boss = (faceDrawing(op).sketchOnPlane("XY").extrude(depth + 0.02) as Shape3D).translateZ(-depth);
+        result = result.fuse(onFace(boss, op, b));
+      }
+    } catch {
+      throw new EdgeTreatmentError(`Diese ${op.op === "cut" ? "Bohrung oder Tasche" : "Erhöhung"} passt nicht auf ${f.name}.`);
+    }
+  }
+  return result;
 }
 
 /** Pickable edges of the finished body (before shell and mirror), for the viewport. */
@@ -421,7 +498,8 @@ export const importedShapes = new Map<string, Shape3D>();
 
 export function buildLocal(f: Feature): Shape3D {
   if (f.type === "group") return buildGroup(f);
-  let shape = applyShell(buildBody(f), f);
+  // Holes come after hollowing: a cable opening goes through the wall of the finished shell.
+  let shape = applyFaceOps(applyShell(buildBody(f), f), f);
   // Mirrored copies: flip the geometry in the feature's own frame.
   if (f.mirror) shape = shape.mirror(f.mirror === "x" ? "YZ" : "XZ", [0, 0, 0]);
   return shape;

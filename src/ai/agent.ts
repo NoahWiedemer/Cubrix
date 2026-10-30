@@ -5,9 +5,10 @@ import { logError } from "../core/errorLog";
 import { markModeling } from "./run";
 import { execute, getCommand, listCommands, toToolDefinition } from "../core/commands";
 import { getDoc, useApp } from "../core/store";
-import { geometryKey, isSolid, type Feature } from "../core/document";
-import { useMeshes } from "../cad/kernel";
-import { worldBox } from "../core/bounds";
+import { geometryKey, isSolid, type Feature, type Transform } from "../core/document";
+import * as THREE from "three";
+import { getGeometry, useMeshes } from "../cad/kernel";
+import { worldBox, worldTransform } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
 import type { Effort } from "./models";
 import { runTurn, type Block, type Message, type Provider, type ToolSpec, type Transport } from "./providers";
@@ -29,6 +30,16 @@ export function buildTools(): ToolSpec[] {
     ...commands,
     { name: "get_model", description: "Gibt das aktuelle Modell als JSON zurück: Objekte mit IDs, Typ, Maßen, Position, Drehung, Bounding-Box (mm) sowie Auswahl und Drucker.", input_schema: { type: "object", properties: {} } },
     { name: "get_screenshot", description: "Liefert ein Bild des aktuellen Viewports, um das Ergebnis zu prüfen.", input_schema: { type: "object", properties: {} } },
+    {
+      name: "measure",
+      description: "Misst Objekte: mit a Maße und Bounding-Box, mit a und b zusätzlich Abstand je Achse (negativ = Überlappung) und Mittelpunkt-Abstand. a/b = ID oder Name.",
+      input_schema: { type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, required: ["a"] },
+    },
+    {
+      name: "check_model",
+      description: "Selbstprüfung nach dem Bauen: wartet auf den CAD-Kern und meldet Fehler beim Berechnen, schwebende Teile, Teile außerhalb des Bauraums, unter dem Bett und Überlappungen zwischen eigenständigen Objekten.",
+      input_schema: { type: "object", properties: {} },
+    },
     { name: "list_commands", description: "Listet alle Befehle mit Beschreibung.", input_schema: { type: "object", properties: {} } },
     {
       name: "run_script",
@@ -62,6 +73,82 @@ export function modelSnapshot() {
   };
 }
 
+export const r1 = (n: number) => Math.round(n * 100) / 100 + 0;
+
+/** Every solid at any depth with its world box, once the kernel has built it. */
+async function worldBoxes(): Promise<{ boxes: { f: Feature; box: THREE.Box3; top: string; path: string[] }[]; errors: string[] }> {
+  const doc = getDoc();
+  const errors: string[] = [];
+  const boxes: { f: Feature; box: THREE.Box3; top: string; path: string[] }[] = [];
+  const walk = async (f: Feature, frames: Transform[], top: string, path: string[]) => {
+    if (!f.visible || f.type === "sketch") return;
+    if (f.type === "group") {
+      for (const c of f.children) await walk(c, [...frames, f.transform], top, [...path, f.name]);
+      return;
+    }
+    try {
+      await getGeometry(f);
+    } catch (e) {
+      errors.push(`${f.name}: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    const box = worldBox(f, useMeshes.getState().entries, worldTransform(frames, f.transform));
+    if (box) boxes.push({ f, box, top, path });
+  };
+  for (const f of doc.features) await walk(f, [], f.id, []);
+  return { boxes, errors };
+}
+
+const boxInfo = (b: THREE.Box3) => {
+  const size = b.getSize(new THREE.Vector3());
+  return { size: [r1(size.x), r1(size.y), r1(size.z)], min: [r1(b.min.x), r1(b.min.y), r1(b.min.z)], max: [r1(b.max.x), r1(b.max.y), r1(b.max.z)] };
+};
+
+async function measure(a: string, b?: string) {
+  const { boxes } = await worldBoxes();
+  const find = (key: string) => boxes.find((x) => x.f.id === key || x.f.name === key);
+  const A = find(a);
+  if (!A) throw new Error(`„${a}“ nicht gefunden (Sichtbarkeit prüfen).`);
+  if (!b) return { name: A.f.name, ...boxInfo(A.box) };
+  const B = find(b);
+  if (!B) throw new Error(`„${b}“ nicht gefunden (Sichtbarkeit prüfen).`);
+  const gap = [0, 1, 2].map((i) => r1(Math.max(A.box.min.getComponent(i) - B.box.max.getComponent(i), B.box.min.getComponent(i) - A.box.max.getComponent(i))));
+  const ca = A.box.getCenter(new THREE.Vector3());
+  const cb = B.box.getCenter(new THREE.Vector3());
+  return { a: { name: A.f.name, ...boxInfo(A.box) }, b: { name: B.f.name, ...boxInfo(B.box) }, gapXYZ: gap, overlap: gap.every((v) => v < 0), centerDistance: r1(ca.distanceTo(cb)) };
+}
+
+/** Automatic self-check; touching parts count as connected, boxes are the measure. */
+export async function checkModel() {
+  const { boxes, errors } = await worldBoxes();
+  const doc = getDoc();
+  const [vx, vy, vz] = doc.printer.volume;
+  const TOL = 0.05;
+  const touches = (a: THREE.Box3, b: THREE.Box3) => a.clone().expandByScalar(TOL).intersectsBox(b);
+  const floating: string[] = [];
+  const belowBed: string[] = [];
+  const outside: string[] = [];
+  const overlaps: string[] = [];
+  boxes.forEach((x, i) => {
+    if (x.box.min.z < -TOL) belowBed.push(`${x.f.name} (unten bei ${r1(x.box.min.z)} mm)`);
+    if (x.box.min.x < -vx / 2 - TOL || x.box.max.x > vx / 2 + TOL || x.box.min.y < -vy / 2 - TOL || x.box.max.y > vy / 2 + TOL || x.box.max.z > vz + TOL) outside.push(x.f.name);
+    if (x.box.min.z > TOL && !boxes.some((o, j) => i !== j && touches(x.box, o.box))) floating.push(`${x.f.name} (${r1(x.box.min.z)} mm über dem Bett)`);
+    for (let j = i + 1; j < boxes.length; j++) {
+      const o = boxes[j];
+      if (o.top === x.top) continue; // parts of one group may interlock
+      const common = x.box.clone().intersect(o.box);
+      if (!common.isEmpty()) {
+        const s = common.getSize(new THREE.Vector3());
+        if (Math.min(s.x, s.y, s.z) > 0.2) overlaps.push(`${x.f.name} / ${o.f.name} (${r1(s.x)} × ${r1(s.y)} × ${r1(s.z)} mm)`);
+      }
+    }
+  });
+  const total = boxes.reduce((b, x) => b.union(x.box), new THREE.Box3());
+  const list = (a: string[]) => (a.length > 12 ? [...a.slice(0, 12), `… und ${a.length - 12} weitere`] : a);
+  const ok = !errors.length && !floating.length && !belowBed.length && !outside.length && !overlaps.length;
+  return { ok, parts: boxes.length, ...(boxes.length ? { total: boxInfo(total) } : {}), errors, floating: list(floating), belowBed: list(belowBed), outsideVolume: list(outside), overlaps: list(overlaps) };
+}
+
 /** One short line per object (id, type, name, base position, size) for every request. */
 export function sceneSummary(): string {
   const doc = getDoc();
@@ -77,7 +164,7 @@ export function sceneSummary(): string {
     const hidden = f.visible ? "" : " (ausgeblendet)";
     const kind = f.type === "boolean" ? `boolean:${f.op}` : f.type;
     lines.push(`${"  ".repeat(depth)}${depth ? "└ " : ""}${f.id} ${kind} "${f.name}" pos=[${f.transform.position.map(r).join(",")}]${size}${rot}${hidden}`);
-    if (f.type === "boolean" && depth < 3) f.children.forEach((c) => add(c, depth + 1));
+    if ((f.type === "boolean" || f.type === "group") && depth < 3) f.children.forEach((c) => add(c, depth + 1));
   };
   doc.features.forEach((f) => add(f, 0));
   const sel = useApp.getState().selection;
@@ -93,7 +180,11 @@ Koordinaten: Millimeter, Z zeigt nach oben, das Druckbett liegt bei Z = 0 und is
 
 Arbeitsweise (schnell und mit wenigen Aufrufen):
 - Ändere das Modell ausschließlich über die Werkzeuge. Jede Änderung landet im Verlauf.
-- Plane zuerst die ganze Aufgabe, dann setze sie mit möglichst WENIGEN Aufrufen um. Du kannst mehrere Werkzeuge in einer Antwort aufrufen.
+- Arbeite in drei Schritten:
+  1. PLAN: Liste vor dem ersten Werkzeug kurz die Teile mit echten Maßen auf (Stückliste). Bei realen Produkten nimm Datenblatt-Maße (Websuche, falls unsicher) statt Schätzungen. Lege den Aufbau fest: Bezugsteil, Reihenfolge, was gefast, gerundet oder gebohrt wird.
+  2. BAUEN: Möglichst alles in EINEM shapes__createMany: Teile bauen aufeinander auf (on: "Platine"), Reihen über repeat oder grid statt Einzelteilen, Farbe, Material, edges und holes direkt am Teil, groupName für das Ganze. Danach nur noch, was der Batch nicht kann (object__pocket, text__create, boolean__*).
+  3. PRÜFEN: Rufe am Ende check_model auf, behebe, was es meldet, und miss kritische Abstände mit measure. Wenn ein Viewport-Bild verfügbar ist, kontrolliere mit get_screenshot das Aussehen. Überlappungen innerhalb einer Gruppe sind erlaubt (Pins in der Platine).
+- Du kannst mehrere Werkzeuge in einer Antwort aufrufen.
 - Nutze Sammelbefehle, nie Schleifen über Einzelaufrufe: shapes__createMany (viele Körper auf einmal), object__pattern (linear/grid/circular/mirror), objects__transformMany, object__delete mit ids, boolean__subtract/union/intersect mit targetId und toolIds (alle Werkzeuge in einem Schnitt).
 - Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
 - Aufräumen zuerst: Entscheide vor dem ersten Bauschritt, was ersetzt wird. Wird ein vorhandenes Objekt nicht mehr gebraucht, lösche es im ERSTEN Aufruf (object__delete) und baue erst dann; merkst du es später, lösche sofort, nie erst am Ende. Der unveränderte Start-Würfel (20-mm-Quader „Quader 1“ als einziges Objekt) ist nur ein Platzhalter: Bei einem Auftrag für etwas Neues löschst du ihn zuerst, außer die Nachricht bezieht sich auf ihn („mach daraus …“, „nimm den Würfel als Basis“). Was der Nutzer als Ausgangspunkt nennt, bleibt.
@@ -102,6 +193,9 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
 ${webSearch ? `- Websuche: NUR wenn die Aufgabe aktuelle oder reale Fakten braucht, die du nicht sicher weißt (z. B. exakte Maße eines bestimmten Produkts wie Platine, Lochabstände und Anschlüsse des neuesten Raspberry Pi, Normen, Datenblätter). Nicht für allgemeines Modellieren (Würfel, Box, Halter mit genannten Maßen: ohne Suche). Höchstens 3 Suchen; web_fetch (falls vorhanden) nur, um eine gefundene Seite mit den Maßen (Datenblatt, Maßzeichnung) ganz zu lesen. Nenne vor dem Bauen kurz die gefundenen Maße und die Quelle.
 ` : ""}- Runde Formen IMMER als echte Kurven: sketch__ellipse, sketch__roundedRect, sketch__slot, sketch__path mit arc/spline-Segmenten, Kreise. Nie Rundungen durch Linienzüge/Vielecke annähern. Runde Umrisse über corner (2D) bzw. sketch__roundCorners, nicht über 3D-Kantenrundung. Beispiel ovaler Anhänger: sketch__ellipse (rx, ry, height 3), Loch per Zylinder + boolean__subtract.
 - Mehrteilige Dinge (z. B. „Bau mir ein ESP32-Modell“: Platine, Chips, Pins, USB-Buchse) kommen IMMER in eine benannte Gruppe (z. B. „ESP32 DevKit“): shapes__createMany mit groupName oder danach group__create. Gruppen sind reine Ordner, keine Booleschen Operationen.
+- Bohrungen: object__hole (viele Positionen in at, Tiefe, Senkung, thread für Kernlöcher), nicht einzelne Zylinder abziehen. Ausschnitte, Falze, Dome und Stege: object__pocket (cut/add) auf einer Fläche. Beide sind nachträglich änderbar.
+- Echtheit: Reale Teile bekommen reale Details und Farben: Leiterplatte #1f6b45 glossy mit 1,6 mm Dicke und Montagelöchern, Blechschirme und USB-Buchsen #b9c0c5 metal, ICs #1c1e20 matte, vergoldete Pins #d9b24c metal im 2,54-mm-Raster, Taster #2a2c2f. Gehäuse: Wand ≥ 1,6 mm, Deckel mit 0,2 mm Spiel und umlaufendem Falz (object__pocket add), Schrauben M3 mit Kernloch.
+- Beispiel ESP32 DevKit (Stückliste zuerst, dann ein Aufruf): Platine box 54×28×1,6 glossy grün mit edges vertical 1 mm und holes in den Ecken; WROOM-Modul on Platine 18×25,5×0,8 dunkel, darauf Schirm 16×18×2,4 metal; micro-USB on Platine am Rand; zwei Taster; Pinleisten als repeat (count 15, step [2.54,0,0]) mit Kunststoffleiste und Pins; alles mit groupName "ESP32 DevKit".
 - Nur bestimmte Kanten runden oder fasen: edges__fillet / edges__chamfer mit filter (z. B. "top" für eine weiche Oberkante, "vertical" für runde Gehäuseecken) statt object__fillet, das ALLE Kanten trifft.
 - Gefäße und Gehäuse: Box/Becher per object__shell (Wandstärke, open "top") statt Innenkörper abzuziehen. Runde Gefäße (Vase, Becher, Flasche, Knopf): halbes Querschnittsprofil rechts der Achse mit sketch__path zeichnen (Y = Höhe), dann sketch__revolve, dann object__shell.
 - Für den 3D-Druck: Wände mindestens 1,2 mm, Überhänge über 45° vermeiden, Teile flach aufs Bett legen.
@@ -158,6 +252,8 @@ export function phaseFor(name: string, input: Record<string, unknown>): string {
   if (id.startsWith("text.")) return "Setzt Text …";
   if (name === "get_screenshot") return "Prüft das Ergebnis …";
   if (name === "get_model") return "Sieht sich das Modell an …";
+  if (name === "measure") return "Misst nach …";
+  if (name === "check_model") return "Prüft das Ergebnis …";
   if (name === "run_script") return "Führt mehrere Schritte aus …";
   return `${getCommand(id)?.label ?? id} …`;
 }
@@ -180,6 +276,10 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
         const image = await captureViewport();
         return image ? result("Screenshot des Viewports.", { image }) : result("Kein Screenshot verfügbar.");
       }
+      case "measure":
+        return result(await measure(String(block.input.a), block.input.b ? String(block.input.b) : undefined));
+      case "check_model":
+        return result(await checkModel());
       case "run_script": {
         const steps = (block.input.steps as { command: string; params?: Record<string, unknown> }[]) ?? [];
         const done = [];

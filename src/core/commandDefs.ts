@@ -19,6 +19,9 @@ import {
   uniqueName,
   parentsOf,
   groupsOf,
+  type FaceName,
+  type FaceOp,
+  type FaceShape,
   type EdgeFilter,
   type EdgeOp,
   type EdgeRef,
@@ -252,6 +255,59 @@ defineCommand({
   },
 });
 
+/** Expands `repeat: {count, step:[x,y,z]}` and `grid: {nx, ny, dx, dy}` into single parts. */
+function expandRepeats(specs: Record<string, any>[]) {
+  const out: { spec: Record<string, any>; base?: string }[] = [];
+  for (const spec of specs) {
+    const { repeat, grid, ...one } = spec;
+    const cells: Vec3[] = [];
+    if (grid) for (let j = 0; j < (grid.ny ?? 1); j++) for (let i = 0; i < (grid.nx ?? 1); i++) cells.push([i * (grid.dx ?? 0), j * (grid.dy ?? 0), 0]);
+    else if (repeat) for (let i = 0; i < repeat.count; i++) cells.push((repeat.step as Vec3).map((v) => v * i) as Vec3);
+    else {
+      out.push({ spec: one });
+      continue;
+    }
+    const start = (one.position ?? [0, 0, 0]) as Vec3;
+    cells.forEach((c, i) =>
+      out.push({ spec: { ...one, position: start.map((v, k) => round(v + c[k])), ...(one.name ? { name: `${one.name} ${i + 1}` } : {}) }, base: one.name }),
+    );
+  }
+  return out;
+}
+
+/** `on: "Platine"`: position counts from the middle of that part's top (z = height above it). */
+function placeRelative(doc: ModelDocument, spec: Record<string, any>, made: Map<string, { top: number; x: number; y: number }>) {
+  if (!spec.on) return spec;
+  const ref = String(spec.on);
+  let base = made.get(ref);
+  if (!base) {
+    const f = doc.features.find((x) => x.id === ref || x.name === ref) ?? findFeature(doc, ref);
+    if (!f) throw new Error(`Bezug „${ref}“ nicht gefunden.`);
+    const b = worldBox(f, useMeshes.getState().entries);
+    base = b ? { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, top: b.max.z } : { x: f.transform.position[0], y: f.transform.position[1], top: f.transform.position[2] };
+  }
+  const [x, y, z] = (spec.position ?? [0, 0, 0]) as Vec3;
+  return { ...spec, position: [round(base.x + x), round(base.y + y), round(base.top + (z ?? 0))] };
+}
+
+/** Finish of one part: look, edges and holes, all in the same step. */
+function finishPart(doc: ModelDocument, id: string, spec: Record<string, any>): ModelDocument {
+  const extra: Partial<Feature> = {};
+  if (spec.color) {
+    if (!/^#[0-9a-f]{6}$/i.test(spec.color)) throw new Error("Farbe bitte als #rrggbb angeben.");
+    extra.color = String(spec.color).toLowerCase();
+  }
+  if (spec.material) {
+    if (!isMaterialId(spec.material)) throw new Error(`Unbekanntes Material. Möglich: ${MATERIALS.map((m) => m.id).join(", ")}.`);
+    if (spec.material !== DEFAULT_MATERIAL) extra.material = spec.material;
+  }
+  if (spec.fillet) extra.fillet = spec.fillet;
+  if (spec.chamfer) extra.chamfer = spec.chamfer;
+  if (spec.edges) extra.edgeOps = (spec.edges as Record<string, any>[]).map((e) => ({ kind: e.kind ?? "fillet", size: e.size, filter: e.filter }));
+  if (spec.holes) extra.faceOps = (spec.holes as Record<string, any>[]).flatMap((h) => holeOps(h, h.at ?? [[h.u ?? 0, h.v ?? 0]]));
+  return Object.keys(extra).length ? updateFeature(doc, id, (f) => ({ ...f, ...extra }) as Feature) : doc;
+}
+
 /** Places one primitive spec (as `primitive.<type>` would) on a document; returns the new doc + id. */
 function addPrimitive(doc: ModelDocument, spec: Record<string, any>, ctx: CommandContext) {
   const cmd = getCommand(`primitive.${spec.type}`) as DocumentCommand | undefined;
@@ -273,10 +329,10 @@ defineCommand({
   kind: "document",
   label: "Formen erstellen",
   description:
-    "Erstellt viele Grundkörper in EINEM Schritt. shapes: [{type: 'box'|'cylinder'|'sphere'|…, params: {…mm}, position: [x,y,z], rotation?: [rx,ry,rz], name?}]. Mit groupName landen sie gleich in einer neuen Gruppe. Gibt die neuen IDs zurück.",
+    "Erstellt viele Teile in EINEM Schritt, inklusive Aussehen und Bearbeitung. shapes: [{type: 'box'|'cylinder'|'sphere'|…, params: {…mm}, position: [x,y,z], rotation?, name?, on?: 'Name' (position zählt dann ab Mitte der Oberseite dieses Teils), repeat?: {count, step:[x,y,z]}, grid?: {nx, ny, dx, dy}, color?: '#rrggbb', material?: 'matte'|'glossy'|'metal'|'silk'|'clear'|'wood', fillet?, chamfer?, edges?: [{kind:'fillet'|'chamfer', size, filter:'top'|'bottom'|'vertical'|'horizontal'|'x'|'y'}], holes?: [{at:[[u,v],…], diameter, depth?, face?, thread?}]}]. Mit groupName landen sie gleich in einer neuen Gruppe. Gibt die neuen IDs zurück.",
   icon: "shapes",
   params: {
-    shapes: { type: "list", description: "Liste der Formen [{type, params, position, rotation?, name?}]" },
+    shapes: { type: "list", description: "Liste der Teile [{type, params, position, rotation?, name?, on?, repeat?, grid?, color?, material?, fillet?, chamfer?, edges?, holes?}]" },
     groupName: { type: "string", optional: true, description: "Name einer neuen Gruppe für alle Formen (z. B. \"ESP32 DevKit\")" },
   },
   apply(doc, p, ctx) {
@@ -285,10 +341,19 @@ defineCommand({
     if (specs.length > 500) throw new Error("Höchstens 500 Formen auf einmal");
     let next = doc;
     const ids: string[] = [];
-    for (const spec of specs) {
-      const r = addPrimitive(next, spec, ctx);
-      next = r.doc;
+    // Shapes of this call by name, for `on` references to parts made earlier in the list.
+    const made = new Map<string, { id: string; top: number; x: number; y: number }>();
+    for (const raw of expandRepeats(specs)) {
+      const { spec, base } = raw;
+      const placed = placeRelative(next, spec, made);
+      const r = addPrimitive(next, placed, ctx);
+      next = finishPart(r.doc, r.id, spec);
       ids.push(r.id);
+      const f = findFeature(next, r.id)!;
+      const pa = (f as { params?: Record<string, number> }).params ?? {};
+      const entry = { id: r.id, x: f.transform.position[0], y: f.transform.position[1], top: f.transform.position[2] + (pa.height ?? pa.diameter ?? pa.size ?? 0) };
+      made.set(f.name, entry);
+      if (base) made.set(base, entry);
     }
     if (p.groupName) {
       const g = makeGroup(next, ids, String(p.groupName));
@@ -727,6 +792,106 @@ defineCommand({
   perform(_p, ctx) {
     if (useEdgePick.getState().id) stopEdgePick();
     else startEdgePick(ctx.selection[0]);
+  },
+});
+
+const FACES: FaceName[] = ["top", "bottom", "front", "back", "left", "right"];
+const faceParam = { type: "enum", options: FACES, optional: true, description: "Fläche: top, bottom, front (−Y), back (+Y), left (−X), right (+X); Standard top" } as const;
+/** ISO metric coarse pitch, for thread core holes (printed threads: core ≈ M − pitch). */
+const threadCore = (m: number) => Math.round((m - (m <= 3 ? 0.5 : m <= 4 ? 0.7 : m <= 5 ? 0.8 : m <= 6 ? 1 : m <= 8 ? 1.25 : m <= 10 ? 1.5 : 1.75)) * 100) / 100;
+
+function addFaceOps(doc: ModelDocument, id: string, ops: FaceOp[]) {
+  const f = findFeature(doc, id);
+  if (!f) throw new Error("Objekt nicht gefunden");
+  if (f.type === "sketch" || f.type === "group") throw new Error(`${f.name} ist kein Körper; bitte ein einzelnes Objekt wählen.`);
+  return { f, doc: updateFeature(doc, id, (x) => ({ ...x, faceOps: [...(x.faceOps ?? []), ...ops] })) };
+}
+
+/** A hole from AI/UI values. */
+function holeOps(p: Record<string, any>, at: [number, number][]): FaceOp[] {
+  const m = p.thread as number | undefined;
+  const d = m ? threadCore(m) : Number(p.diameter);
+  if (!(d > 0)) throw new Error("Bitte einen Durchmesser (oder thread für ein Gewinde-Kernloch) angeben.");
+  const head = p.headDiameter ? { kind: (p.head ?? "counterbore") as "counterbore" | "countersink", d: p.headDiameter, ...(p.headDepth ? { depth: p.headDepth } : {}) } : undefined;
+  return at.map(([u, v]) => ({ op: "cut", face: (p.face ?? "top") as FaceName, u, v, shape: { kind: "circle", d }, ...(p.depth ? { depth: p.depth } : {}), ...(head ? { head } : {}) }));
+}
+
+defineCommand({
+  id: "object.hole",
+  kind: "document",
+  label: "Bohrung",
+  description:
+    "Bohrt ein oder viele Löcher in EINEM Schritt in eine Fläche. at = Liste [[u,v],…] ab Flächenmitte (top/bottom: u=X, v=Y; front/back: u=X, v=Z; left/right: u=Y, v=Z). Ohne depth durchgehend. head + headDiameter: Senkung (counterbore = Zylinderkopf, countersink = Senkkopf). thread: 3 macht ein Kernloch für M3.",
+  icon: "screw",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    face: faceParam,
+    at: { type: "list", optional: true, description: "Positionen [[u,v],…] (Standard: Flächenmitte)" },
+    diameter: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Durchmesser" },
+    depth: { type: "number", unit: "mm", min: 0, optional: true, description: "Tiefe; leer = durchgehend" },
+    head: { type: "enum", options: ["counterbore", "countersink"], optional: true, description: "Senkung" },
+    headDiameter: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Kopf-Ø" },
+    headDepth: { type: "number", unit: "mm", min: 0, optional: true, description: "Kopftiefe" },
+    thread: { type: "number", optional: true, description: "Gewindegröße M (Kernloch)" },
+  },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const at = (p.at as [number, number][] | undefined) ?? [[0, 0]];
+    const r = addFaceOps(doc, p.id ?? ctx.selection[0], holeOps(p, at));
+    return { doc: r.doc, label: `${r.f.name}: ${at.length === 1 ? "Bohrung" : `${at.length} Bohrungen`}` };
+  },
+});
+
+defineCommand({
+  id: "object.pocket",
+  kind: "document",
+  label: "Tasche",
+  description:
+    "Fräst eine Tasche (mode cut) oder setzt eine Erhöhung (mode add) auf eine Fläche: shape rect (width, height, radius), circle (width = Ø) oder slot (width = Länge, height = Breite), Mitte u/v ab Flächenmitte. Für Kabeldurchlässe, USB-Ausschnitte, Schraubdome, Stege, Deckel-Falze. Ohne depth bei cut: durchgehend.",
+  icon: "extrude",
+  params: {
+    id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" },
+    face: faceParam,
+    mode: { type: "enum", options: ["cut", "add"], optional: true, description: "cut = vertiefen (Standard), add = aufsetzen" },
+    shape: { type: "enum", options: ["rect", "circle", "slot"], optional: true, description: "Form (Standard rect)" },
+    u: { type: "number", unit: "mm", optional: true, description: "Mitte u" },
+    v: { type: "number", unit: "mm", optional: true, description: "Mitte v" },
+    width: { type: "number", unit: "mm", min: 0.1, description: "Breite entlang u" },
+    height: { type: "number", unit: "mm", min: 0.1, optional: true, description: "Breite entlang v" },
+    radius: { type: "number", unit: "mm", min: 0, optional: true, description: "Eckradius" },
+    depth: { type: "number", unit: "mm", min: 0, optional: true, description: "Tiefe bzw. Höhe" },
+  },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const mode = (p.mode ?? "cut") as "cut" | "add";
+    const kind = p.shape ?? "rect";
+    if (mode === "add" && !p.depth) throw new Error("Eine Erhöhung braucht depth (Höhe).");
+    const shape: FaceShape = kind === "circle" ? { kind, d: p.width } : kind === "slot" ? { kind, l: p.width, w: p.height ?? p.width / 2 } : { kind: "rect", w: p.width, h: p.height ?? p.width, ...(p.radius ? { r: p.radius } : {}) };
+    const op: FaceOp = { op: mode, face: (p.face ?? "top") as FaceName, u: p.u ?? 0, v: p.v ?? 0, shape, ...(p.depth ? { depth: p.depth } : {}) };
+    const r = addFaceOps(doc, p.id ?? ctx.selection[0], [op]);
+    return { doc: r.doc, label: `${r.f.name}: ${mode === "cut" ? "Tasche" : "Erhöhung"}` };
+  },
+});
+
+defineCommand({
+  id: "object.removeFaceOp",
+  kind: "document",
+  label: "Bohrung/Tasche entfernen",
+  description: "Entfernt eine Bohrung, Tasche oder Erhöhung (index in der Liste).",
+  icon: "delete",
+  params: { id: { type: "id", optional: true, description: "Objekt-ID (Standard: Auswahl)" }, index: { type: "number", min: 0, description: "Index" } },
+  isEnabled: hasOne,
+  apply(doc, p, ctx) {
+    const f = findFeature(doc, p.id ?? ctx.selection[0]);
+    if (!f?.faceOps?.[p.index]) return null;
+    const rest = f.faceOps.filter((_, i) => i !== p.index);
+    return {
+      doc: updateFeature(doc, f.id, (x) => {
+        const { faceOps: _old, ...others } = x;
+        return (rest.length ? { ...others, faceOps: rest } : others) as Feature;
+      }),
+      label: `${f.name}: Bohrung/Tasche entfernen`,
+    };
   },
 });
 
