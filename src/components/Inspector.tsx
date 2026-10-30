@@ -157,11 +157,6 @@ function View() {
         <SegmentedControl size="sm" className="block" value={String(snap)} onChange={(v) => execute("view.snap", { mm: Number(v) })}
           options={SNAPS.map((mm) => ({ value: String(mm), label: mm === 0 ? "Aus" : mm.toLocaleString("de-DE") }))} />
       </section>
-      <section>
-        <h4>Kamera</h4>
-        <SegmentedControl size="sm" className="block" value={s.projection} onChange={(mode) => execute("view.projection", { mode })}
-          options={[{ value: "perspective", label: "Perspektive" }, { value: "orthographic", label: "Orthografisch" }]} />
-      </section>
       <button className="more-row" onClick={() => setMore(!more)}>
         {more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}Mehr
       </button>
