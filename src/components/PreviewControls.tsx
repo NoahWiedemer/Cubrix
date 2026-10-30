@@ -62,7 +62,11 @@ export function ViewportCapture() {
     const c = document.createElement("canvas");
     c.width = Math.round(src.width * scale);
     c.height = Math.round(src.height * scale);
-    c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
+    const ctx = c.getContext("2d")!;
+    // The canvas is transparent over the viewport's CSS background.
+    ctx.fillStyle = "#14181b";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(src, 0, 0, c.width, c.height);
     const data = c.toDataURL("image/png").split(",")[1] ?? null;
     waiting.forEach((r) => r(data));
   }, 3);

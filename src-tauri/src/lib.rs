@@ -1,5 +1,6 @@
 mod ai;
 mod autosave;
+mod connector;
 mod errorlog;
 mod fonts;
 mod mcp;
@@ -119,11 +120,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(ai::AiState::default())
         .manage(mcp::McpState::default())
+        .manage(connector::ConnectorState::default())
         .setup(|app| {
             ai::migrate_app_data(app.handle());
             if let Ok(dir) = app.path().app_cache_dir() {
                 fonts::warm_up(dir);
             }
+            connector::autostart(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -158,6 +161,13 @@ pub fn run() {
             mcp::mcp_connect,
             mcp::mcp_call,
             mcp::mcp_cancel,
+            connector::connector_status,
+            connector::connector_set,
+            connector::connector_token,
+            connector::connector_regenerate,
+            connector::connector_decide,
+            connector::connector_disconnect,
+            connector::connector_reply,
             e2e_audio
         ])
         .build(tauri::generate_context!())

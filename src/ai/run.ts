@@ -26,15 +26,33 @@ export function markModeling() {
   modelingTimer = window.setTimeout(() => useAiRun.setState({ modeling: false }), 4000);
 }
 
+let external = false;
+let externalTimer: number | undefined;
+/** External clients run without a chat: a burst of calls counts as a run and ends 5 s after the last. */
+export function touchExternal(phase: string) {
+  if (!useAiRun.getState().running) {
+    startRun();
+    external = true;
+    setPhase(phase);
+  }
+  if (!external) return; // the chat's own run is in charge
+  window.clearTimeout(externalTimer);
+  externalTimer = window.setTimeout(endRun, 5000);
+}
+
 let known = new Set<string>(useApp.getState().nodes[useApp.getState().currentId].doc.features.map((f) => f.id));
 
 export const startRun = () => {
+  external = false;
+  window.clearTimeout(externalTimer);
   // Everything already in the model is "known"; only objects made during the run animate.
   const s = useApp.getState();
   known = new Set(s.nodes[s.currentId].doc.features.map((f) => f.id));
   useAiRun.setState({ running: true, modeling: false, startedAt: performance.now(), phase: "Denkt nach …", born: {} });
 };
 export const endRun = () => {
+  external = false;
+  window.clearTimeout(externalTimer);
   window.clearTimeout(modelingTimer);
   useAiRun.setState({ running: false, modeling: false, phase: "" });
 };

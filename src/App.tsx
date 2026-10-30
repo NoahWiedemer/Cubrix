@@ -17,6 +17,7 @@ import { HelpCenter } from "./help/HelpCenter";
 import { useViewportFrame } from "./ui/viewportFrame";
 import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ConnectorApproval } from "./components/ConnectorSettings";
 import { ProviderDialog } from "./components/ProviderKeys";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import { UpdateToast } from "./components/UpdateToast";
@@ -105,6 +106,7 @@ export function App() {
       <HelpCenter />
       <SettingsDialog />
       <ProviderDialog />
+      <ConnectorApproval />
       <RecoveryBanner />
       <UpdateToast />
       <ShortcutOverlay />

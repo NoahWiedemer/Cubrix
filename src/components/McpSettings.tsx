@@ -6,6 +6,7 @@ import { isMac } from "../core/commands";
 import { isTauri } from "../core/platform";
 import { Icon } from "../ui/icons";
 import { SegmentedControl } from "../ui/SegmentedControl";
+import { ConnectorSettings } from "./ConnectorSettings";
 import { addMcpServer, commandLine, connectMcpServer, parseMcpConfig, refreshMcp, removeMcpServer, updateMcpServer, useMcp, type McpDraft, type McpServer } from "../ai/mcp";
 
 const STATUS: Record<McpServer["status"], string> = { off: "Aus", idle: "Nicht verbunden", connected: "Verbunden", error: "Fehler" };
@@ -194,10 +195,23 @@ function ServerCard({ s }: { s: McpServer }) {
 }
 
 export function McpSettings() {
+  const [more, setMore] = useState(false);
+  if (!isTauri) return <p className="subtle-hint">Nur in der Desktop-App verfügbar.</p>;
+  return (
+    <>
+      <ConnectorSettings />
+      <button className="more-row mcp-more" aria-expanded={more} onClick={() => setMore(!more)}>
+        {more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}Externe Server nutzen
+      </button>
+      {more && <ExternalServers />}
+    </>
+  );
+}
+
+function ExternalServers() {
   const { servers, loaded } = useMcp();
   const [adding, setAdding] = useState(false);
   useEffect(() => void refreshMcp(), []);
-  if (!isTauri) return <p className="subtle-hint">Nur in der Desktop-App verfügbar.</p>;
   return (
     <div className="mcp">
       {servers.map((s) => <ServerCard key={s.id} s={s} />)}

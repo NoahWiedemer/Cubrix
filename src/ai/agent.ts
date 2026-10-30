@@ -259,7 +259,7 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   const node = after !== before ? useApp.getState().nodes[after] : undefined;
   events.onStep({ label: node?.label ?? cmd.label, nodeId: node?.id, ok: true });
   // New objects are reported by id so the model can refer to them (the UI selection stays the user's).
-  const created = node && node.parentId ? node.doc.features.filter((f) => !useApp.getState().nodes[node.parentId!].doc.features.some((g) => g.id === f.id)).map((f) => ({ id: f.id, name: f.name })) : [];
+  const created = cmd.kind === "document" && node && node.parentId ? node.doc.features.filter((f) => !useApp.getState().nodes[node.parentId!].doc.features.some((g) => g.id === f.id)).map((f) => ({ id: f.id, name: f.name })) : [];
   // Compact on purpose: the model already gets the scene summary each turn.
   return created.length ? { ok: true, created } : { ok: true, changed: !!node };
 }
@@ -316,7 +316,7 @@ async function runMcpTool(block: Extract<Block, { type: "tool_use" }>, route: Mc
   }
 }
 
-async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
+export async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id: string; prompt: string }, events: AgentEvents): Promise<Block> {
   events.onPhase?.(phaseFor(block.name, block.input));
   const result = (content: unknown, extra: Partial<Extract<Block, { type: "tool_result" }>> = {}): Block => ({
     type: "tool_result",
@@ -331,7 +331,8 @@ async function runTool(block: Extract<Block, { type: "tool_use" }>, group: { id:
       case "list_commands":
         return result(listCommands().map((c) => ({ id: c.id, description: c.description })));
       case "get_screenshot": {
-        const image = await captureViewport();
+        // A hidden window draws nothing; the tool must not wait for a frame forever.
+        const image = await Promise.race([captureViewport(), new Promise<null>((r) => setTimeout(() => r(null), 5000))]);
         return image ? result("Screenshot des Viewports.", { image }) : result("Kein Screenshot verfügbar.");
       }
       case "measure":

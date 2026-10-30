@@ -94,6 +94,29 @@ Pick a color and a material per object: matte, glossy, metal, silk, transparent 
 
 The assistant works with your own **Anthropic** or **OpenAI** API key. Keys are stored locally on your machine and are only sent to the provider you choose. There's no Cubrix account and no Cubrix server. All the CAD tools work without a key.
 
+## Use Cubrix from Claude Code / Codex
+
+Cubrix can act as an MCP server, so a coding agent on your machine can model in the project you have open. Changes appear live in the viewport and land in the history, grouped as one run, so you can undo them.
+
+1. In Cubrix, open **Settings → MCP** and switch on **Cubrix als Connector**. It is off by default, listens on `127.0.0.1` only (port 7331 or the next free one) and requires a bearer token.
+2. Copy the ready-made setup from the same page. It contains your real token:
+
+```bash
+claude mcp add --transport http cubrix http://127.0.0.1:7331/mcp --header "Authorization: Bearer YOUR_TOKEN"
+```
+
+For Codex, add this to `~/.codex/config.toml` and set `CUBRIX_TOKEN` in the shell that starts Codex:
+
+```toml
+[mcp_servers.cubrix]
+url = "http://127.0.0.1:7331/mcp"
+bearer_token_env_var = "CUBRIX_TOKEN"
+```
+
+3. The first time a client connects, Cubrix asks whether it may control the project. Then try: *"Build a 60 x 40 mm tray with rounded corners in Cubrix."*
+
+Agents get the same tools as the built-in assistant, plus `get_scene`, `save_project` and `export_model` (STL, 3MF, OBJ, STEP to an absolute path). Your agent can read and change the open project and write files through those tools, so treat the token like a password.
+
 ## Quickstart
 
 1. [Download Cubrix](https://github.com/NoahWiedemer/Cubrix/releases/latest) and install it.  

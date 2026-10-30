@@ -106,6 +106,9 @@ struct Secrets {
     /// Secrets of MCP servers: server id → name ("url", "header:…", "env:…") → obfuscated hex.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     mcp: HashMap<String, HashMap<String, String>>,
+    /// Bearer token of the connector (Cubrix as an MCP server), obfuscated hex.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    connector: Option<String>,
 }
 
 /// What the webview may see about a key.
@@ -210,6 +213,33 @@ pub(crate) fn mcp_set_secrets<R: Runtime>(app: &AppHandle<R>, id: &str, values: 
         s.version = 2;
     }
     save_secrets(app, &s)
+}
+
+fn random_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(hex(&bytes))
+}
+
+/// Replaces the connector's token with a new random one.
+pub(crate) fn connector_new_token<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
+    let token = random_token()?;
+    let mut s = load_secrets(app);
+    s.connector = Some(hex(&xor(token.as_bytes(), &install_key(app)?)));
+    s.version = s.version.max(2);
+    save_secrets(app, &s)?;
+    Ok(token)
+}
+
+/// The connector's token, created on first use.
+pub(crate) fn connector_token<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
+    match load_secrets(app).connector {
+        Some(stored) => {
+            let bytes = unhex(&stored).ok_or("Gespeicherter Token ist beschädigt")?;
+            String::from_utf8(xor(&bytes, &install_key(app)?)).map_err(|e| e.to_string())
+        }
+        None => connector_new_token(app),
+    }
 }
 
 /// The active key of a provider.

@@ -72,6 +72,7 @@ import { useSettingsDialog } from "../ui/settingsNav";
 import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
+import { settleGeometry } from "../cad/kernel";
 import { MANUAL, PRINTERS, bestOrientation } from "./printAnalysis";
 import { composeTransform, relativeTransform, worldBox, worldTransform } from "./bounds";
 import { baseName, isTauri, openBinaryFile, openTextFile, saveFile } from "./platform";
@@ -2843,17 +2844,25 @@ export function loadProjectText(text: string, path: string | null, label: string
   if (migratedFrom < 2) app.toast("info", "Ältere Projektdatei geöffnet – beim Speichern wird sie ins neue Format übernommen.");
 }
 
-async function saveProject(forceDialog: boolean) {
+async function saveProject(forceDialog: boolean, target?: string) {
   const s = useApp.getState();
   const doc = s.nodes[s.currentId].doc;
   const text = currentProjectText();
-  const path = await saveFile(`${fileSafe(doc.name)}.cubrix`, PROJECT_FILTER, text, forceDialog ? null : s.filePath);
-  if (!path) return;
+  const path = await saveFile(`${fileSafe(doc.name)}.cubrix`, PROJECT_FILTER, text, target ?? (forceDialog ? null : s.filePath));
+  if (!path) return null;
   useApp.setState({ savedNodeId: s.currentId, filePath: isTauri ? path : null });
   useChat.setState((c) => ({ savedEntries: c.entries.length }));
   if (isTauri) addRecent(path);
   void clearAutosave();
   s.toast("success", `Gespeichert: ${baseName(path)}`);
+  return path;
+}
+
+/** Saves without a dialog (external clients): to `path`, or where the project already lives. */
+export async function saveProjectTo(path: string | null) {
+  const target = path ?? useApp.getState().filePath;
+  if (!target) throw new Error("Das Projekt wurde noch nie gespeichert: bitte path angeben.");
+  return (await saveProject(false, target))!;
 }
 
 defineCommand({
@@ -2895,7 +2904,7 @@ defineCommand({
   icon: "save",
   shortcut: "mod+s",
   params: {},
-  perform: () => saveProject(false),
+  perform: async () => void (await saveProject(false)),
 });
 
 defineCommand({
@@ -2906,8 +2915,33 @@ defineCommand({
   icon: "save",
   shortcut: "shift+mod+s",
   params: {},
-  perform: () => saveProject(true),
+  perform: async () => void (await saveProject(true)),
 });
+
+/** Exports all visible solids, to `target` or wherever the dialog says. */
+async function writeExport(doc: ModelDocument, format: ExportFormat, target?: string) {
+  const visible = doc.features.filter((f) => f.visible && isSolid(f));
+  const flat = doc.features.filter((f) => f.visible && f.type === "sketch").length;
+  if (!visible.length) throw new Error("Es gibt keine sichtbaren Körper zum Exportieren.");
+  if (flat) useApp.getState().toast("info", flat === 1 ? "1 flache Skizze wurde nicht exportiert." : `${flat} flache Skizzen wurden nicht exportiert.`);
+  const { data, mtl } = await exportFeatures(visible, format, fileSafe(doc.name));
+  const path = await saveFile(`${fileSafe(doc.name)}.${format}`, { name: format.toUpperCase(), extensions: [format] }, data, target);
+  // OBJ colours live in a companion .mtl next to the file.
+  if (path && mtl) {
+    const mtlPath = path.replace(/[^/\\]+$/, `${fileSafe(doc.name)}.mtl`);
+    await saveFile(baseName(mtlPath), { name: "MTL", extensions: ["mtl"] }, mtl, isTauri ? mtlPath : undefined);
+  }
+  if (path) useApp.getState().toast("success", `${format.toUpperCase()} exportiert: ${baseName(path)}`);
+  return path;
+}
+
+/** Export without a dialog (external clients). */
+export async function exportToPath(format: ExportFormat, path: string) {
+  const { nodes, currentId } = useApp.getState();
+  await settleGeometry(nodes[currentId].doc);
+  await writeExport(nodes[currentId].doc, format, path);
+  return path;
+}
 
 function defineExport(format: ExportFormat, description: string, shortcut?: string) {
   defineCommand({
@@ -2920,22 +2954,7 @@ function defineExport(format: ExportFormat, description: string, shortcut?: stri
     params: {},
     isEnabled: (ctx) => ctx.doc.features.some((f) => f.visible && isSolid(f)),
     async perform(_p, ctx) {
-      const visible = ctx.doc.features.filter((f) => f.visible && isSolid(f));
-      const flat = ctx.doc.features.filter((f) => f.visible && f.type === "sketch").length;
-      if (!visible.length) throw new Error("Es gibt keine sichtbaren Körper zum Exportieren.");
-      if (flat) useApp.getState().toast("info", flat === 1 ? "1 flache Skizze wurde nicht exportiert." : `${flat} flache Skizzen wurden nicht exportiert.`);
-      const { data, mtl } = await exportFeatures(visible, format, fileSafe(ctx.doc.name));
-      const path = await saveFile(
-        `${fileSafe(ctx.doc.name)}.${format}`,
-        { name: format.toUpperCase(), extensions: [format] },
-        data,
-      );
-      // OBJ colours live in a companion .mtl next to the file.
-      if (path && mtl) {
-        const mtlPath = path.replace(/[^/\\]+$/, `${fileSafe(ctx.doc.name)}.mtl`);
-        await saveFile(baseName(mtlPath), { name: "MTL", extensions: ["mtl"] }, mtl, isTauri ? mtlPath : undefined);
-      }
-      if (path) useApp.getState().toast("success", `${format.toUpperCase()} exportiert: ${baseName(path)}`);
+      await writeExport(ctx.doc, format);
     },
   });
 }

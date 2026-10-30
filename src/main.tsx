@@ -55,6 +55,8 @@ if (isTauri) {
   requestAnimationFrame(() => boot("ui"));
 }
 
+void import("./ai/connector").then((m) => m.initConnector());
+
 // `?beispiel` opens the example project (handy for demos and screenshots).
 if (new URLSearchParams(location.search).has("beispiel"))
   void execute("file.example").then(() => {

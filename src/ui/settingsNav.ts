@@ -6,7 +6,7 @@ import type { IconName } from "./icons";
 export const SETTINGS_SECTIONS = [
   { id: "general", title: "Allgemein", icon: "settings", summary: "Version, Hilfe und Tastenkürzel." },
   { id: "ai", title: "KI & Modelle", icon: "sparkle", summary: "Anbieter, Schlüssel und das Modell für den KI-Assistenten." },
-  { id: "mcp", title: "MCP", icon: "plug", summary: "Externe Werkzeuge für den KI-Assistenten anschließen." },
+  { id: "mcp", title: "MCP", icon: "plug", summary: "Cubrix aus Claude Code oder Codex steuern und externe Werkzeuge anschließen." },
   { id: "view", title: "Ansicht", icon: "iso", summary: "Darstellung der 3D-Ansicht und Leistung." },
   { id: "printer", title: "Drucker", icon: "printer", summary: "Drucker und Bauraum dieses Projekts." },
   { id: "updates", title: "Updates", icon: "update", summary: "Cubrix aktuell halten." },
