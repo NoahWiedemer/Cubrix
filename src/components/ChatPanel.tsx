@@ -10,6 +10,7 @@ import { SegmentedControl } from "../ui/SegmentedControl";
 import { Menu, MenuItem, MenuSeparator, MenuTitle } from "../ui/Menu";
 import { runAgent } from "../ai/agent";
 import { useChat, type ChatEntry, type ChatStep } from "../ai/chatStore";
+import { cleanModelText } from "../ai/cleanText";
 import { VoiceButton } from "./VoiceButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { friendlyError, type FriendlyError } from "../ai/errors";
@@ -24,6 +25,14 @@ import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
 type Step = ChatStep;
 
 let controller: AbortController | null = null;
+
+const domainOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
 
 const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Mach daraus einen Spielwürfel"];
 
@@ -268,7 +277,7 @@ export function ChatPanel() {
         update((x) => ({ ...x, error: friendlyError(e), prompt }));
       }
     } finally {
-      update((e) => ({ ...e, durationMs: performance.now() - t0 }));
+      update((e) => ({ ...e, text: cleanModelText(e.text), durationMs: performance.now() - t0 }));
       endRun();
       if (current()) useChat.setState({ running: false });
       useChat.setState({ abortRun: null });
@@ -324,8 +333,8 @@ export function ChatPanel() {
                 <div className="msg-sources">
                   <Icon name="globe" size={12} />
                   {e.sources.map((src) => (
-                    <button key={src.url} className="source-link" title={src.url} onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(src.url))}>
-                      {src.title.length > 40 ? `${src.title.slice(0, 38)}…` : src.title}
+                    <button key={src.url} className="source-link" title={src.title} onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(src.url))}>
+                      {domainOf(src.url)}
                     </button>
                   ))}
                 </div>

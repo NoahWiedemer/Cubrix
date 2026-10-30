@@ -3,6 +3,7 @@
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cleanModelText } from "../ai/cleanText";
 import { isTauri } from "../core/platform";
 
 function openExternal(url: string) {
@@ -33,7 +34,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text }: { text: string 
   return (
     <div className="md">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml>
-        {text}
+        {cleanModelText(text)}
       </ReactMarkdown>
     </div>
   );

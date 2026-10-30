@@ -132,7 +132,11 @@ async function anthropicTurn(
         blocks[i] = { type: "anthropic_raw", block: { ...b } };
         const results = (b as { content?: { type?: string; url?: string; title?: string }[] }).content;
         if (Array.isArray(results)) for (const r of results) if (r.url) sources.push({ url: r.url, title: r.title ?? r.url });
-      } else blocks[i] = { type: "text", text: b.text ?? "" };
+      } else {
+        // A second text block in the same answer (after search results) is a new paragraph.
+        if (blocks.some((x) => x?.type === "text" && x.text)) onText("\n\n");
+        blocks[i] = { type: "text", text: b.text ?? "" };
+      }
     } else if (type === "content_block_delta") {
       const i = e.index as number;
       const d = e.delta as { type: string; text?: string; partial_json?: string; thinking?: string; signature?: string };
@@ -233,10 +237,20 @@ async function openaiTurn(
 ): Promise<TurnResult> {
   const items: Record<string, unknown>[] = [];
   let finalOutput: Record<string, unknown>[] | null = null;
+  let wrote = false;
+  let newItem = false;
   const parse = sseParser((e) => {
     const type = e.type as string;
-    if (type === "response.output_text.delta") onText((e.delta as string) ?? "");
-    else if (type === "response.output_item.done") items.push(e.item as Record<string, unknown>);
+    if (type === "response.output_text.delta") {
+      // Several message items in one answer are separate paragraphs.
+      if (newItem && wrote) onText("\n\n");
+      newItem = false;
+      wrote = true;
+      onText((e.delta as string) ?? "");
+    } else if (type === "response.output_item.done") {
+      items.push(e.item as Record<string, unknown>);
+      newItem = true;
+    }
     else if (type === "response.completed") finalOutput = ((e.response as { output?: Record<string, unknown>[] }) ?? {}).output ?? null;
     else if (type === "response.failed" || type === "error") {
       const err = (e.response as { error?: { message?: string } } | undefined)?.error ?? (e.error as { message?: string } | undefined) ?? (e as { message?: string });

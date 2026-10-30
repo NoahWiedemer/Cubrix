@@ -197,6 +197,7 @@ Arbeitsweise (schnell und mit wenigen Aufrufen):
   2. BAUEN: Möglichst alles in EINEM shapes__createMany: Teile bauen aufeinander auf (on: "Platine"), Reihen über repeat oder grid statt Einzelteilen, Farbe, Material, edges und holes direkt am Teil, groupName für das Ganze. Danach nur noch, was der Batch nicht kann (object__pocket, text__create, boolean__*).
   3. PRÜFEN: Rufe am Ende check_model auf, behebe, was es meldet, und miss kritische Abstände mit measure. Wenn ein Viewport-Bild verfügbar ist, kontrolliere mit get_screenshot das Aussehen. Überlappungen innerhalb einer Gruppe sind erlaubt (Pins in der Platine).
 - Du kannst mehrere Werkzeuge in einer Antwort aufrufen.
+- Schreibe keine Zitat-Marker in den Text; die App zeigt deine Quellen selbst unter der Antwort.
 - Nutze Sammelbefehle, nie Schleifen über Einzelaufrufe: shapes__createMany (viele Körper auf einmal), object__pattern (linear/grid/circular/mirror), objects__transformMany, object__delete mit ids, boolean__subtract/union/intersect mit targetId und toolIds (alle Werkzeuge in einem Schnitt).
 - Das aktuelle Modell steht unten; get_model nur, wenn du Details brauchst. get_screenshot nur zur Endkontrolle, falls nötig.
 - Bestehende Arbeit respektieren: Objekte, die der Auftrag nicht betrifft, änderst, verschiebst, blendest und löschst du nicht. Etwas Neues baust du daneben auf freiem Platz (siehe Größen unten) und blendest nichts aus; für einen Blick auf ein Teil dient view__fit.
@@ -385,10 +386,20 @@ export async function runAgent(opts: {
   const group = { id: opts.groupId ?? Math.random().toString(36).slice(2), prompt: opts.prompt };
   const messages: Message[] = [...prepareHistory(opts.history), { role: "user", content: [{ type: "text", text: opts.prompt }] }];
   const tools = buildTools();
+  // Text before and after tool steps stays apart, as separate paragraphs.
+  let wrote = false;
+  let turnStart = false;
+  const onText = (d: string) => {
+    if (turnStart && wrote) opts.events.onText("\n\n");
+    turnStart = false;
+    if (d) wrote = true;
+    opts.events.onText(d);
+  };
   for (let turn = 0; turn < (opts.maxTurns ?? 16); turn++) {
+    turnStart = true;
     if (opts.signal.aborted) break;
     opts.events.onPhase?.(turn === 0 ? "Denkt nach …" : "Plant den nächsten Schritt …");
-    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, prepareHistory(messages), opts.events.onText, opts.signal, opts.webSearch);
+    const res = await runTurn(opts.provider, opts.transport, opts.model, opts.effort ?? null, systemPrompt(opts.webSearch), tools, prepareHistory(messages), onText, opts.signal, opts.webSearch);
     messages.push({ role: "assistant", content: res.blocks, model: opts.model });
     for (const q of res.searches ?? []) opts.events.onStep({ label: `Sucht im Web: ${q}`, ok: true });
     if (res.sources?.length) opts.events.onSources?.(res.sources);
