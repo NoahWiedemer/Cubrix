@@ -54,5 +54,16 @@ export function modelInfo(provider: Provider, id: string): ModelInfo {
   return CATALOG[provider].find((m) => m.id === id) ?? { id, name: modelName(provider, id), effort: provider === "openai", recommended: false };
 }
 
+/**
+ * What a run uses: the selected model, whose id alone decides the provider. If that provider
+ * has no key, the first connected one takes over without touching the selection, so the
+ * choice comes back with its key and nothing has to be kept in sync.
+ */
+export function activeModel(selected: string, connected: Provider[]): { provider: Provider; id: string } {
+  const provider = providerOf(selected);
+  if (!connected.length || connected.includes(provider)) return { provider, id: selected };
+  return { provider: connected[0], id: DEFAULT_MODEL[connected[0]] };
+}
+
 /** Provider of a catalog model id. */
 export const providerOf = (id: string): Provider => (CATALOG.anthropic.some((m) => m.id === id) || id.startsWith("claude") ? "anthropic" : "openai");

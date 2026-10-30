@@ -16,6 +16,15 @@ import { Appearance } from "./ColorRow";
 import { worldBox } from "../core/bounds";
 import { Icon } from "../ui/icons";
 import { featureIcon } from "./ObjectTree";
+import { Select } from "../ui/Select";
+
+const FACE_OP_KINDS: { value: "hole" | "countersink" | "counterbore" | "pocket" | "boss"; label: string }[] = [
+  { value: "hole", label: "Bohrung" },
+  { value: "countersink", label: "Senkkopf" },
+  { value: "counterbore", label: "Zylinderkopf" },
+  { value: "pocket", label: "Tasche" },
+  { value: "boss", label: "Erhöhung" },
+];
 
 const show = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
 const parse = (s: string) => Number(s.trim().replace(",", "."));
@@ -634,16 +643,8 @@ function FaceOps({ f }: { f: Feature }) {
       {adding && (
         <div className="face-op-form">
           <div className="field-grid">
-            <select className="select" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Art">
-              <option value="hole">Bohrung</option>
-              <option value="countersink">Senkkopf</option>
-              <option value="counterbore">Zylinderkopf</option>
-              <option value="pocket">Tasche</option>
-              <option value="boss">Erhöhung</option>
-            </select>
-            <select className="select" value={face} onChange={(e) => setFace(e.target.value as FaceName)} aria-label="Fläche">
-              {(Object.keys(FACE_LABELS) as FaceName[]).map((k) => <option key={k} value={k}>{FACE_LABELS[k]}</option>)}
-            </select>
+            <Select<typeof kind> label="Art" value={kind} onChange={setKind} groups={[{ options: FACE_OP_KINDS }]} />
+            <Select<FaceName> label="Fläche" value={face} onChange={setFace} groups={[{ options: (Object.keys(FACE_LABELS) as FaceName[]).map((k) => ({ value: k, label: FACE_LABELS[k] })) }]} />
           </div>
           <div className="field-grid">
             {field("size", kind === "pocket" || kind === "boss" ? "B" : "Ø", kind === "pocket" || kind === "boss" ? "Breite" : "Durchmesser", 0.1)}

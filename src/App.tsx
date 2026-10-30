@@ -18,7 +18,6 @@ import { useViewportFrame } from "./ui/viewportFrame";
 import { Library } from "./components/Library";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ConnectorApproval } from "./components/ConnectorSettings";
-import { ProviderDialog } from "./components/ProviderKeys";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import { UpdateToast } from "./components/UpdateToast";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
@@ -105,7 +104,6 @@ export function App() {
       <Library />
       <HelpCenter />
       <SettingsDialog />
-      <ProviderDialog />
       <ConnectorApproval />
       <RecoveryBanner />
       <UpdateToast />

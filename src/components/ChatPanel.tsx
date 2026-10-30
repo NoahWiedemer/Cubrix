@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { execute } from "../core/commands";
-import { isTauri } from "../core/platform";
 import { useAiSettings } from "../ui/settings";
 import { Icon } from "../ui/icons";
 import { ProviderLogo } from "../ui/ProviderLogo";
@@ -18,11 +17,11 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { friendlyError, type FriendlyError } from "../ai/errors";
 import { logError } from "../core/errorLog";
 import { tauriTransport, type Provider } from "../ai/providers";
-import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, modelInfo, type Effort, type ModelInfo } from "../ai/models";
+import { activeModel, CATALOG, EFFORT_LABELS, modelInfo, type Effort, type ModelInfo } from "../ai/models";
 import { connectedProviders, refreshKeys, useKeys } from "../ai/keys";
 import { endRun, setPhase, startRun, useAiRun } from "../ai/run";
 import { useApp } from "../core/store";
-import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
+import { openSettings } from "../ui/settingsNav";
 
 type Step = ChatStep;
 
@@ -43,16 +42,17 @@ const PROVIDER_LABEL: Record<Provider, string> = { anthropic: "Anthropic", opena
 
 /**
  * Model + reasoning depth in one compact dropdown. Lists the models of every provider
- * with an active key, grouped by provider; picking a model picks its provider too.
+ * with an active key, grouped by provider; the picked model decides the provider.
  */
 function ModelMenu() {
-  const { provider, model, effort } = useAiSettings();
+  const { model, effort } = useAiSettings();
   const keys = useKeys((s) => s.keys);
   const pop = usePopover();
-  const current = modelInfo(provider, model[provider] || DEFAULT_MODEL[provider]);
   const providers = connectedProviders(keys);
-  const pick = (p: Provider, id: string) => {
-    useAiSettings.setState((s) => ({ provider: p, model: { ...s.model, [p]: id } }));
+  const { provider, id } = activeModel(model, providers);
+  const current = modelInfo(provider, id);
+  const pick = (id: string) => {
+    useAiSettings.setState({ model: id });
     pop.setOpen(false);
   };
   return (
@@ -69,7 +69,7 @@ function ModelMenu() {
               {i > 0 && <MenuSeparator />}
               <MenuTitle>{PROVIDER_LABEL[p]}</MenuTitle>
               {CATALOG[p].map((m) => (
-                <MenuItem key={m.id} iconNode={<ProviderLogo mark={markFor(p)} />} label={<ModelLabel m={m} />} checked={p === provider && m.id === current.id} onClick={() => pick(p, m.id)} />
+                <MenuItem key={m.id} iconNode={<ProviderLogo mark={markFor(p)} />} label={<ModelLabel m={m} />} checked={p === provider && m.id === current.id} onClick={() => pick(m.id)} />
               ))}
             </div>
           ))}
@@ -197,7 +197,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
 
 export function ChatPanel() {
   const { entries, running } = useChat();
-  const { provider, model, effort } = useAiSettings();
+  const { model, effort } = useAiSettings();
   const keys = useKeys((s) => s.keys);
   const keysLoaded = useKeys((s) => s.loaded);
   const [demo, setDemo] = useState(false);
@@ -237,11 +237,6 @@ export function ChatPanel() {
     }
     void refreshKeys();
   }, []);
-
-  // The chosen provider must have a key; otherwise use one that has.
-  useEffect(() => {
-    if (connected.length && !connected.includes(provider)) useAiSettings.setState({ provider: connected[0] });
-  }, [connected.join(), provider]);
 
   useEffect(() => {
     const focus = () => inputRef.current?.focus();
@@ -286,7 +281,8 @@ export function ChatPanel() {
     const update = (fn: (e: ChatEntry) => ChatEntry) => {
       if (current()) useChat.setState((s) => ({ entries: [...s.entries.slice(0, -1), fn(s.entries[s.entries.length - 1])] }));
     };
-    const info = modelInfo(provider, model[provider] || DEFAULT_MODEL[provider]);
+    const { provider, id } = activeModel(model, connected);
+    const info = modelInfo(provider, id);
     const groupId = Math.random().toString(36).slice(2);
     const t0 = performance.now();
     update((e) => ({ ...e, groupId }));
@@ -336,12 +332,12 @@ export function ChatPanel() {
   };
 
   if (!hasKey)
-    return (
-      <div className="scroll chat-scroll">
-        <div className="chat-setup-title"><Icon name="key" size={16} />KI verbinden</div>
-        {keysLoaded || !isTauri ? <ProviderKeys /> : null}
+    return keysLoaded ? (
+      <div className="chat-connect">
+        <p>Verbinde einen Modell-Anbieter, um den KI-Assistenten zu nutzen.</p>
+        <button className="btn-ghost" onClick={() => openSettings("ai")}>Anbieter verbinden</button>
       </div>
-    );
+    ) : null;
 
   return (
     <div
@@ -373,7 +369,7 @@ export function ChatPanel() {
           {more.open && (
             <Menu style={{ top: 34, right: 0 }}>
               <MenuItem icon="reset" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [], savedEntries: -1 }); more.setOpen(false); }} />
-              <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
+              <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { openSettings("ai"); more.setOpen(false); }} />
             </Menu>
           )}
         </div>

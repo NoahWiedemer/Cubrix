@@ -8,7 +8,11 @@ import { SegmentedControl } from "../ui/SegmentedControl";
 import { useAiSettings, useSettings } from "../ui/settings";
 import { SETTINGS_SECTIONS, stepSection, useSettingsDialog, type SettingsSection } from "../ui/settingsNav";
 import { checkForUpdates, updateSource, useUpdatePrefs, useUpdater } from "../core/updater";
-import { CATALOG, DEFAULT_MODEL, EFFORT_LABELS, type Effort } from "../ai/models";
+import { activeModel, CATALOG, EFFORT_LABELS, type Effort } from "../ai/models";
+import { connectedProviders, useKeys } from "../ai/keys";
+import type { Provider } from "../ai/providers";
+import { ProviderLogo } from "../ui/ProviderLogo";
+import { Select } from "../ui/Select";
 import { useHelp } from "../help/HelpCenter";
 import { useShortcuts } from "./ShortcutOverlay";
 import { ProviderKeys } from "./ProviderKeys";
@@ -70,29 +74,30 @@ function General() {
   );
 }
 
+const PROVIDER_LOOK: Record<Provider, { label: string; mark: "claude" | "openai" }> = { anthropic: { label: "Anthropic", mark: "claude" }, openai: { label: "OpenAI", mark: "openai" } };
+
 function Ai() {
-  const { provider, model, effort } = useAiSettings();
+  const { model, effort } = useAiSettings();
   const aiAnimations = useSettings((s) => s.aiAnimations);
-  const current = model[provider] || DEFAULT_MODEL[provider];
+  const keys = useKeys((s) => s.keys);
+  const connected = connectedProviders(keys);
+  const { id } = activeModel(model, connected);
+  const groups = connected.map((p) => ({
+    label: PROVIDER_LOOK[p].label,
+    options: CATALOG[p].map((m) => ({ value: m.id, label: m.name, hint: m.hint, icon: <ProviderLogo mark={PROVIDER_LOOK[p].mark} /> })),
+  }));
   return (
     <>
-      <Group title="Modell">
-        <Row label="Anbieter">
-          <SegmentedControl size="sm" value={provider} onChange={(p) => useAiSettings.setState({ provider: p })} options={[{ value: "anthropic", label: "Anthropic" }, { value: "openai", label: "OpenAI" }]} />
-        </Row>
-        <Row label="Modell">
-          <select className="set-select" value={current} onChange={(e) => useAiSettings.setState({ model: { ...model, [provider]: e.target.value } })}>
-            {CATALOG[provider].map((m) => <option key={m.id} value={m.id}>{m.name}{m.hint ? ` · ${m.hint}` : ""}</option>)}
-          </select>
+      <div className="set-group"><ProviderKeys /></div>
+      <Group title="Standardmodell">
+        <Row label="Modell" hint={connected.length ? "Im Chat stehen die Modelle aller verbundenen Anbieter zur Wahl." : "Verbinde zuerst einen Anbieter."}>
+          <Select className="set-select" label="Modell" value={id} disabled={!connected.length} placeholder="Kein Anbieter verbunden" onChange={(m) => useAiSettings.setState({ model: m })} groups={groups} />
         </Row>
         <Row label="Denktiefe" hint="Mehr Tiefe braucht länger und kostet mehr.">
           <SegmentedControl size="sm" value={effort} onChange={(e) => useAiSettings.setState({ effort: e })}
             options={(Object.keys(EFFORT_LABELS) as Effort[]).map((e) => ({ value: e, label: EFFORT_LABELS[e] }))} />
         </Row>
         <Switch label="KI-Animationen" hint="Neue Objekte wachsen ins Bild, die Ansicht leuchtet während der Arbeit." value={aiAnimations} onChange={(v) => useSettings.setState({ aiAnimations: v })} />
-      </Group>
-      <Group title="Anbieter und Schlüssel">
-        <div className="set-block"><ProviderKeys /></div>
       </Group>
     </>
   );
@@ -182,7 +187,7 @@ export function SettingsDialog() {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       // An open dropdown takes its own Esc first.
-      if (e.key === "Escape" && !document.querySelector(".help-backdrop .select-menu")) {
+      if (e.key === "Escape" && !document.querySelector("[data-floating]")) {
         e.stopImmediatePropagation();
         close();
       }

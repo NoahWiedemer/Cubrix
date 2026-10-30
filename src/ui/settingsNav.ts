@@ -26,6 +26,8 @@ export function stepSection(id: SettingsSection, delta: number): SettingsSection
   return SETTINGS_SECTIONS[(i + delta + n) % n].id;
 }
 
+export const openSettings = (section: SettingsSection) => useSettingsDialog.setState({ open: true, section });
+
 export const useSettingsDialog = create<{ open: boolean; section: SettingsSection }>()(
   persist((): { open: boolean; section: SettingsSection } => ({ open: false, section: SETTINGS_SECTIONS[0].id }), {
     name: "cubrix.settingsDialog",
