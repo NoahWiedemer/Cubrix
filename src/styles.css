@@ -1471,3 +1471,7 @@ body.shape-dragging, body.shape-dragging * { cursor: grabbing !important; user-s
 .edge-op > span { flex: 1; min-width: 0; }
 .edge-op > svg { color: var(--text-3); flex: none; }
 .field-caption .edge-max { display: block; }
+.tree-list:focus { outline: none; }
+.tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.tree-row.drop-into { box-shadow: inset 0 0 0 1.5px var(--accent); }

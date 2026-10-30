@@ -19,7 +19,7 @@ import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { findFeature, groupsOf, parentsOf, type BooleanFeature, type Feature, type GroupFeature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
-import { SELECTION_ID, composeTransform, worldBox } from "../core/bounds";
+import { SELECTION_ID, transformMatrix, composeTransform, relativeTransform, worldTransform, worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
 import { GroundGrid } from "./GroundGrid";
@@ -49,8 +49,13 @@ const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("de-DE");
 function useTransform(f: Feature): Transform {
   const preview = useApp((s) => (s.preview?.id === f.id ? s.preview.transform : null));
   // While a multi-selection is dragged, every selected object follows the shared motion.
-  const shared = useApp((s) => (s.preview?.id === SELECTION_ID && s.selection.includes(f.id) ? s.preview.transform : null));
-  return preview ?? (shared ? composeTransform(shared, f.transform) : f.transform);
+  const shared = useApp((s) => (s.preview?.id === SELECTION_ID && s.selection.includes(f.id) && !f.locked ? s.preview.transform : null));
+  if (preview) return preview;
+  if (!shared) return f.transform;
+  // The shared motion is in world space; members of groups stay in their group's frame.
+  const s = useApp.getState();
+  const frames = groupsOf(s.nodes[s.currentId].doc, f.id).map((g) => g.transform);
+  return relativeTransform(frames, composeTransform(shared, worldTransform(frames, f.transform)));
 }
 
 const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0] };
@@ -119,9 +124,11 @@ function EdgePicker({ f }: { f: Feature }) {
 function SelectionGizmo({ features }: { features: Feature[] }) {
   const entries = useMeshes((s) => s.entries);
   const motion = useApp((s) => (s.preview?.id === SELECTION_ID ? s.preview.transform : IDENTITY));
+  const doc = useDoc();
   const box = new THREE.Box3();
   for (const m of features) {
-    const b = worldBox(m, entries, composeTransform(motion, m.transform));
+    const world = worldTransform(groupsOf(doc, m.id).map((g) => g.transform), m.transform);
+    const b = worldBox(m, entries, composeTransform(motion, world));
     if (b) box.union(b);
   }
   const virtual = useMemo(
@@ -274,6 +281,24 @@ function GroupObject({ f, order, root }: { f: GroupFeature; order: number; root?
   );
 }
 
+/**
+ * Double-click into a boolean: selects the operand at the clicked spot (the smallest one
+ * whose box holds the point, so a small cut wins over the big body around it).
+ */
+async function pickOperand(f: BooleanFeature, world: THREE.Vector3) {
+  const s = useApp.getState();
+  const frames = [...groupsOf(s.nodes[s.currentId].doc, f.id).map((g) => g.transform), f.transform];
+  const point = new THREE.Vector3(world.x, -world.z, world.y); // scene is Y-up, CAD is Z-up
+  const local = point.applyMatrix4(frames.reduce((m, t) => m.multiply(transformMatrix(t)), new THREE.Matrix4()).invert());
+  await Promise.all(f.children.filter((c) => c.type !== "sketch").map((c) => getGeometry(c).catch(() => null)));
+  const entries = useMeshes.getState().entries;
+  const hits = f.children
+    .map((c) => ({ c, box: worldBox(c, entries) }))
+    .filter((h) => h.box?.clone().expandByScalar(0.3).containsPoint(local))
+    .sort((a, b) => a.box!.getSize(new THREE.Vector3()).lengthSq() - b.box!.getSize(new THREE.Vector3()).lengthSq());
+  void execute("selection.set", { ids: [(hits[0]?.c ?? f.children[0]).id] });
+}
+
 /** From the outermost group down to the object itself (booleans count as one object). */
 function pickChain(id: string): string[] {
   const { nodes, currentId } = useApp.getState();
@@ -343,7 +368,13 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
   };
   // Double-click inside a group selects just this member.
   const onDoubleClick = (e: ThreeEvent<MouseEvent>) => {
-    if (presenting || !root || f.locked) return;
+    if (presenting || f.locked) return;
+    if (f.type === "boolean") {
+      e.stopPropagation();
+      void pickOperand(f, e.point);
+      return;
+    }
+    if (!root) return;
     e.stopPropagation();
     void execute("selection.set", { ids: [f.id] });
   };
@@ -857,10 +888,15 @@ export function Viewport() {
   const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
   const singleParents = single ? parentsOf(doc, single.id) : [];
   const selected = useMemo(() => selection.map((id) => findFeature(doc, id)).filter((f): f is Feature => !!f), [selection, doc]);
-  const multiMovable =
-    selected.length > 1 && selected.every((f) => !f.locked && parentsOf(doc, f.id).length === 0 && groupsOf(doc, f.id).every((g) => g.transform.position.every((v) => v === 0) && g.transform.rotation.every((v) => v === 0)));
-  // The gizmo works in world space; members of a moved or turned group are edited in the Inspektor.
+  // The gizmo works in world space; members of a moved or turned group go through the
+  // shared-motion gizmo too, which converts into their frame.
   const insideMovedGroup = !!single && groupsOf(doc, single.id).some((g) => g.transform.position.some((v) => v !== 0) || g.transform.rotation.some((v) => v !== 0));
+  // One gizmo for what can move: locked objects stay, operands aren't moved this way, and a
+  // member whose group is selected too already moves with it.
+  const movable = useMemo(() => {
+    if (selected.length < 2 && !insideMovedGroup) return [];
+    return selected.filter((f) => !f.locked && parentsOf(doc, f.id).length === 0 && !groupsOf(doc, f.id).some((g) => g.locked || selection.includes(g.id)));
+  }, [selected, insideMovedGroup, doc, selection]);
   const textTool = useTextTool((s) => s.active);
   const measuring = useMeasure((s) => s.active);
   const box = useBoxSelect();
@@ -938,7 +974,7 @@ export function Viewport() {
               <Dimensions f={single} />
             </>
           )}
-          {multiMovable && workspace === "model" && <SelectionGizmo key={selection.join()} features={selected} />}
+          {movable.length > 0 && workspace === "model" && <SelectionGizmo key={movable.map((f) => f.id).join()} features={movable} />}
           {single && workspace === "model" && singleParents.length > 0 && <OperandEditor f={single} parents={singleParents} />}
         </group>
         <DepthRange />

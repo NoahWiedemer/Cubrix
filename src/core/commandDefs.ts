@@ -1,5 +1,6 @@
 // All built-in commands. Importing this module registers them.
 
+import { useTree } from "../ui/treeNav";
 import { startEdgePick, stopEdgePick, useEdgePick } from "../ui/edgePick";
 import { DEFAULT_MATERIAL, MATERIALS, isMaterialId, materialOf, type MaterialId } from "./materials";
 import { useShortcuts } from "../components/ShortcutOverlay";
@@ -17,6 +18,7 @@ import {
   newId,
   uniqueName,
   parentsOf,
+  groupsOf,
   type EdgeFilter,
   type EdgeOp,
   type EdgeRef,
@@ -68,7 +70,7 @@ import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { MANUAL, PRINTERS, bestOrientation } from "./printAnalysis";
-import { composeTransform, worldBox } from "./bounds";
+import { composeTransform, relativeTransform, worldBox, worldTransform } from "./bounds";
 import { baseName, isTauri, openBinaryFile, openTextFile, saveFile } from "./platform";
 import { svgToShapes, threeMfObjects } from "./importFormats";
 import { bufferToBase64, registerAsset } from "../cad/assets";
@@ -556,12 +558,8 @@ defineCommand({
   apply(doc, p, ctx) {
     const ids: string[] = p.ids ?? ctx.selection;
     const d = p.delta as Vec3;
-    const features = doc.features.map((f) =>
-      ids.includes(f.id)
-        ? { ...f, transform: { ...f.transform, position: f.transform.position.map((v, i) => round(v + d[i])) as Vec3 } }
-        : f,
-    );
-    return { doc: { ...doc, features }, label: `${ids.length > 1 ? `${ids.length} Objekte` : findFeature(doc, ids[0])?.name} verschieben` };
+    const next = ids.reduce((x, id) => updateFeature(x, id, (f) => ({ ...f, transform: { ...f.transform, position: f.transform.position.map((v, i) => round(v + d[i])) as Vec3 } })), doc);
+    return { doc: next, label: `${ids.length > 1 ? `${ids.length} Objekte` : findFeature(doc, ids[0])?.name} verschieben` };
   },
 });
 
@@ -1049,7 +1047,7 @@ defineCommand({
 // ── Mehrfachauswahl ─────────────────────────────────────────────────────────
 
 const pickedIds = (p: Record<string, any>, ctx: CommandContext): string[] => p.ids ?? ctx.selection;
-const several = (ctx: CommandContext) => ctx.selection.length > 1;
+const several = (ctx: CommandContext) => ctx.selection.length > 0;
 
 defineCommand({
   id: "objects.transformBy",
@@ -1067,8 +1065,12 @@ defineCommand({
     const ids = pickedIds(p, ctx);
     const motion: Transform = { position: p.position, rotation: p.rotation ?? [0, 0, 0] };
     if ([...motion.position, ...motion.rotation].every((v) => v === 0)) return null;
-    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => ({ ...f, transform: composeTransform(motion, f.transform) })), doc);
-    return { doc: next, label: `${ids.length} Objekte bewegen` };
+    // The motion is in world space; members of a group stay expressed in their group.
+    const next = ids.reduce((d, id) => {
+      const frames = groupsOf(d, id).map((g) => g.transform);
+      return updateFeature(d, id, (f) => ({ ...f, transform: relativeTransform(frames, composeTransform(motion, worldTransform(frames, f.transform))) }));
+    }, doc);
+    return { doc: next, label: ids.length === 1 ? `${findFeature(doc, ids[0])?.name} bewegen` : `${ids.length} Objekte bewegen` };
   },
 });
 
@@ -1089,7 +1091,11 @@ defineCommand({
     const s = (Array.isArray(p.factor) ? p.factor : [p.factor, p.factor, p.factor]).map(Number) as Vec3;
     if (s.some((v) => !(v > 0.01 && v < 100))) throw new Error("Faktoren müssen zwischen 0,01 und 100 liegen.");
     if (s.every((v) => v === 1)) return null;
-    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => scaleFeature(f, s, p.anchor ?? f.transform.position)), doc);
+    const next = ids.reduce((d, id) => {
+      const frames = groupsOf(d, id).map((g) => g.transform);
+      const anchor = p.anchor ? relativeTransform(frames, { position: p.anchor, rotation: [0, 0, 0] }).position : undefined;
+      return updateFeature(d, id, (f) => scaleFeature(f, s, anchor ?? f.transform.position));
+    }, doc);
     return { doc: next, label: `${ids.length} Objekte skalieren (${Math.round(s[0] * 100)} %)` };
   },
 });
@@ -1224,6 +1230,58 @@ defineCommand({
 });
 
 defineCommand({
+  id: "group.move",
+  kind: "document",
+  label: "In Gruppe verschieben",
+  description: "Verschiebt Objekte in eine Gruppe, aus ihr heraus (groupId leer = oberste Ebene) oder an eine andere Stelle der Liste. Sie bleiben im Raum, wo sie sind.",
+  icon: "folder",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    groupId: { type: "string", optional: true, description: "Ziel-Gruppe (leer = oberste Ebene)" },
+    index: { type: "number", min: 0, optional: true, description: "Position in der Ziel-Liste (Standard: ans Ende)" },
+  },
+  isEnabled: hasSelection,
+  apply(doc, p, ctx) {
+    const ids: string[] = p.ids ?? ctx.selection;
+    const groupId: string | null = p.groupId || null;
+    const target = groupId ? findFeature(doc, groupId) : null;
+    if (groupId && target?.type !== "group") throw new Error("Das Ziel ist keine Gruppe.");
+    const moving = ids.map((id) => findFeature(doc, id)).filter((f): f is Feature => !!f && parentsOf(doc, f.id).length === 0);
+    if (!moving.length) throw new Error("Teile eines Verbunds lassen sich nicht verschieben.");
+    if (groupId && moving.some((f) => f.id === groupId || groupsOf(doc, groupId).some((g) => g.id === f.id)))
+      throw new Error("Eine Gruppe kann nicht in sich selbst liegen.");
+    const frames = groupId ? [...groupsOf(doc, groupId), target as GroupFeature].map((g) => g.transform) : [];
+    const moved = moving.map((f) => ({ ...f, transform: relativeTransform(frames, worldTransform(groupsOf(doc, f.id).map((g) => g.transform), f.transform)) }));
+    // Index counted in the target list as it is now, without the moved rows.
+    const before = groupId ? (target as GroupFeature).children : doc.features;
+    const index = before.slice(0, p.index ?? before.length).filter((f) => !ids.includes(f.id)).length;
+    const strip = (list: Feature[]): Feature[] =>
+      list.filter((f) => !ids.includes(f.id)).map((f) => (f.type === "group" ? { ...f, children: strip(f.children) } : f));
+    const insert = (list: Feature[]) => [...list.slice(0, index), ...moved, ...list.slice(index)];
+    const add = (list: Feature[]): Feature[] => list.map((f) => (f.type !== "group" ? f : { ...f, children: f.id === groupId ? insert(f.children) : add(f.children) }));
+    const placed = groupId ? add(strip(doc.features)) : insert(strip(doc.features));
+    // Groups emptied by the move disappear.
+    const prune = (list: Feature[]): Feature[] => list.map((f) => (f.type === "group" ? { ...f, children: prune(f.children) } : f)).filter((f) => f.type !== "group" || f.children.length > 0);
+    return { doc: { ...doc, features: prune(placed) }, label: `${moved.length === 1 ? moved[0].name : `${moved.length} Objekte`} verschieben` };
+  },
+});
+
+defineCommand({
+  id: "tree.rename",
+  kind: "action",
+  label: "Umbenennen",
+  description: "Benennt das ausgewählte Objekt in der Objektliste um.",
+  icon: "rename",
+  shortcut: "f2",
+  params: {},
+  isEnabled: (ctx) => ctx.selection.length === 1,
+  perform(_p, ctx) {
+    const id = ctx.selection[0];
+    useTree.setState((s) => ({ renaming: id, open: [...new Set([...s.open, ...containersOf(ctx.doc, id).map((c) => c.id)])] }));
+  },
+});
+
+defineCommand({
   id: "group.rename",
   kind: "document",
   label: "Gruppe umbenennen",
@@ -1278,7 +1336,7 @@ defineCommand({
     if (!copySelection(doc, ctx.selection)) return null;
     clipboard!.pastes = -1; // pasting a cut puts it back in place first
     const gone = new Set(ctx.selection);
-    return { doc: { ...doc, features: doc.features.filter((f) => !gone.has(f.id)) }, selection: [], label: `${gone.size === 1 ? "Objekt" : `${gone.size} Objekte`} ausschneiden` };
+    return { doc: removeFeatures(doc, [...gone]), selection: [], label: `${gone.size === 1 ? "Objekt" : `${gone.size} Objekte`} ausschneiden` };
   },
 });
 
@@ -1331,7 +1389,11 @@ defineCommand({
       const copy = cloneFeature(f);
       copy.name = uniqueName(working, f.name.replace(/\s\d+$/, ""));
       copy.transform = { ...f.transform, position: [f.transform.position[0] + dx, f.transform.position[1], f.transform.position[2]] };
-      working = { ...working, features: [...working.features, copy] };
+      // A copy stays in the same list: next to its original, also inside a group.
+      const parent = groupsOf(working, id).at(-1);
+      working = parent
+        ? updateFeature(working, parent.id, (g) => ({ ...g, children: [...(g as GroupFeature).children, copy] }) as Feature)
+        : { ...working, features: [...working.features, copy] };
       created.push(copy.id);
     }
     if (!created.length) return null;
@@ -1435,17 +1497,20 @@ defineCommand({
     const ids: string[] = p.ids ?? ctx.selection;
     const entries = useMeshes.getState().entries;
     let changed = false;
-    const features = doc.features.map((f) => {
-      if (!ids.includes(f.id)) return f;
-      const b = worldBox(f, entries);
-      if (!b || Math.abs(b.min.z) < 1e-4) return f;
+    let next = doc;
+    for (const id of ids) {
+      const f = findFeature(next, id);
+      if (!f) continue;
+      const frames = groupsOf(next, id).map((g) => g.transform);
+      const world = worldTransform(frames, f.transform);
+      const b = worldBox(f, entries, world);
+      if (!b || Math.abs(b.min.z) < 1e-4) continue;
       changed = true;
-      const pos = [...f.transform.position] as Vec3;
-      pos[2] = round(pos[2] - b.min.z);
-      return { ...f, transform: { ...f.transform, position: pos } };
-    });
+      const moved: Transform = { ...world, position: [world.position[0], world.position[1], round(world.position[2] - b.min.z)] };
+      next = updateFeature(next, id, (x) => ({ ...x, transform: relativeTransform(frames, moved) }));
+    }
     if (!changed) return null;
-    return { doc: { ...doc, features }, label: "Auf Druckbett legen" };
+    return { doc: next, label: "Auf Druckbett legen" };
   },
 });
 

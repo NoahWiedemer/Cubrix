@@ -22,6 +22,22 @@ export function composeTransform(outer: Transform, inner: Transform): Transform 
   return { position: [r(pos.x), r(pos.y), r(pos.z)], rotation: [deg(e.x), deg(e.y), deg(e.z)] };
 }
 
+/** A transform inside nested frames (outermost first) expressed in the world. */
+export const worldTransform = (frames: Transform[], t: Transform): Transform => frames.reduceRight((inner, outer) => composeTransform(outer, inner), t);
+
+/** The inverse: a world transform expressed inside nested frames. */
+export function relativeTransform(frames: Transform[], world: Transform): Transform {
+  const inverse = frames.reduce((m, f) => m.multiply(transformMatrix(f)), new THREE.Matrix4()).invert();
+  const m = inverse.multiply(transformMatrix(world));
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  m.decompose(pos, quat, new THREE.Vector3());
+  const e = new THREE.Euler().setFromQuaternion(quat, "XYZ");
+  const r = (v: number) => Math.round(v * 1000) / 1000 + 0;
+  const deg = (v: number) => r(THREE.MathUtils.radToDeg(v));
+  return { position: [r(pos.x), r(pos.y), r(pos.z)], rotation: [deg(e.x), deg(e.y), deg(e.z)] };
+}
+
 /** Id of the virtual object that stands for a multi-selection (gizmo preview). */
 export const SELECTION_ID = "__selection";
 
