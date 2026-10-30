@@ -161,6 +161,13 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
   return p;
 }
 
+/** Waits until every object is built, so commands that need measurements can rely on them. */
+export async function settleGeometry(doc: { features: Feature[] }): Promise<string[]> {
+  const errors: string[] = [];
+  await Promise.all(doc.features.filter((f) => f.type !== "sketch").map((f) => getGeometry(f).catch((e: Error) => e instanceof KernelError && errors.push(e.message))));
+  return errors;
+}
+
 /** Pickable edges of a body (local frame); shared by the edge picker. */
 export async function listBodyEdges(f: Feature): Promise<EdgeInfo[]> {
   const local = { ...f, transform: { position: [0, 0, 0], rotation: [0, 0, 0] } } as Feature;

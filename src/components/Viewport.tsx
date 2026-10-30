@@ -318,7 +318,7 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
         app.toast("error", err instanceof KernelError && err.edgeTreatment ? err.message : `${f.name}: ${err.message}`);
         // A rejected rounding/chamfer step is taken back so the model never shows a value it can't build.
         const node = app.nodes[app.currentId];
-        if (err instanceof KernelError && err.edgeTreatment && node.parentId && /^(object\.(fillet|chamfer|shell)|edges\.(fillet|chamfer))$/.test(node.commandId))
+        if (err instanceof KernelError && err.edgeTreatment && node.parentId && /^(object\.(fillet|chamfer|shell|hole|pocket)|edges\.(fillet|chamfer)|shapes\.createMany)$/.test(node.commandId))
           app.jumpTo(node.parentId);
       });
     return () => {

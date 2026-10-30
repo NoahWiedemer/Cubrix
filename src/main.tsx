@@ -18,9 +18,9 @@ void import("./components/FontPicker").then((m) => setTimeout(m.preloadSystemFon
 
 // Dev only: scripted demos (e.g. AI build animations) from the browser console / CDP.
 if (import.meta.env.DEV)
-  void Promise.all([import("./ai/run"), import("./core/commands"), import("./core/store"), import("./core/updater"), import("./ai/chatStore"), import("./components/Library"), import("./ui/measureTool"), import("./ui/edgePick")]).then(
-    ([run, commands, store, updater, chat, library, measure, edgePick]) =>
-      Object.assign(window, { __cubrix: { run, execute: commands.execute, useApp: store.useApp, updater, useChat: chat.useChat, useLibrary: library.useLibrary, measure, edgePick } }),
+  void Promise.all([import("./ai/run"), import("./core/commands"), import("./core/store"), import("./core/updater"), import("./ai/chatStore"), import("./components/Library"), import("./ui/measureTool"), import("./ui/edgePick"), import("./ai/agent")]).then(
+    ([run, commands, store, updater, chat, library, measure, edgePick, agent]) =>
+      Object.assign(window, { __cubrix: { run, execute: commands.execute, useApp: store.useApp, updater, useChat: chat.useChat, useLibrary: library.useLibrary, measure, edgePick, checkModel: agent.checkModel, settle: agent.settle } }),
   );
 import { initKernel, useKernel } from "./cad/kernel";
 import { isTauri } from "./core/platform";

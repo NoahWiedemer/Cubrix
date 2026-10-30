@@ -9,7 +9,7 @@ import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
 import { clearPreview, execute, previewCommand } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
-import { featureTypeLabel, findFeature, hasNoEdges, type Feature, type GroupFeature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
+import { featureTypeLabel, findFeature, hasNoEdges, type FaceName, type FaceOp, type Feature, type GroupFeature, type PrimitiveFeature, type Transform, type Vec3 } from "../core/document";
 import { useMeshes, useMissingFonts } from "../cad/kernel";
 import { FontPicker } from "./FontPicker";
 import { Appearance } from "./ColorRow";
@@ -514,6 +514,7 @@ function SingleObject({ f }: { f: Feature }) {
         </div>
       )}
       {f.type !== "sketch" && f.type !== "group" && <ShellSection f={f} />}
+      {f.type !== "sketch" && f.type !== "group" && <FaceOps f={f} />}
       {f.type === "group" ? <GroupAppearance f={f} /> : <Appearance key={f.id + (f.color ?? "")} ids={[f.id]} color={f.color} material={f.material} />}
     </>
   );
@@ -585,6 +586,76 @@ function MultiFields({ features }: { features: Feature[] }) {
         {axisRow("rotation", "°")}
       </div>
     </>
+  );
+}
+
+const FACE_LABELS: Record<FaceName, string> = { top: "Oben", bottom: "Unten", front: "Vorne", back: "Hinten", left: "Links", right: "Rechts" };
+
+const faceOpLabel = (op: FaceOp) => {
+  const s = op.shape;
+  const what = op.op === "add" ? "Erhöhung" : s.kind === "circle" ? (op.head ? (op.head.kind === "countersink" ? "Senkbohrung" : "Kopfbohrung") : "Bohrung") : "Tasche";
+  const size = s.kind === "circle" ? `Ø ${show(s.d)}` : s.kind === "rect" ? `${show(s.w)} × ${show(s.h)}` : `${show(s.l)} × ${show(s.w)}`;
+  return `${what} ${size} · ${FACE_LABELS[op.face]}`;
+};
+
+/** Holes and pockets on a face: list plus a small form. */
+function FaceOps({ f }: { f: Feature }) {
+  const [adding, setAdding] = useState(false);
+  const [kind, setKind] = useState<"hole" | "countersink" | "counterbore" | "pocket" | "boss">("hole");
+  const [face, setFace] = useState<FaceName>("top");
+  const [v, setV] = useState({ size: 4, size2: 8, depth: 0, u: 0, v: 0 });
+  const field = (key: keyof typeof v, label: string, caption: string, min?: number) => (
+    <div className="field-cell">
+      <NumberField label={label} value={v[key]} min={min} step={0.5} onCommit={(n) => setV((o) => ({ ...o, [key]: n }))} />
+      <span className="field-cap">{caption}</span>
+    </div>
+  );
+  const add = () => {
+    const at = [[v.u, v.v]];
+    const depth = v.depth > 0 ? v.depth : undefined;
+    if (kind === "pocket" || kind === "boss")
+      void execute("object.pocket", { id: f.id, face, mode: kind === "boss" ? "add" : "cut", u: v.u, v: v.v, width: v.size, height: v.size2, depth: depth ?? (kind === "boss" ? 2 : undefined) });
+    else void execute("object.hole", { id: f.id, face, at, diameter: v.size, depth, ...(kind === "hole" ? {} : { head: kind, headDiameter: v.size2 }) });
+    setAdding(false);
+  };
+  return (
+    <div className="group">
+      <div className="group-label">
+        <span><Icon name="screw" size={15} />Bohrungen und Taschen</span>
+        <button className={`lock ${adding ? "on" : ""}`} onClick={() => setAdding(!adding)}><span>Hinzufügen</span></button>
+      </div>
+      {f.faceOps?.map((op, i) => (
+        <div key={i} className="edge-op">
+          <Icon name={op.op === "add" ? "extrude" : "screw"} size={14} />
+          <span>{faceOpLabel(op)}</span>
+          <button className="icon-btn small" onClick={() => void execute("object.removeFaceOp", { id: f.id, index: i })} data-tip="Entfernen" data-tip-pos="left"><Icon name="delete" size={13} /></button>
+        </div>
+      ))}
+      {adding && (
+        <div className="face-op-form">
+          <div className="field-grid">
+            <select className="select" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Art">
+              <option value="hole">Bohrung</option>
+              <option value="countersink">Senkkopf</option>
+              <option value="counterbore">Zylinderkopf</option>
+              <option value="pocket">Tasche</option>
+              <option value="boss">Erhöhung</option>
+            </select>
+            <select className="select" value={face} onChange={(e) => setFace(e.target.value as FaceName)} aria-label="Fläche">
+              {(Object.keys(FACE_LABELS) as FaceName[]).map((k) => <option key={k} value={k}>{FACE_LABELS[k]}</option>)}
+            </select>
+          </div>
+          <div className="field-grid">
+            {field("size", kind === "pocket" || kind === "boss" ? "B" : "Ø", kind === "pocket" || kind === "boss" ? "Breite" : "Durchmesser", 0.1)}
+            {kind !== "hole" && field("size2", kind === "pocket" || kind === "boss" ? "H" : "K", kind === "pocket" || kind === "boss" ? "Höhe" : "Kopf-Ø", 0.1)}
+            {field("depth", "T", kind === "boss" ? "Aufbau" : "Tiefe (0 = durch)", 0)}
+            {field("u", "U", "ab Mitte")}
+            {field("v", "V", "ab Mitte")}
+          </div>
+          <button className="btn-ghost" onClick={add}><Icon name="check" size={14} />Anwenden</button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -7,7 +7,7 @@ import { execute, getCommand, listCommands, toToolDefinition } from "../core/com
 import { getDoc, useApp } from "../core/store";
 import { geometryKey, isSolid, type Feature, type Transform } from "../core/document";
 import * as THREE from "three";
-import { getGeometry, useMeshes } from "../cad/kernel";
+import { getGeometry, settleGeometry, useMeshes } from "../cad/kernel";
 import { worldBox, worldTransform } from "../core/bounds";
 import { HELP_TOPICS } from "../help/topics";
 import type { Effort } from "./models";
@@ -72,6 +72,8 @@ export function modelSnapshot() {
     }),
   };
 }
+
+export const settle = settleGeometry;
 
 export const r1 = (n: number) => Math.round(n * 100) / 100 + 0;
 
@@ -143,6 +145,16 @@ export async function checkModel() {
       }
     }
   });
+  // A whole assembly can hang in the air even though its parts touch each other.
+  for (const top of new Set(boxes.map((x) => x.top))) {
+    const parts = boxes.filter((x) => x.top === top);
+    const low = Math.min(...parts.map((x) => x.box.min.z));
+    const others = boxes.filter((x) => x.top !== top);
+    if (low > TOL && !parts.some((p) => others.some((o) => touches(p.box, o.box)))) {
+      const name = doc.features.find((f) => f.id === top)?.name ?? parts[0].f.name;
+      if (!floating.some((n) => n.startsWith(name))) floating.push(`${name} (${r1(low)} mm über dem Bett)`);
+    }
+  }
   const total = boxes.reduce((b, x) => b.union(x.box), new THREE.Box3());
   const list = (a: string[]) => (a.length > 12 ? [...a.slice(0, 12), `… und ${a.length - 12} weitere`] : a);
   const ok = !errors.length && !floating.length && !belowBed.length && !outside.length && !overlaps.length;
@@ -226,8 +238,17 @@ async function runCommand(id: string, params: Record<string, unknown>, group: { 
   if (!cmd) throw new Error(`Unbekannter Befehl ${id}`);
   const before = useApp.getState().currentId;
   // Scene-changing commands light up the viewport glow (read-only tools don't).
-  if (cmd.kind === "document") markModeling();
+  if (cmd.kind === "document") {
+    markModeling();
+    // Commands may measure what the previous one built.
+    await settleGeometry(getDoc());
+  }
   await execute(id, params, { source: "ai", group, throwErrors: true });
+  // A step the kernel can't build must reach the model as an error, not end up silently undone.
+  if (cmd.kind === "document" && useApp.getState().currentId !== before) {
+    const errors = await settleGeometry(getDoc());
+    if (errors.length) throw new Error(errors[0]);
+  }
   const after = useApp.getState().currentId;
   const node = after !== before ? useApp.getState().nodes[after] : undefined;
   events.onStep({ label: node?.label ?? cmd.label, nodeId: node?.id, ok: true });
