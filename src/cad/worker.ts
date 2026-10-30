@@ -6,7 +6,7 @@ import opencascade from "replicad-opencascadejs";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import { importSTEP, makeCompound, setOC, type Face, type Shape3D } from "replicad";
 import { materialOf } from "../core/materials";
-import { buildLocal, buildPlaced, EdgeTreatmentError, importedShapes } from "./build";
+import { buildLocal, buildPlaced, largestEdge, EdgeTreatmentError, importedShapes } from "./build";
 import { zipSync, strToU8 } from "fflate";
 import { loadFonts, registerFont } from "./text";
 import { stlToSolid } from "./stl";
@@ -217,6 +217,8 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       await registerFont(req.name, req.data);
       return post({ id: req.id, ok: true, kind: "font" });
     }
+
+    if (req.kind === "edgeMax") return post({ id: req.id, ok: true, kind: "edgeMax", value: largestEdge(req.feature, req.edge, req.value) });
 
     if (req.kind === "mesh") {
       const key = JSON.stringify(req.feature);

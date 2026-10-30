@@ -1,11 +1,13 @@
 // Compact inline value input for commands with a single numeric parameter (Abrunden,
-// Fasen, …) or a single text (placing 3D text). Opens where the context menu was, previews live while typing and commits
-// one history entry on Enter. Esc or a click outside cancels and removes the preview.
+// Fasen, …) or a single text (placing 3D text). Opens where the context menu was, previews live while typing (kernel-heavy
+// edits only on Enter) and commits one history entry on Enter. Esc or a click outside cancels and removes the preview.
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { clearPreview, execute, getCommand, previewCommand } from "../core/commands";
 import { Icon } from "../ui/icons";
+import { applyEdge } from "../ui/applyEdge";
+import { useApp } from "../core/store";
 import { useClampX } from "../ui/useClampX";
 
 interface Request {
@@ -43,10 +45,12 @@ function Popover({ req }: { req: Request }) {
   const cmd = getCommand(req.command)!;
   const spec = cmd.params[req.param];
   const isText = req.kind === "text";
+  const heavy = /^object\.(fillet|chamfer|shell)$/.test(req.command);
   const [text, setText] = useState(req.initial ?? fmt(useLastValues.getState().values[req.command] ?? 2));
   const valueOf = (v: string) => (isText ? v : parse(v));
   const invalid = (v: string) => (isText ? !v.trim() : !Number.isFinite(parse(v)) || parse(v) < 0);
   const [error, setError] = useState<string | null>(null);
+  const [limit, setLimit] = useState<number | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const timer = useRef<number>();
@@ -59,6 +63,8 @@ function Popover({ req }: { req: Request }) {
 
   const preview = (value: string) => {
     window.clearTimeout(timer.current);
+    // Kernel-heavy edits apply on Enter only; just check the input here.
+    if (heavy) return setError(invalid(value) ? "Bitte eine Zahl ≥ 0 eingeben." : null);
     timer.current = window.setTimeout(() => {
       if (invalid(value)) {
         clearPreview();
@@ -74,6 +80,20 @@ function Popover({ req }: { req: Request }) {
     window.clearTimeout(timer.current);
     clearPreview();
     const v = valueOf(text);
+    const edge = req.command === "object.fillet" ? "fillet" : req.command === "object.chamfer" ? "chamfer" : null;
+    if (edge && typeof v === "number") {
+      const id = (req.params?.id as string | undefined) ?? useApp.getState().selection[0];
+      const r = await applyEdge(id, edge, v);
+      useLastValues.setState((s) => ({ values: { ...s.values, [req.command]: r.value } }));
+      // Clamped: stay open and show the applied maximum; Enter or a click outside closes.
+      if (r.limit !== null) {
+        setText(fmt(r.limit));
+        setLimit(r.limit);
+        return;
+      }
+      useValuePopover.setState({ req: null });
+      return;
+    }
     const ok = await execute(req.command, { ...req.params, [req.param]: v });
     if (ok && typeof v === "number") useLastValues.setState((s) => ({ values: { ...s.values, [req.command]: v } }));
     useValuePopover.setState({ req: null });
@@ -137,6 +157,7 @@ function Popover({ req }: { req: Request }) {
         {unit && <span className="unit">{unit}</span>}
       </div>
       {error && <div className="value-pop-error">{error}</div>}
+      {limit !== null && <div className="value-pop-max">max. {fmt(limit)} mm</div>}
     </div>
   );
 }

@@ -82,6 +82,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     when: "Wenn du Teile zueinander ausrichten oder auf dem Bett anordnen willst.",
     steps: [
       "Klicke einen Körper an. Mit gedrückter Shift-Taste wählst du weitere aus.",
+      "In einer Gruppe wählt ein Klick die ganze Gruppe. ⌘+Klick geht eine Ebene tiefer, bis zum einzelnen Objekt, und dann wieder nach oben.",
+      "Mehrere ausgewählte Objekte bewegst, drehst und skalierst du gemeinsam; im Inspektor stehen gemeinsame Werte, sonst „Gemischt“.",
       "Ziehe an einem Pfeil, um entlang einer Achse zu verschieben. Die kleinen Quadrate am Ursprung verschieben in einer Ebene.",
       "Drücke R (oder „Drehen“), um Drehringe zu zeigen. Mit Shift drehst du in 1°-Schritten, sonst in 15°-Schritten.",
       "Für exakte Werte tippe Position und Drehung rechts in die Felder. Ziehen an der Beschriftung X/Y/Z ändert den Wert stufenlos.",

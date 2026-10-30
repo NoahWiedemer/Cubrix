@@ -1,5 +1,5 @@
 // All built-in commands. Importing this module registers them.
-import { transformMatrix } from "./bounds";
+
 import { DEFAULT_MATERIAL, MATERIALS, isMaterialId, materialOf, type MaterialId } from "./materials";
 import { useShortcuts } from "../components/ShortcutOverlay";
 import { SHAPE_LABELS, setShapeField, type ShapeField } from "./shapeFields";
@@ -49,7 +49,7 @@ import { usePreview } from "../ui/preview";
 import { useSketch } from "../ui/sketch";
 import { useLayout } from "../ui/layout";
 import { parseProject, serializeProject } from "./projectFile";
-import { useChat } from "../ai/chatStore";
+import { chatUnsaved, setProjectChat, useChat } from "../ai/chatStore";
 import { addRecent, clearAutosave, removeRecent } from "./autosave";
 import { cameraState } from "../ui/cameraState";
 import { hasClosedProfile, resizeProfile, scaleFeature } from "./scale";
@@ -64,7 +64,7 @@ import { useHelp } from "../help/HelpCenter";
 import { useMeshes, exportFeatures } from "../cad/kernel";
 import type { ExportFormat } from "../cad/protocol";
 import { MANUAL, PRINTERS, bestOrientation } from "./printAnalysis";
-import { worldBox } from "./bounds";
+import { composeTransform, worldBox } from "./bounds";
 import { baseName, isTauri, openBinaryFile, openTextFile, saveFile } from "./platform";
 import { svgToShapes, threeMfObjects } from "./importFormats";
 import { bufferToBase64, registerAsset } from "../cad/assets";
@@ -967,6 +967,117 @@ defineCommand({
   },
 });
 
+// ── Mehrfachauswahl ─────────────────────────────────────────────────────────
+
+const pickedIds = (p: Record<string, any>, ctx: CommandContext): string[] => p.ids ?? ctx.selection;
+const several = (ctx: CommandContext) => ctx.selection.length > 1;
+
+defineCommand({
+  id: "objects.transformBy",
+  kind: "document",
+  label: "Auswahl bewegen",
+  description: "Bewegt und dreht mehrere Objekte gemeinsam: position/rotation beschreiben EINE Starrkörper-Bewegung, die alle Objekte zusammen ausführen.",
+  icon: "move",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    position: { type: "vec3", unit: "mm", description: "Verschiebung" },
+    rotation: { type: "vec3", unit: "°", optional: true, description: "Drehung" },
+  },
+  isEnabled: several,
+  apply(doc, p, ctx) {
+    const ids = pickedIds(p, ctx);
+    const motion: Transform = { position: p.position, rotation: p.rotation ?? [0, 0, 0] };
+    if ([...motion.position, ...motion.rotation].every((v) => v === 0)) return null;
+    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => ({ ...f, transform: composeTransform(motion, f.transform) })), doc);
+    return { doc: next, label: `${ids.length} Objekte bewegen` };
+  },
+});
+
+defineCommand({
+  id: "objects.scaleBy",
+  kind: "document",
+  label: "Auswahl skalieren",
+  description: "Skaliert mehrere Objekte: mit anchor gemeinsam um diesen Punkt (Abstände wachsen mit), ohne anchor jedes um sich selbst.",
+  icon: "scale",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    factor: { type: "vec3", description: "Faktoren [X, Y, Z]" },
+    anchor: { type: "vec3", unit: "mm", optional: true, description: "Gemeinsamer Fixpunkt" },
+  },
+  isEnabled: several,
+  apply(doc, p, ctx) {
+    const ids = pickedIds(p, ctx);
+    const s = (Array.isArray(p.factor) ? p.factor : [p.factor, p.factor, p.factor]).map(Number) as Vec3;
+    if (s.some((v) => !(v > 0.01 && v < 100))) throw new Error("Faktoren müssen zwischen 0,01 und 100 liegen.");
+    if (s.every((v) => v === 1)) return null;
+    const next = ids.reduce((d, id) => updateFeature(d, id, (f) => scaleFeature(f, s, p.anchor ?? f.transform.position)), doc);
+    return { doc: next, label: `${ids.length} Objekte skalieren (${Math.round(s[0] * 100)} %)` };
+  },
+});
+
+defineCommand({
+  id: "objects.setAxis",
+  kind: "document",
+  label: "Position/Drehung setzen",
+  description: "Setzt für mehrere Objekte eine Achse von Position oder Drehung: value = alle auf diesen Wert, delta = jedes relativ um diesen Wert.",
+  icon: "move",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    kind: { type: "enum", options: ["position", "rotation"], description: "Was geändert wird" },
+    axis: { type: "number", min: 0, max: 2, description: "0 = X, 1 = Y, 2 = Z" },
+    value: { type: "number", optional: true, description: "Absoluter Wert für alle" },
+    delta: { type: "number", optional: true, description: "Relative Änderung je Objekt" },
+  },
+  isEnabled: several,
+  apply(doc, p, ctx) {
+    const ids = pickedIds(p, ctx);
+    const kind = p.kind as "position" | "rotation";
+    const axis = Math.round(p.axis);
+    if (p.value === undefined && p.delta === undefined) throw new Error("value oder delta angeben.");
+    let changed = 0;
+    let next = doc;
+    for (const id of ids) {
+      const f = findFeature(next, id);
+      if (!f) continue;
+      const v = round(p.value ?? f.transform[kind][axis] + p.delta);
+      if (v === f.transform[kind][axis]) continue;
+      changed++;
+      const list = [...f.transform[kind]] as Vec3;
+      list[axis] = v;
+      next = updateFeature(next, id, (x) => ({ ...x, transform: { ...x.transform, [kind]: list } }));
+    }
+    if (!changed) return null;
+    return { doc: next, label: `${changed} Objekte: ${kind === "position" ? "Position" : "Drehung"} ${"XYZ"[axis]}` };
+  },
+});
+
+defineCommand({
+  id: "objects.setParams",
+  kind: "document",
+  label: "Maße aller ändern",
+  description: "Setzt dieselben Maße bei mehreren gleichartigen Grundkörpern (jeder bleibt an seinem Platz).",
+  icon: "resize",
+  params: {
+    ids: { type: "ids", optional: true, description: "Objekt-IDs (Standard: Auswahl)" },
+    params: { type: "string", description: "Objekt mit den neuen Maßen in mm, z. B. {\"diameter\": 40}" },
+  },
+  isEnabled: several,
+  apply(doc, p, ctx) {
+    const ids = pickedIds(p, ctx);
+    const one = getCommand("object.setParams") as DocumentCommand;
+    let next = doc;
+    let changed = 0;
+    for (const id of ids) {
+      const r = one.apply(next, { id, params: p.params }, ctx);
+      if (r) {
+        next = r.doc;
+        changed++;
+      }
+    }
+    return changed ? { doc: next, label: `${changed} Objekte: Maße` } : null;
+  },
+});
+
 // ── Gruppen ─────────────────────────────────────────────────────────────────
 
 /** The list (top level or a group's members) that directly contains `id`. */
@@ -994,18 +1105,6 @@ function makeGroup(doc: ModelDocument, ids: string[], name?: string): { doc: Mod
     return rest;
   };
   return { doc: { ...doc, features: insert(doc.features) }, id: group.id, name: groupName };
-}
-
-/** A member's transform expressed in the group's parent frame (for ungrouping). */
-function composeTransform(outer: Transform, inner: Transform): Transform {
-  const m = transformMatrix(outer).multiply(transformMatrix(inner));
-  const pos = new THREE.Vector3();
-  const quat = new THREE.Quaternion();
-  m.decompose(pos, quat, new THREE.Vector3());
-  const e = new THREE.Euler().setFromQuaternion(quat, "XYZ");
-  const r = (v: number) => Math.round(v * 1000) / 1000;
-  const deg = (v: number) => r(THREE.MathUtils.radToDeg(v));
-  return { position: [r(pos.x), r(pos.y), r(pos.z)], rotation: [deg(e.x), deg(e.y), deg(e.z)] };
 }
 
 defineCommand({
@@ -2396,7 +2495,7 @@ const OPEN_FILTER = { name: "Cubrix-Projekt", extensions: ["cubrix", "albedo", "
 
 async function confirmDiscard(): Promise<boolean> {
   const s = useApp.getState();
-  if (s.savedNodeId === s.currentId) return true;
+  if (s.savedNodeId === s.currentId && !chatUnsaved()) return true;
   const text = "Ungespeicherte Änderungen gehen verloren. Fortfahren?";
   if (isTauri) {
     const { ask } = await import("@tauri-apps/plugin-dialog");
@@ -2430,7 +2529,7 @@ export function loadProjectText(text: string, path: string | null, label: string
     useApp.setState({ nodes: h.nodes, rootId: h.rootId, currentId: h.currentId, savedNodeId: path ? h.currentId : null });
   } else if (!path) useApp.setState({ savedNodeId: null });
   useApp.setState({ selection: project.selection.filter((id) => !!findFeature(project.document, id)) });
-  useChat.setState({ entries: project.chat.entries, api: project.chat.api, running: false });
+  setProjectChat(project.chat.entries, project.chat.api);
   if (project.camera) setTimeout(() => cameraState.set?.(project.camera!), 50);
   if (migratedFrom < 2) app.toast("info", "Ältere Projektdatei geöffnet – beim Speichern wird sie ins neue Format übernommen.");
 }
@@ -2442,6 +2541,7 @@ async function saveProject(forceDialog: boolean) {
   const path = await saveFile(`${fileSafe(doc.name)}.cubrix`, PROJECT_FILTER, text, forceDialog ? null : s.filePath);
   if (!path) return;
   useApp.setState({ savedNodeId: s.currentId, filePath: isTauri ? path : null });
+  useChat.setState((c) => ({ savedEntries: c.entries.length }));
   if (isTauri) addRecent(path);
   void clearAutosave();
   s.toast("success", `Gespeichert: ${baseName(path)}`);

@@ -20,13 +20,12 @@ import { connectedProviders, refreshKeys, useKeys } from "../ai/keys";
 import { endRun, setPhase, startRun, useAiRun } from "../ai/run";
 import { useApp } from "../core/store";
 import { ProviderKeys, useProviderDialog } from "./ProviderKeys";
-import logo from "../assets/brand/modelonio-logo-mit-hintergrund-256.png";
 
 type Step = ChatStep;
 
 let controller: AbortController | null = null;
 
-const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Schlüsselanhänger mit Loch", "Mach daraus einen Spielwürfel"];
+const STARTERS = ["Box mit Deckel, 60 × 40 × 30 mm", "Halterung für einen Arduino Uno", "Mach daraus einen Spielwürfel"];
 
 const markFor = (p: Provider) => (p === "anthropic" ? "claude" : "openai");
 const PROVIDER_LABEL: Record<Provider, string> = { anthropic: "Anthropic", openai: "OpenAI" };
@@ -227,10 +226,16 @@ export function ChatPanel() {
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "";
     controller = new AbortController();
+    const signal = controller.signal;
+    useChat.setState({ abortRun: () => controller?.abort() });
+    const generation = useChat.getState().generation;
+    // After switching projects this run may only wind down, not touch the new chat.
+    const current = () => useChat.getState().generation === generation;
     const entry: ChatEntry = { role: "assistant", text: "", steps: [] };
     useChat.setState((s) => ({ entries: [...s.entries, { role: "user", text: prompt, steps: [] }, entry], running: true }));
-    const update = (fn: (e: ChatEntry) => ChatEntry) =>
-      useChat.setState((s) => ({ entries: [...s.entries.slice(0, -1), fn(s.entries[s.entries.length - 1])] }));
+    const update = (fn: (e: ChatEntry) => ChatEntry) => {
+      if (current()) useChat.setState((s) => ({ entries: [...s.entries.slice(0, -1), fn(s.entries[s.entries.length - 1])] }));
+    };
     const info = modelInfo(provider, model[provider] || DEFAULT_MODEL[provider]);
     const groupId = Math.random().toString(36).slice(2);
     const t0 = performance.now();
@@ -247,7 +252,7 @@ export function ChatPanel() {
         transport: tauriTransport,
         history: useChat.getState().api,
         prompt,
-        signal: controller.signal,
+        signal,
         events: {
           onText: (d) => update((e) => ({ ...e, text: e.text + d })),
           onStep: (step) => update((e) => ({ ...e, steps: [...e.steps, step] })),
@@ -255,9 +260,9 @@ export function ChatPanel() {
           onSources: (src) => update((e) => ({ ...e, sources: [...(e.sources ?? []), ...src].filter((x, i, all) => all.findIndex((y) => y.url === x.url) === i).slice(0, 8) })),
         },
       });
-      useChat.setState({ api });
+      if (current()) useChat.setState({ api });
     } catch (e) {
-      if (controller?.signal.aborted) update((x) => ({ ...x, text: x.text || "Gestoppt." }));
+      if (signal.aborted) update((x) => ({ ...x, text: x.text || "Gestoppt." }));
       else {
         logError("ai", e instanceof Error ? e.message : String(e), { provider, model: info.id, request: "agent" });
         update((x) => ({ ...x, error: friendlyError(e), prompt }));
@@ -265,7 +270,8 @@ export function ChatPanel() {
     } finally {
       update((e) => ({ ...e, durationMs: performance.now() - t0 }));
       endRun();
-      useChat.setState({ running: false });
+      if (current()) useChat.setState({ running: false });
+      useChat.setState({ abortRun: null });
       controller = null;
     }
   };
@@ -294,7 +300,7 @@ export function ChatPanel() {
           </button>
           {more.open && (
             <Menu style={{ top: 34, right: 0 }}>
-              <MenuItem icon="reset" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [] }); more.setOpen(false); }} />
+              <MenuItem icon="reset" label="Neuer Chat" onClick={() => { useChat.setState({ entries: [], api: [], savedEntries: -1 }); more.setOpen(false); }} />
               <MenuItem icon="key" label="Anbieter und Schlüssel …" onClick={() => { useProviderDialog.setState({ open: true }); more.setOpen(false); }} />
             </Menu>
           )}
@@ -303,7 +309,6 @@ export function ChatPanel() {
       <div className="scroll chat-scroll" ref={listRef}>
         {entries.length === 0 ? (
           <div className="chat-empty">
-            <img src={logo} alt="" />
             <p>Was möchtest du bauen?</p>
             <div className="chat-starters">
               {STARTERS.map((s) => (
@@ -331,7 +336,7 @@ export function ChatPanel() {
               {e.role === "assistant" && !(running && i === entries.length - 1) && e.durationMs !== undefined && !e.error && (
                 <div className="run-done">
                   <Icon name="check" size={12} />
-                  <span>Fertig · {Math.max(1, Math.round(e.durationMs / 1000))} s{e.steps.filter((x) => x.nodeId).length ? ` · ${e.steps.filter((x) => x.nodeId).length} ${e.steps.filter((x) => x.nodeId).length === 1 ? "Änderung" : "Änderungen"}` : ""}</span>
+                  <span>Fertig · {Math.max(1, Math.round(e.durationMs / 1000))} s</span>
                   {e.groupId && <RunUndo groupId={e.groupId} />}
                 </div>
               )}

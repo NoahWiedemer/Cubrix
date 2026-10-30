@@ -134,6 +134,7 @@ async function withFonts(f: Feature): Promise<Feature> {
   }
   if (f.type === "text") return (await ensureFont(f.params.font, f.params.bold)) ? f : { ...f, params: { ...f.params, font: "inter" } };
   if (f.type === "boolean") return { ...f, children: (await Promise.all(f.children.map(withFonts))) as [Feature, ...Feature[]] };
+  if (f.type === "group") return { ...f, children: await Promise.all(f.children.map(withFonts)) };
   return f;
 }
 
@@ -158,6 +159,20 @@ export function getGeometry(f: Feature): Promise<GeometryEntry> {
     cache.set(key, p);
   }
   return p;
+}
+
+const edgeLimits = new Map<string, number>();
+
+/** Largest working fillet/chamfer up to `value` (0 = none); known limits are remembered per geometry. */
+export async function clampEdge(f: Feature, edge: "fillet" | "chamfer", value: number): Promise<number> {
+  const key = `${edge}|${geometryKey({ ...f, [edge]: 0 } as Feature)}`;
+  const known = edgeLimits.get(key);
+  if (known !== undefined && value >= known) return known;
+  const local = { ...f, transform: { position: [0, 0, 0], rotation: [0, 0, 0] } } as Feature;
+  const r = await request({ kind: "edgeMax", feature: await withFonts(local), edge, value });
+  if (!r.ok || r.kind !== "edgeMax") throw new Error(r.ok ? "Unerwartete Antwort" : r.error);
+  if (r.value < value) edgeLimits.set(key, r.value);
+  return r.value;
 }
 
 export async function exportFeatures(

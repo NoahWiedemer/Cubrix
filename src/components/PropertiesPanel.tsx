@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, ChevronRight, Link2, Link2Off } from "lucide-react";
 import { SegmentedControl } from "../ui/SegmentedControl";
-import { maxEdgeSize, textOf } from "../core/commandDefs";
+import { textOf } from "../core/commandDefs";
+import { applyEdge } from "../ui/applyEdge";
 import { profileBounds } from "../core/scale";
 import { SHAPE_LABELS, shapeFields } from "../core/shapeFields";
 import { SHAPE_DEFAULTS, type ExtraType } from "../core/shapeDefs";
@@ -33,6 +34,12 @@ interface NumberFieldProps {
   onPreview?(v: number): void;
   /** Typing "150%" calls this with 1.5 (size fields: scale the whole object). */
   onPercent?(factor: number): void;
+  /** Several objects with different values: shows "Gemischt", a typed value sets all. */
+  mixed?: boolean;
+  /** Scrubbing reports the relative change instead of a value (several objects). */
+  onDelta?(delta: number, done: boolean): void;
+  /** Kernel-heavy fields: only Enter or releasing the scrub handle applies; blur reverts. */
+  enterOnly?: boolean;
 }
 
 /** Tiny corner glyphs as scrub handles for the Kanten fields. */
@@ -43,19 +50,21 @@ const ChamferGlyph = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 11V6l4-4h5" /></svg>
 );
 
-function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, onCommit, onPreview, onPercent }: NumberFieldProps) {
-  const [text, setText] = useState(show(value));
+function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, readOnly, onCommit, onPreview, onPercent, mixed, onDelta, enterOnly }: NumberFieldProps) {
+  const initial = () => (mixed ? "" : show(value));
+  const [text, setText] = useState(initial);
   const focused = useRef(false);
   useEffect(() => {
-    if (!focused.current) setText(show(value));
-  }, [value]);
+    if (!focused.current) setText(initial());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, mixed]);
 
   const clamp = (v: number) => Math.min(max ?? Infinity, min !== undefined ? Math.max(min, v) : v);
   const commit = (v: number) => {
-    if (!Number.isFinite(v)) return setText(show(value));
+    if (!Number.isFinite(v)) return setText(initial());
     v = clamp(v);
     setText(show(v));
-    if (Math.abs(v - value) > 1e-9) onCommit(v);
+    if (mixed || Math.abs(v - value) > 1e-9) onCommit(v);
   };
 
   const scrub = (e: React.PointerEvent<HTMLElement>, threshold = 2) => {
@@ -75,6 +84,12 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
       const unit = step * (ev.altKey ? 0.1 : 1);
       const raw = start + ((ev.clientX - startX) / 4) * unit * (ev.shiftKey ? 10 : 1);
       current = clamp(Math.round(Math.round(raw / unit) * unit * 1000) / 1000);
+      if (onDelta) {
+        const d = current - start;
+        setText(mixed ? `${d >= 0 ? "+" : ""}${show(d)}` : show(current));
+        onDelta(d, false);
+        return;
+      }
       setText(show(current));
       onPreview?.(current);
     };
@@ -87,6 +102,11 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
         inputRef.current?.select();
         return;
       }
+      if (onDelta) {
+        onDelta(current - start, true);
+        if (mixed) setText("");
+        return;
+      }
       if (Math.abs(current - start) > 1e-9) onCommit(current);
       else onPreview?.(start);
     };
@@ -95,6 +115,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
   };
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const enterPressed = useRef(false);
   // Long values shrink a little instead of being clipped by the unit.
   const fontSize = text.length > 6 ? 12 : text.length > 4 ? 13 : undefined;
   return (
@@ -117,6 +138,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
         ref={inputRef}
         value={text}
         readOnly={readOnly}
+        placeholder={mixed ? "Gemischt" : undefined}
         style={fontSize ? { fontSize } : undefined}
         inputMode="decimal"
         onFocus={(e) => {
@@ -126,6 +148,9 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           focused.current = false;
+          if (mixed && !text.trim()) return;
+          if (enterOnly && !enterPressed.current) return setText(initial());
+          enterPressed.current = false;
           const pct = /^\s*([\d.,]+)\s*%\s*$/.exec(text);
           if (pct && onPercent) {
             const k = Number(pct[1].replace(",", ".")) / 100;
@@ -136,9 +161,12 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
           commit(parse(text));
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Enter") {
+            enterPressed.current = true;
+            (e.target as HTMLInputElement).blur();
+          }
           if (e.key === "Escape") {
-            setText(show(value));
+            setText(initial());
             (e.target as HTMLInputElement).blur();
           }
           if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -148,7 +176,7 @@ function NumberField({ value, label, axis, unit = "mm", step = 1, min, max, read
           }
         }}
       />
-      {unit && text.length <= 3 && <span className="unit">{unit}</span>}
+      {unit && text && text.length <= 3 && <span className="unit">{unit}</span>}
     </div>
   );
 }
@@ -427,16 +455,10 @@ function TextSection({ f }: { f: Feature }) {
 }
 
 function SingleObject({ f }: { f: Feature }) {
-  const limit = maxEdgeSize(f);
-  // Stay just below the size at which the edge treatments would consume a whole face;
-  // fillet and chamfer share that room.
-  const edgeLimit = (other: number) => (limit !== null ? Math.max(0, Math.floor((limit - other - 0.05) * 10) / 10) : undefined);
-  const last = useRef(0);
-  const edgePreview = (command: string, v: number) => {
-    const now = performance.now();
-    if (now - last.current < 80) return; // each preview rebuilds the solid
-    last.current = now;
-    previewCommand(command, { id: f.id, radius: v });
+  // Set when a value was clamped to what the geometry allows ("max. 3,4 mm").
+  const [edgeLimit, setEdgeLimit] = useState<{ edge: "fillet" | "chamfer"; max: number } | null>(null);
+  const edgeApply = (edge: "fillet" | "chamfer", v: number) => {
+    void applyEdge(f.id, edge, v).then((r) => setEdgeLimit(r.limit !== null ? { edge, max: r.limit } : null));
   };
   return (
     <>
@@ -458,21 +480,89 @@ function SingleObject({ f }: { f: Feature }) {
                 label={k === "fillet" ? <FilletGlyph /> : <ChamferGlyph />}
                 value={f[k] ?? 0}
                 min={0}
-                max={edgeLimit((k === "fillet" ? f.chamfer : f.fillet) ?? 0)}
                 step={0.5}
-                onPreview={(v) => edgePreview(`object.${k}`, v)}
-                onCommit={(v) => {
-                  clearPreview();
-                  void execute(`object.${k}`, { id: f.id, radius: v });
-                }}
+                enterOnly
+                onCommit={(v) => edgeApply(k, v)}
               />
             ))}
           </div>
-          <div className="field-caption two"><span>Abrunden</span><span>Fase</span></div>
+          <div className="field-caption two">
+            <span>Abrunden{edgeLimit?.edge === "fillet" && <em className="edge-max"> max. {show(edgeLimit.max)} mm</em>}</span>
+            <span>Fase{edgeLimit?.edge === "chamfer" && <em className="edge-max"> max. {show(edgeLimit.max)} mm</em>}</span>
+          </div>
         </div>
       )}
       {f.type !== "sketch" && f.type !== "group" && <ShellSection f={f} />}
       {f.type === "group" ? <GroupAppearance f={f} /> : <Appearance key={f.id + (f.color ?? "")} ids={[f.id]} color={f.color} material={f.material} />}
+    </>
+  );
+}
+
+/** Position, rotation and size of several objects: shared values, or "Gemischt". */
+function MultiFields({ features }: { features: Feature[] }) {
+  const ids = features.map((f) => f.id);
+  const axisRow = (kind: "position" | "rotation", unit: string) => (
+    <div className="field-row">
+      {(["x", "y", "z"] as const).map((axis, i) => {
+        const first = features[0].transform[kind][i];
+        const same = features.every((f) => f.transform[kind][i] === first);
+        return (
+          <NumberField
+            key={axis}
+            label={axis.toUpperCase()}
+            axis={axis}
+            unit={unit}
+            value={same ? first : 0}
+            mixed={!same}
+            onCommit={(v) => void execute("objects.setAxis", { ids, kind, axis: i, value: v })}
+            onDelta={(d, done) => {
+              if (!done) return void previewCommand("objects.setAxis", { ids, kind, axis: i, delta: d });
+              clearPreview();
+              if (d !== 0) void execute("objects.setAxis", { ids, kind, axis: i, delta: d });
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+  // Same kind and same size: edit the real dimensions, else only relative scaling.
+  const first = features[0] as PrimitiveFeature;
+  const sameSize = "params" in first && first.type in PARAM_FIELDS && features.every((f) => f.type === first.type && "params" in f && JSON.stringify(f.params) === JSON.stringify(first.params));
+  const fields = sameSize ? PARAM_FIELDS[first.type] : [];
+  return (
+    <>
+      <div className="group">
+        <div className="group-label"><span><Icon name="measure" size={15} />Maße</span>{!sameSize && <span className="muted-note">Gemischt</span>}</div>
+        {sameSize ? (
+          <>
+            <div className={`field-row ${cols(fields.length)}`}>
+              {fields.map(({ key, label }) => (
+                <NumberField key={key} label={label[0]} value={(first.params as Record<string, number>)[key]} min={0.1}
+                  onCommit={(v) => void execute("objects.setParams", { ids, params: { [key]: v } })}
+                  onPercent={(k) => void execute("objects.scaleBy", { ids, factor: [k, k, k] })} />
+              ))}
+            </div>
+            <div className={`field-caption ${cols(fields.length)}`} style={fields.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
+              {fields.map(({ key, label }) => <span key={key}>{label}</span>)}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="field-row one">
+              <NumberField label="S" unit="%" value={100} min={1} step={5} onCommit={(v) => void execute("objects.scaleBy", { ids, factor: [v / 100, v / 100, v / 100] })} />
+            </div>
+            <div className="field-caption" style={{ gridTemplateColumns: "1fr" }}><span>Größe aller (jedes Objekt um sich selbst)</span></div>
+          </>
+        )}
+      </div>
+      <div className="group">
+        <div className="group-label"><span><Icon name="position" size={15} />Position</span><span className="group-unit">mm</span></div>
+        {axisRow("position", "mm")}
+      </div>
+      <div className="group">
+        <div className="group-label"><span><Icon name="rotateCw" size={15} />Drehung</span><span className="group-unit">°</span></div>
+        {axisRow("rotation", "°")}
+      </div>
     </>
   );
 }
@@ -497,14 +587,7 @@ function GroupAppearance({ f }: { f: GroupFeature }) {
 
 /** Aushöhlen: wall thickness plus which side stays open. */
 function ShellSection({ f }: { f: Feature }) {
-  const last = useRef(0);
   const open = f.shell?.open ?? "top";
-  const preview = (v: number) => {
-    const now = performance.now();
-    if (now - last.current < 120) return; // each preview rebuilds the solid
-    last.current = now;
-    previewCommand("object.shell", { id: f.id, thickness: v, open });
-  };
   return (
     <div className="group">
       <div className="group-label"><span><Icon name="shell" size={15} />Aushöhlen</span></div>
@@ -514,11 +597,8 @@ function ShellSection({ f }: { f: Feature }) {
           value={f.shell?.thickness ?? 0}
           min={0}
           step={0.4}
-          onPreview={preview}
-          onCommit={(v) => {
-            clearPreview();
-            void execute("object.shell", { id: f.id, thickness: v, open });
-          }}
+          enterOnly
+          onCommit={(v) => void execute("object.shell", { id: f.id, thickness: v, open })}
         />
         <SegmentedControl
           size="sm"
@@ -553,6 +633,7 @@ export function PropertiesPanel() {
                 <div className="type">{selected.map((f) => f.name).join(", ")}</div>
               </div>
             </div>
+            <MultiFields features={selected} />
             {selected.length === 2 && (
             <div className="props-actions">
                 <>

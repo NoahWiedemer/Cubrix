@@ -1,5 +1,6 @@
 // Application state: a branching history tree of document snapshots plus UI state.
 // The current document is always `nodes[currentId].doc`.
+import { setProjectChat } from "../ai/chatStore";
 import { create } from "zustand";
 import { createDocument, newId, type ModelDocument, type Transform } from "./document";
 import type { IconName } from "../ui/icons";
@@ -138,6 +139,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   reset(doc, label, filePath) {
+    setProjectChat(); // loading a project restores its own chat right after this
     const root = rootNode(doc, label);
     set({
       nodes: { [root.id]: root },

@@ -95,6 +95,7 @@ export function scaleDimensions(f: Feature, s: Vec3): Feature {
       return { ...f, params } as Feature;
     }
     case "boolean":
+    case "group":
       return {
         ...f,
         children: f.children.map((c) => ({
@@ -112,7 +113,7 @@ const dominant = (s: Vec3) => s.reduce((a, b) => (Math.abs(b - 1) > Math.abs(a -
  * Compounds (booleans) only scale uniformly: their operands may be round or rotated,
  * and those cannot be stretched along one world axis without changing the shape.
  */
-export const scalesUniformly = (f: Feature) => f.type === "boolean" || f.type === "import";
+export const scalesUniformly = (f: Feature) => f.type === "boolean" || f.type === "group" || f.type === "import";
 
 /** The factors actually applied to `f` for a requested scale. */
 export function effectiveScale(f: Feature, s: Vec3): Vec3 {

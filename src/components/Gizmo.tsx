@@ -106,7 +106,8 @@ function Arrow({ axis, color, hover, on, dim, onDown, hoverProps, cube = false }
   );
 }
 
-export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
+/** `multi`: `f` is a virtual object for several selected ones; `box` is their combined box. */
+export function Gizmo({ f, transform, multi }: { f: Feature; transform: Transform; multi?: { ids: string[]; box: THREE.Box3 | null } }) {
   const { camera, gl, size } = useThree();
   const controls = useThree((s) => s.controls) as unknown as { enabled: boolean } | null;
   const entries = useMeshes((s) => s.entries);
@@ -120,7 +121,7 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
   const cornerRef = useRef<THREE.Group>(null);
   const lastPreview = useRef(0);
 
-  const box = worldBox(f, entries, transform);
+  const box = multi ? multi.box : worldBox(f, entries, transform);
   const center = useMemo(() => (box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(...transform.position)), [box, transform]);
 
   // While the kernel rebuilds a preview there is briefly no box: keep the last anchor.
@@ -232,7 +233,8 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
         const now = performance.now();
         if (now - lastPreview.current > 70) {
           lastPreview.current = now;
-          previewCommand("object.scale", { id: f.id, factor });
+          if (multi) previewCommand("objects.scaleBy", { ids: multi.ids, factor, anchor: anchor.toArray() });
+          else previewCommand("object.scale", { id: f.id, factor });
         }
         return;
       }
@@ -328,12 +330,16 @@ export function Gizmo({ f, transform }: { f: Feature; transform: Transform }) {
         const factor = scaleFactor.current;
         scaleFactor.current = null;
         clearPreview();
-        void execute("object.scale", { id: f.id, factor });
+        if (multi) void execute("objects.scaleBy", { ids: multi.ids, factor, anchor: anchor.toArray() });
+        else void execute("object.scale", { id: f.id, factor });
         return;
       }
       const p = useApp.getState().preview;
       if (!p) return;
-      void execute("object.transform", { id: f.id, position: p.transform.position, rotation: p.transform.rotation }).then(
+      const commit = multi
+        ? execute("objects.transformBy", { ids: multi.ids, position: p.transform.position, rotation: p.transform.rotation })
+        : execute("object.transform", { id: f.id, position: p.transform.position, rotation: p.transform.rotation });
+      void commit.then(
         (changed) => !changed && useApp.setState({ preview: null }),
       );
     };

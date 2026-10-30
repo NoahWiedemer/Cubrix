@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useApp } from "./store";
+import { chatUnsaved, useChat } from "../ai/chatStore";
 import { isTauri } from "./platform";
 
 const KEY = "cubrix.autosave";
@@ -48,9 +49,11 @@ export async function clearAutosave() {
 export function startAutosave(serialize: () => string) {
   setInterval(() => {
     const s = useApp.getState();
-    if (s.savedNodeId === s.currentId) return; // nothing unsaved
-    if (s.currentId === lastWritten) return; // unchanged since the last autosave
-    lastWritten = s.currentId;
+    if (s.savedNodeId === s.currentId && !chatUnsaved()) return; // nothing unsaved
+    // The chat counts too: a conversation without model changes is still worth keeping.
+    const state = `${s.currentId}:${useChat.getState().entries.length}`;
+    if (state === lastWritten) return; // unchanged since the last autosave
+    lastWritten = state;
     void writeAutosave(serialize()).catch(() => {});
   }, 30_000);
 }

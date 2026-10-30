@@ -85,6 +85,9 @@ export function Toolbar() {
         )}
         {(mode === "pair" || mode === "many") && (
           <>
+            <CommandTool id="tool.rotate" active={rotate} />
+            <CommandTool id="tool.scale" active={scale} />
+            <span className="toolbar-sep" />
             {mode === "pair" && <CommandTool id="object.stackOn" tip="Zweites ausgewähltes Objekt mittig oben auf das erste setzen" />}
             <CommandTool id="boolean.union" />
             <CommandTool id="boolean.subtract" />

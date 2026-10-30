@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { create } from "zustand";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { materialOf } from "../core/materials";
+import { nextDrill } from "../ui/drill";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Gizmo, useGizmo } from "./Gizmo";
 import {
@@ -17,7 +18,7 @@ import { execute } from "../core/commands";
 import { useApp, useDoc } from "../core/store";
 import { findFeature, groupsOf, parentsOf, type BooleanFeature, type Feature, type GroupFeature, type SketchFeature, type Transform, type Vec3 } from "../core/document";
 import { getGeometry, KernelError, useKernel, useMeshes, type GeometryEntry } from "../cad/kernel";
-import { worldBox } from "../core/bounds";
+import { SELECTION_ID, composeTransform, worldBox } from "../core/bounds";
 import { geometryKey } from "../core/document";
 import { Toolbar } from "./Toolbar";
 import { GroundGrid } from "./GroundGrid";
@@ -46,7 +47,27 @@ const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("de-DE");
 
 function useTransform(f: Feature): Transform {
   const preview = useApp((s) => (s.preview?.id === f.id ? s.preview.transform : null));
-  return preview ?? f.transform;
+  // While a multi-selection is dragged, every selected object follows the shared motion.
+  const shared = useApp((s) => (s.preview?.id === SELECTION_ID && s.selection.includes(f.id) ? s.preview.transform : null));
+  return preview ?? (shared ? composeTransform(shared, f.transform) : f.transform);
+}
+
+const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0] };
+
+/** One gizmo for several selected objects, at their combined bounding box. */
+function SelectionGizmo({ features }: { features: Feature[] }) {
+  const entries = useMeshes((s) => s.entries);
+  const motion = useApp((s) => (s.preview?.id === SELECTION_ID ? s.preview.transform : IDENTITY));
+  const box = new THREE.Box3();
+  for (const m of features) {
+    const b = worldBox(m, entries, composeTransform(motion, m.transform));
+    if (b) box.union(b);
+  }
+  const virtual = useMemo(
+    () => ({ id: SELECTION_ID, name: "Auswahl", type: "group", visible: true, transform: IDENTITY, children: features }) as Feature,
+    [features],
+  );
+  return <Gizmo f={virtual} transform={motion} multi={{ ids: features.map((f) => f.id), box: box.isEmpty() ? null : box }} />;
 }
 
 /**
@@ -192,16 +213,10 @@ function GroupObject({ f, order, root }: { f: GroupFeature; order: number; root?
   );
 }
 
-/**
- * What a click on `id` selects: a group member picks its outermost group, unless the
- * selection is already inside that group (then members are picked one by one).
- */
-function pickTarget(id: string, root: string | undefined): string {
-  if (!root) return id;
-  const { selection, nodes, currentId } = useApp.getState();
-  const doc = nodes[currentId].doc;
-  const inside = selection.some((s) => s !== root && groupsOf(doc, s).some((g) => g.id === root));
-  return inside ? id : root;
+/** From the outermost group down to the object itself (booleans count as one object). */
+function pickChain(id: string): string[] {
+  const { nodes, currentId } = useApp.getState();
+  return [...groupsOf(nodes[currentId].doc, id).map((g) => g.id), id];
 }
 
 function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: string }) {
@@ -255,8 +270,15 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
       placeText({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }, [e.point.x, -e.point.z, e.point.y], f.id);
       return;
     }
-    const multi = e.shiftKey || e.metaKey || e.ctrlKey;
-    void execute("selection.set", { ids: [pickTarget(f.id, root)], mode: multi ? "toggle" : "replace" });
+    const chain = pickChain(f.id);
+    if (e.metaKey || e.ctrlKey) {
+      // ⌘-click drills in: one level deeper each time, from the object back to the top.
+      const { selection } = useApp.getState();
+      void execute("selection.set", { ids: [nextDrill(chain, selection)] });
+      return;
+    }
+    // Shift adds to the selection; a plain click always takes the outermost group.
+    void execute("selection.set", { ids: [chain[0]], mode: e.shiftKey ? "toggle" : "replace" });
   };
   // Double-click inside a group selects just this member.
   const onDoubleClick = (e: ThreeEvent<MouseEvent>) => {
@@ -279,8 +301,9 @@ function FeatureObject({ f, order, root }: { f: Feature; order: number; root?: s
           if (presenting) return;
           e.stopPropagation();
           e.nativeEvent.preventDefault();
-          const target = pickTarget(f.id, root);
-          if (!useApp.getState().selection.includes(target)) void execute("selection.set", { ids: [target] });
+          // Keep a drilled-in selection; otherwise take the outermost group.
+          const chain = pickChain(f.id);
+          if (!chain.some((id) => useApp.getState().selection.includes(id))) void execute("selection.set", { ids: [chain[0]] });
           openContextMenu(e.nativeEvent.clientX, e.nativeEvent.clientY);
         }}
         onPointerOver={(e) => {
@@ -760,6 +783,9 @@ export function Viewport() {
   const down = useRef<[number, number] | null>(null);
   const single = selection.length === 1 ? findFeature(doc, selection[0]) : undefined;
   const singleParents = single ? parentsOf(doc, single.id) : [];
+  const selected = useMemo(() => selection.map((id) => findFeature(doc, id)).filter((f): f is Feature => !!f), [selection, doc]);
+  const multiMovable =
+    selected.length > 1 && selected.every((f) => !f.locked && parentsOf(doc, f.id).length === 0 && groupsOf(doc, f.id).every((g) => g.transform.position.every((v) => v === 0) && g.transform.rotation.every((v) => v === 0)));
   // The gizmo works in world space; members of a moved or turned group are edited in the Inspektor.
   const insideMovedGroup = !!single && groupsOf(doc, single.id).some((g) => g.transform.position.some((v) => v !== 0) || g.transform.rotation.some((v) => v !== 0));
   const textTool = useTextTool((s) => s.active);
@@ -837,6 +863,7 @@ export function Viewport() {
               <Dimensions f={single} />
             </>
           )}
+          {multiMovable && workspace === "model" && <SelectionGizmo key={selection.join()} features={selected} />}
           {single && workspace === "model" && singleParents.length > 0 && <OperandEditor f={single} parents={singleParents} />}
         </group>
         <DepthRange />
@@ -861,6 +888,8 @@ export function Viewport() {
         <span className="w3" />
         <span className="w4" />
       </div>
+      {/* Crisp mint frame, same trigger and fade as the glow. */}
+      <div className={`ai-frame ${aiRunning && aiAnimations ? "on" : ""}`} aria-hidden />
       {measuring && <MeasureModeSwitch />}
       {isolated && workspace !== "preview" && !measuring && (
         <div className="vp-badge iso">

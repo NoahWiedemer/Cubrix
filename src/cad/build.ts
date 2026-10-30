@@ -355,6 +355,33 @@ export function buildLocal(f: Feature): Shape3D {
   return shape;
 }
 
+/**
+ * The largest fillet/chamfer up to `value` that really builds for this body (with its
+ * other edge treatment and shell): `value` itself if it works, otherwise a binary search
+ * down; rounded down to 0.05 mm. 0 when no size works at all.
+ */
+export function largestEdge(f: Feature, edge: "fillet" | "chamfer", value: number): number {
+  const works = (v: number) => {
+    try {
+      buildLocal({ ...f, [edge]: v } as Feature);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (works(value)) return value;
+  let lo = 0;
+  let hi = value;
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    if (works(mid)) lo = mid;
+    else hi = mid;
+  }
+  const stepped = Math.floor(lo * 20) / 20;
+  if (stepped > 0 && works(stepped)) return stepped;
+  return lo > 0 && works(lo) ? Math.round(lo * 1000) / 1000 : 0;
+}
+
 function place(shape: Shape3D, f: Feature): Shape3D {
   const [rx, ry, rz] = f.transform.rotation;
   let s = shape;

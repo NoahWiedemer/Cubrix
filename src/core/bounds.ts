@@ -10,6 +10,21 @@ export function transformMatrix(t: Transform): THREE.Matrix4 {
   return new THREE.Matrix4().compose(new THREE.Vector3(...t.position), q, new THREE.Vector3(1, 1, 1));
 }
 
+/** `inner` expressed in the frame of `outer` applied on top (positions in mm, rotations in degrees). */
+export function composeTransform(outer: Transform, inner: Transform): Transform {
+  const m = transformMatrix(outer).multiply(transformMatrix(inner));
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  m.decompose(pos, quat, new THREE.Vector3());
+  const e = new THREE.Euler().setFromQuaternion(quat, "XYZ");
+  const r = (v: number) => Math.round(v * 1000) / 1000 + 0;
+  const deg = (v: number) => r(THREE.MathUtils.radToDeg(v));
+  return { position: [r(pos.x), r(pos.y), r(pos.z)], rotation: [deg(e.x), deg(e.y), deg(e.z)] };
+}
+
+/** Id of the virtual object that stands for a multi-selection (gizmo preview). */
+export const SELECTION_ID = "__selection";
+
 const boxCache = new WeakMap<GeometryEntry, Map<string, THREE.Box3>>();
 
 /** Exact world-space bounding box of a feature (null while its mesh is still computing). */
